@@ -1,0 +1,14 @@
+name: "CI Workflow"
+on: [push, pull_request]
+
+jobs:
+  basic-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - uses: jpkrohling/setup-operator-sdk@v1-release
+        with:
+          operator-sdk-version: v0.11.0
+
+      - name: "basic checks"
+        run: make test/ci
