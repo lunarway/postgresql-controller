@@ -14,7 +14,7 @@ jobs:
           operator-sdk-version: v0.11.0
 
       - name: "Formatting check"
-        run: make test/check
+        run: make code/check
 
       - name: "Compile"
         run: make code/compile
