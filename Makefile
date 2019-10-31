@@ -39,6 +39,3 @@ image/build/push: image/build image/push
 test/unit:
 	@echo Running tests:
 	go test -v -race -cover ./pkg/...
-
-.PHONY: test/ci
-test/ci: code/compile code/check test/unit

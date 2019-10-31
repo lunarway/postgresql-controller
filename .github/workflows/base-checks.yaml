@@ -10,5 +10,11 @@ jobs:
         with:
           operator-sdk-version: v0.11.0
 
-      - name: "basic checks"
-        run: make test/ci
+      - name: "Formatting check"
+        run: make test/check
+
+      - name: "Compile"
+        run: make code/compile
+
+      - name: "Test"
+        run: make test/unit
