@@ -15,7 +15,6 @@ spec:
       serviceAccountName: postgresql-controller
       containers:
         - name: postgresql-controller
-          # Replace this with the built image name
           image: quay.io/lunarway/postgresql-controller:v0.0.1-beta4
           command:
           - postgresql-controller
