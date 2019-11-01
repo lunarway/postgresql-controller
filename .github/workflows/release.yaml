@@ -1,11 +1,11 @@
-name: "Release Docker image"
+name: "Release"
 on:
   push:
     tags:
       - 'v*'
 
 jobs:
-  release-docker:
+  docker:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1
