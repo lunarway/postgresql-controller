@@ -39,3 +39,11 @@ image/build/push: image/build image/push
 test/unit:
 	@echo Running tests:
 	go test -v -race -cover ./pkg/...
+
+.PHONY: release
+release:
+	sed -i "" 's|REPLACE_IMAGE|${REG}/${ORG}/${PROJECT}:${TAG}|g' deploy/operator.yaml
+	git add deploy/operator.yaml
+	git commit -m"Release ${TAG}"
+	git tag ${TAG}
+	git push --tags
