@@ -1,0 +1,32 @@
+name: "Release"
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - uses: actions/setup-go@v1
+        with:
+          go-version: '1.13.3'
+      - uses: jpkrohling/setup-operator-sdk@v1-release
+        with:
+          operator-sdk-version: v0.11.0
+
+      - name: Set tag in environment
+        run: echo ::set-env name=RELEASE_VERSION::$(echo ${GITHUB_REF:10}) # extracts the tag name from refs/tags/v1.2.3
+
+      - name: "Build image"
+        run: make image/build TAG=$RELEASE_VERSION
+
+      - name: "Docker login to Quay.io"
+        env:
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+        run: docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD quay.io
+
+      - name: "Push image"
+        run: make image/push TAG=$RELEASE_VERSION
