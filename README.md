@@ -22,14 +22,16 @@ metadata:
   name: user
 spec:
   name: user
+  password:
+    value: <strong-password>
   host:
     value: some.host.com
 ```
 
-The `host` field is modelled like Kubernetes core's [`EnvVarSource`](https://github.com/kubernetes/api/blob/665c8a257c1af277521b08dd43d5c73570405ef0/core/v1/types.go#L1847-L1862), so it can specify raw values like above or reference ConfigMaps etc.
+The `password` and `host` fields are modelled like Kubernetes core's [`EnvVarSource`](https://github.com/kubernetes/api/blob/665c8a257c1af277521b08dd43d5c73570405ef0/core/v1/types.go#L1847-L1862), so it can specify raw values like above or reference ConfigMaps and Secrets.
 
 <details>
-<summary>Example of a database referencing a ConfigMap resource</summary>
+<summary>Example of a database referencing ConfigMap and Secret resource</summary>
 
 ```yaml
 apiVersion: lunar.bank/v1beta1
@@ -38,6 +40,11 @@ metadata:
   name: user
 spec:
   name: user
+  password:
+    valueFrom:
+      secretKeyRef:
+        name: user-db
+        key: db.password
   host:
     valueFrom:
       configMapKeyRef:
