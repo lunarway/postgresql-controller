@@ -100,7 +100,7 @@ A policy will also be added to AWS IAM for the specific user allowing it to conn
       "Effect": "Allow",
       "Action": ["rds-db:connect"],
       "Resource": [
-        "arn:aws:rds-db:region:instance:dbuser:*/iam_<name>"
+        "arn:aws:rds-db:region:account:dbuser:*/iam_<name>"
       ],
       "Condition": {
         "StringLike": {
