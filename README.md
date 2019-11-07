@@ -44,10 +44,11 @@ spec:
         name: database
         key: db.host
 ```
+
 </details>
 
 The controller will ensure that a database exists on the host based on its configuration.  
-If a resources is deleted we *might* delete the database in the future, preferrable behind a flag to avoid loosing data.
+If a resources is deleted we _might_ delete the database in the future, preferrable behind a flag to avoid loosing data.
 
 ## Users
 
@@ -71,23 +72,45 @@ metadata:
 spec:
   name: bso
   read:
-  - host: 
-      value: some.host.com
-    reason: "I am a developer"
+    - host:
+        value: some.host.com
+      reason: "I am a developer"
   write:
-  - host: 
-      valueFrom:
-        configMapKeyRef:
-          name: database
-          key: db.host
-    database: user
-    reason: "Related to support ticket LW-1234"
-    start: 2019-09-16T10:00:00Z
-    end: 2019-09-16T14:00:00Z
+    - host:
+        valueFrom:
+          configMapKeyRef:
+            name: database
+            key: db.host
+      database: user
+      reason: "Related to support ticket LW-1234"
+      start: 2019-09-16T10:00:00Z
+      end: 2019-09-16T14:00:00Z
 ```
 
 From the configuration the user will be created with an `iam_<name>` user on the host and granted rights to access the required databases.
 Further the role `rds_iam` will be granted allowing the user to sign in with IAM credentials.
+
+A policy will also be added to AWS IAM for the specific user allowing it to connect to the host.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["rds-db:connect"],
+      "Resource": [
+        "arn:aws:rds-db:region:instance:dbuser:*/iam_<name>"
+      ],
+      "Condition": {
+        "StringLike": {
+          "aws:userid": "*:<name>@lunarway.com"
+        }
+      }
+    }
+  ]
+}
+```
 
 # Development
 
