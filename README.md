@@ -13,7 +13,7 @@ The CRD `PostgreSQLDatabase` specified details about a database on a specific in
 It is scoped as cluster wide ie. has no namespace.
 
 The main purpose of this resource is to create databases on a specific host with a specific name used by application services.
-Instances of `PostgreSQLUser` can then give a specific developer access to the database by referenceing the name.
+Instances of `PostgreSQLUser` can then give a specific developer access to the database by referencing the name.
 
 ```yaml
 apiVersion: lunar.bank/v1beta1
