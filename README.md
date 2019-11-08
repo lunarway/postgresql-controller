@@ -94,7 +94,7 @@ spec:
       end: 2019-09-16T14:00:00Z
 ```
 
-From the configuration the user will be created with an `iam_<name>` user on the host and granted rights to access the required databases.
+From the configuration the user will be created with an `iam_developer_<name>` user on the host and granted rights to access the required databases.
 Further the role `rds_iam` will be granted allowing the user to sign in with IAM credentials.
 
 A policy will also be added to AWS IAM for the specific user allowing it to connect to the host.
