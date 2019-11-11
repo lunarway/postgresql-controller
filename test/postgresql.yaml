@@ -1,0 +1,25 @@
+# Deployemnt for running a PostgreSQL instance for testing
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgresql
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgresql
+
+  template:
+    metadata:
+      name: postgresql
+      labels:
+        app: postgresql
+    spec:
+      containers:
+      - name: postgresql
+        image: postgres:9.6.14
+        ports:
+        - containerPort: 5432
+        env:
+          - name: POSTGRES_USER
+            value: iam_creator
