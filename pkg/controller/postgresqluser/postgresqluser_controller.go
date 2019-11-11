@@ -35,9 +35,10 @@ func Add(mgr manager.Manager) error {
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, db *sql.DB) reconcile.Reconciler {
 	return &ReconcilePostgreSQLUser{
-		//  scheme: mgr.GetScheme(),
-		client: mgr.GetClient(),
-		db:     db,
+		client:     mgr.GetClient(),
+		db:         db,
+		grantRoles: []string{"rds_iam", "iam_developer"},
+		rolePrefix: "iam_developer_",
 	}
 }
 
@@ -81,8 +82,8 @@ type ReconcilePostgreSQLUser struct {
 
 	db *sql.DB
 
-	iamDeveloperRoles []string
-	rolePrefix        string
+	grantRoles []string
+	rolePrefix string
 }
 
 // Reconcile reads that state of the cluster for a PostgreSQLUser object and makes changes based on the state read
@@ -136,7 +137,7 @@ func postgresqlConnection(connectionString string) (*sql.DB, error) {
 
 func (r *ReconcilePostgreSQLUser) ensurePostgreSQLRole(log logr.Logger, name string) error {
 	name = fmt.Sprintf("%s%s", r.rolePrefix, name)
-	roles := strings.Join(r.iamDeveloperRoles, ", ")
+	roles := strings.Join(r.grantRoles, ", ")
 	_, err := r.db.Exec(fmt.Sprintf("CREATE ROLE %s WITH LOGIN IN ROLE %s", name, roles))
 	if err != nil {
 		pqError, ok := err.(*pq.Error)

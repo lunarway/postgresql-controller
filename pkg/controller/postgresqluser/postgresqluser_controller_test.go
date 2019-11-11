@@ -105,7 +105,7 @@ func TestReconcile_ensurePostgreSQLRole(t *testing.T) {
 
 			r := ReconcilePostgreSQLUser{
 				db: db,
-				iamDeveloperRoles: []string{
+				grantRoles: []string{
 					RoleRDSIAM,
 					RoleIAMDeveloper,
 				},
