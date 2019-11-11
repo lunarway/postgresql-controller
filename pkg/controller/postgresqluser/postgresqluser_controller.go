@@ -56,17 +56,6 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
-	// We do not create new k8s objects in this controller, so this does not look relevant.
-	// // TODO(user): Modify this to be the types you create that are owned by the primary resource
-	// // Watch for changes to secondary resource Pods and requeue the owner PostgreSQLUser
-	// err = c.Watch(&source.Kind{Type: &corev1.Pod{}}, &handler.EnqueueRequestForOwner{
-	// 	IsController: true,
-	// 	OwnerType:    &lunarwayv1alpha1.PostgreSQLUser{},
-	// })
-	// if err != nil {
-	// 	return err
-	// }
-
 	return nil
 }
 
@@ -78,7 +67,6 @@ type ReconcilePostgreSQLUser struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
 	client client.Client
-	// scheme *runtime.Scheme
 
 	db *sql.DB
 
@@ -155,22 +143,3 @@ func (r *ReconcilePostgreSQLUser) ensurePostgreSQLRole(log logr.Logger, name str
 	}
 	return nil
 }
-
-/*
-SQL to get roles for a user:
-
-select rolname from pg_user
-join pg_auth_members on (pg_user.usesysid=pg_auth_members.member)
-join pg_roles on (pg_roles.oid=pg_auth_members.roleid)
-where
-pg_user.usename='USERNAME';
-
-SQL to get users from role:
-
-select usename from pg_user
-join pg_auth_members on (pg_user.usesysid=pg_auth_members.member)
-join pg_roles on (pg_roles.oid=pg_auth_members.roleid)
-where
-pg_roles.rolname = 'iam_developer';
-
-*/
