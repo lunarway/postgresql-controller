@@ -169,7 +169,7 @@ func (r *ReconcilePostgreSQLDatabase) ensurePostgreSQLDatabase(log logr.Logger, 
 	_, err = r.db.Exec(fmt.Sprintf("CREATE DATABASE %s", name))
 	if err != nil {
 		pqError, ok := err.(*pq.Error)
-		if !ok || pqError.Code.Name() != "duplicate_object" {
+		if !ok || pqError.Code.Name() != "duplicate_database" {
 			return err
 		}
 		log.Info(fmt.Sprintf("Database; %s already exists", name), "errorCode", pqError.Code, "errorName", pqError.Code.Name())
@@ -199,7 +199,7 @@ func (r *ReconcilePostgreSQLDatabase) ensurePostgreSQLDatabase(log logr.Logger, 
 	_, err = serviceConnection.Exec(fmt.Sprintf("CREATE SCHEMA %s", name))
 	if err != nil {
 		pqError, ok := err.(*pq.Error)
-		if !ok || pqError.Code.Name() != "duplicate_object" {
+		if !ok || pqError.Code.Name() != "duplicate_schema" {
 			return err
 		}
 		log.Info(fmt.Sprintf("Schema; %s already exists in database; %s", name, name), "errorCode", pqError.Code, "errorName", pqError.Code.Name())
