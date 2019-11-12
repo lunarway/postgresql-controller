@@ -1,0 +1,7 @@
+apiVersion: lunarway.com/v1alpha1
+kind: PostgreSQLDatabase
+metadata:
+  name: example-postgresqldatabase
+spec:
+  # Add fields here
+  size: 3

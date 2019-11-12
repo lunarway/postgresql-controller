@@ -61,6 +61,7 @@ test/cluster:
 test/cluster/resources:
 	kubectl apply -f deploy/role.yaml -f deploy/role_binding.yaml -f deploy/service_account.yaml
 	kubectl apply -f deploy/crds/lunarway.com_postgresqlusers_crd.yaml
+	kubectl apply -f deploy/crds/lunarway.com_postgresqldatabases_crd.yaml
 	kubectl apply -f test/postgresql.yaml
 
 .PHONY: test/cluster/postgresql
