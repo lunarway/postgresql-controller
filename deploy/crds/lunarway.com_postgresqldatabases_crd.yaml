@@ -31,21 +31,37 @@ spec:
         spec:
           description: PostgreSQLDatabaseSpec defines the desired state of PostgreSQLDatabase
           properties:
+            host:
+              description: Host
+              properties:
+                configMapKeyRef:
+                  description: Selects a key of a ConfigMap.
+                  properties:
+                    configMapKeyRef:
+                      description: Selects a key of a secret in the pod's namespace
+                      properties:
+                        key:
+                          description: The key to select.
+                          type: string
+                      required:
+                      - key
+                      type: object
+                  type: object
+                value:
+                  description: Defaults to "".
+                  type: string
+              type: object
             name:
               description: Name of the database
               type: string
             password:
               description: Password
               properties:
-                name:
-                  description: Name of the environment variable. Must be a C_IDENTIFIER.
-                  type: string
                 value:
                   description: Defaults to "".
                   type: string
                 valueFrom:
-                  description: Source for the environment variable's value. Cannot
-                    be used if value is not empty.
+                  description: Source for Secret
                   properties:
                     secretKeyRef:
                       description: Selects a key of a secret in the pod's namespace
@@ -58,10 +74,9 @@ spec:
                       - key
                       type: object
                   type: object
-              required:
-              - name
               type: object
           required:
+          - host
           - name
           - password
           type: object

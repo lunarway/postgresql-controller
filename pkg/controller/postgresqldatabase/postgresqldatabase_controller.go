@@ -129,8 +129,3 @@ func postgresqlConnection(connectionString string) (*sql.DB, error) {
 	}
 	return db, nil
 }
-
-func (r *ReconcilePostgreSQLDatabase) ensurePostgreSQLDatabase() (log logr.Logger, name string) error {
-
-	return nil
-}

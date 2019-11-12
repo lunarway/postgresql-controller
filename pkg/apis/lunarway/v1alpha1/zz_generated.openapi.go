@@ -84,12 +84,18 @@ func schema_pkg_apis_lunarway_v1alpha1_PostgreSQLDatabaseSpec(ref common.Referen
 							Ref:         ref("./pkg/apis/lunarway/v1alpha1.PasswordVar"),
 						},
 					},
+					"host": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Host",
+							Ref:         ref("./pkg/apis/lunarway/v1alpha1.HostVar"),
+						},
+					},
 				},
-				Required: []string{"name", "password"},
+				Required: []string{"name", "password", "host"},
 			},
 		},
 		Dependencies: []string{
-			"./pkg/apis/lunarway/v1alpha1.PasswordVar"},
+			"./pkg/apis/lunarway/v1alpha1.HostVar", "./pkg/apis/lunarway/v1alpha1.PasswordVar"},
 	}
 }
 

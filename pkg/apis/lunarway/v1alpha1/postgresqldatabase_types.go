@@ -16,8 +16,8 @@ type PostgreSQLDatabaseSpec struct {
 	// Password
 	Password PasswordVar `json:"password"`
 
-	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
-	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
+	// Host
+	Host HostVar `json:"host"`
 }
 
 // PostgreSQLDatabaseStatus defines the observed state of PostgreSQLDatabase
@@ -57,18 +57,16 @@ func init() {
 
 // PasswordVar represents an
 type PasswordVar struct {
-	// Name of the environment variable. Must be a C_IDENTIFIER.
-	Name string `json:"name"`
 	// Defaults to "".
 	// +optional
 	Value string `json:"value,omitempty"`
-	// Source for the environment variable's value. Cannot be used if value is not empty.
+	// Source for Secret
 	// +optional
-	ValueFrom *PasswordVarSource `json:"valueFrom,omitempty"`
+	ValueFrom *SecretVarSource `json:"valueFrom,omitempty"`
 }
 
-// PasswordVarSource represents a source for the value of an EnvVar.
-type PasswordVarSource struct {
+// SecretVarSource represents a source for the value of an EnvVar.
+type SecretVarSource struct {
 	// Selects a key of a secret in the pod's namespace
 	// +optional
 	SecretKeyRef *SecretKeySelector `json:"secretKeyRef,omitempty"`
@@ -77,5 +75,28 @@ type PasswordVarSource struct {
 // SecretKeySelector selects a key of a Secret.
 type SecretKeySelector struct {
 	// The key of the secret to select from.  Must be a valid secret key.
-	Key string `json:"key" protobuf:"bytes,2,opt,name=key"`
+	Key string `json:"key"`
+}
+
+// HostVar
+type HostVar struct {
+	// Defaults to "".
+	// +optional
+	Value string `json:"value,omitempty"`
+	// Selects a key of a ConfigMap.
+	// +optional
+	ConfigMapKeyRef *ConfigVarSource `json:"configMapKeyRef,omitempty"`
+}
+
+// ConfigVarSource represents a source for the value of an EnvVar.
+type ConfigVarSource struct {
+	// Selects a key of a secret in the pod's namespace
+	// +optional
+	ConfigMapKeyRef *ConfigMapKeySelector `json:"configMapKeyRef,omitempty"`
+}
+
+// ConfigMapKeySelector Selects a key from a ConfigMap.
+type ConfigMapKeySelector struct {
+	// The key to select.
+	Key string `json:"key"`
 }
