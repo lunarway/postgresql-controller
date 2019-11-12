@@ -3,13 +3,16 @@ package postgresqldatabase
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"fmt"
 
 	"github.com/go-logr/logr"
 	"github.com/lib/pq"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/pkg/apis/lunarway/v1alpha1"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -107,7 +110,7 @@ func (r *ReconcilePostgreSQLDatabase) Reconcile(request reconcile.Request) (reco
 	reqLogger.Info("Reconciling PostgreSQLDatabase")
 
 	// Resolve the password, is the value in a configMap or Secret or just a plain value
-	password, err := r.resolveDatabasePassword(*database)
+	password, err := r.resolveDatabasePassword(*database, request.Namespace)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -133,18 +136,17 @@ func postgresqlConnection(connectionString string) (*sql.DB, error) {
 	return db, nil
 }
 
-func (r *ReconcilePostgreSQLDatabase) resolveDatabasePassword(db lunarwayv1alpha1.PostgreSQLDatabase) (string, error) {
+func (r *ReconcilePostgreSQLDatabase) resolveDatabasePassword(db lunarwayv1alpha1.PostgreSQLDatabase, namespaceName string) (string, error) {
 	if db.Spec.Password.Value != "" {
 		return db.Spec.Password.Value, nil
 	}
 
-	// TODO: Get the value from the secret
 	if db.Spec.Password.ValueFrom.SecretKeyRef.Key != "" {
-		return db.Spec.Password.ValueFrom.SecretKeyRef.Key, nil
+		return r.getSecretValue(db.Spec.Password.ValueFrom.SecretKeyRef.Name, namespaceName, db.Spec.Password.ValueFrom.SecretKeyRef.Key)
 	}
 
 	if db.Spec.Password.ValueFrom.ConfigMapKeyRef.Key != "" {
-		return db.Spec.Password.ValueFrom.ConfigMapKeyRef.Key, nil
+		return r.getConfigMapValue(db.Spec.Password.ValueFrom.ConfigMapKeyRef.Name, namespaceName, db.Spec.Password.ValueFrom.ConfigMapKeyRef.Key)
 	}
 
 	return "", fmt.Errorf("no password")
@@ -207,4 +209,27 @@ func (r *ReconcilePostgreSQLDatabase) ensurePostgreSQLDatabase(log logr.Logger, 
 		log.Info(fmt.Sprintf("Schema; %s created in database; %s", name, name))
 	}
 	return nil
+}
+
+func (r *ReconcilePostgreSQLDatabase) getSecretValue(name, namespace, key string) (string, error) {
+	secret := &corev1.Secret{}
+	err := r.client.Get(context.TODO(), types.NamespacedName{Name: name, Namespace: namespace}, secret)
+	if err != nil {
+		return "", err
+	}
+
+	password, err := base64.StdEncoding.DecodeString(string(secret.Data[key]))
+	if err != nil {
+		return "", err
+	}
+	return string(password), nil
+}
+
+func (r *ReconcilePostgreSQLDatabase) getConfigMapValue(name, namespace, key string) (string, error) {
+	configMap := &corev1.ConfigMap{}
+	err := r.client.Get(context.TODO(), types.NamespacedName{Name: name, Namespace: namespace}, configMap)
+	if err != nil {
+		return "", err
+	}
+	return string(configMap.Data[key]), nil
 }

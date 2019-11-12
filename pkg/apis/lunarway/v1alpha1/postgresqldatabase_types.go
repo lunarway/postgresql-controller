@@ -78,6 +78,8 @@ type ResourceVarSource struct {
 
 // KeySelector selects a key of a Secret or ConfigMap.
 type KeySelector struct {
+	// The name of the secret in the namespace to select from.
+	Name string `json:"name,omitempty"`
 	// The key of the secret to select from.  Must be a valid secret key.
 	Key string `json:"key"`
 }

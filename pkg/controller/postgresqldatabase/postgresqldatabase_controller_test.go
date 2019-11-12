@@ -2,6 +2,7 @@ package postgresqldatabase
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +11,10 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
@@ -84,10 +89,134 @@ func TestReconcilePostgreSQLDatabase_ensurePostgreSQLDatabase_idempotency(t *tes
 		t.Fatalf("ensurePostgreSQLDatabase failed: %v", err)
 	}
 
+	// Invoke again with same name
 	err = r.ensurePostgreSQLDatabase(logf.Log, name, password)
 	if err != nil {
 		t.Logf("%#v", err)
 		t.Fatalf("ensurePostgreSQLDatabase failed: %v", err)
+	}
+}
+
+func TestReconcilePostgreSQLDatabase_getSecretValue(t *testing.T) {
+	logger := testLogger{t: t}
+	logf.SetLogger(logf.ZapLoggerTo(&logger, true))
+
+	tt := []struct {
+		name       string
+		secretName string
+		namespace  string
+		key        string
+		value      string
+		output     string
+		err        error
+	}{
+		{
+			name:       "sunshine",
+			secretName: "test",
+			namespace:  "test",
+			key:        "test",
+			value:      "dGVzdA==",
+			output:     "test",
+			err:        nil,
+		},
+		{
+			name:       "illegal base64",
+			secretName: "test",
+			namespace:  "test",
+			key:        "test",
+			value:      "dGVzdA",
+			output:     "",
+			err:        errors.New("illegal base64 data at input byte 4"),
+		},
+	}
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      tc.secretName,
+					Namespace: tc.namespace,
+				},
+				Data: map[string][]byte{
+					tc.key: []byte(tc.value),
+				},
+			}
+			// Objects to track in the fake client.
+			objs := []runtime.Object{
+				secret,
+			}
+
+			// Create a fake client to mock API calls.
+			cl := fake.NewFakeClient(objs...)
+
+			r := &ReconcilePostgreSQLDatabase{
+				client: cl,
+			}
+			password, err := r.getSecretValue(tc.secretName, tc.namespace, tc.key)
+			if tc.err != nil {
+				assert.EqualErrorf(t, err, tc.err.Error(), "wrong output error: %v", err.Error())
+			} else {
+				assert.NoError(t, err, "unexpected output error")
+			}
+			assert.Equal(t, tc.output, password, "password not as expected")
+		})
+	}
+}
+
+func TestReconcilePostgreSQLDatabase_getConfigMapValue(t *testing.T) {
+	logger := testLogger{t: t}
+	logf.SetLogger(logf.ZapLoggerTo(&logger, true))
+
+	tt := []struct {
+		name          string
+		configMapName string
+		namespace     string
+		key           string
+		value         string
+		output        string
+		err           error
+	}{
+		{
+			name:          "sunshine",
+			configMapName: "test",
+			namespace:     "test",
+			key:           "test",
+			value:         "test",
+			output:        "test",
+			err:           nil,
+		},
+	}
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+
+			configMap := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      tc.configMapName,
+					Namespace: tc.namespace,
+				},
+				Data: map[string]string{
+					tc.key: tc.value,
+				},
+			}
+			// Objects to track in the fake client.
+			objs := []runtime.Object{
+				configMap,
+			}
+
+			// Create a fake client to mock API calls.
+			cl := fake.NewFakeClient(objs...)
+
+			r := &ReconcilePostgreSQLDatabase{
+				client: cl,
+			}
+			password, err := r.getConfigMapValue(tc.configMapName, tc.namespace, tc.key)
+			if tc.err != nil {
+				assert.EqualErrorf(t, err, tc.err.Error(), "wrong output error: %v", err.Error())
+			} else {
+				assert.NoError(t, err, "unexpected output error")
+			}
+			assert.Equal(t, tc.output, password, "password not as expected")
+		})
 	}
 }
 
@@ -141,178 +270,3 @@ func (t *testLogger) Write(p []byte) (int, error) {
 	t.t.Logf("%s", p)
 	return len(p), nil
 }
-
-// func TestReconcile_ensurePostgreSQLRole(t *testing.T) {
-// 	postgresqlHost := os.Getenv("POSTGRESQL_CONTROLLER_INTEGRATION_HOST")
-// 	if postgresqlHost == "" {
-// 		t.Skip("Integration test host not specified")
-// 	}
-// 	connectionString := fmt.Sprintf("postgresql://iam_creator:@%s?sslmode=disable", postgresqlHost)
-// 	db, err := postgresqlConnection(connectionString)
-// 	if err != nil {
-// 		t.Fatalf("connect to database failed: %v", err)
-// 	}
-// 	var (
-// 		epoch            = time.Now().UnixNano()
-// 		RoleRDSIAM       = fmt.Sprintf("rds_iam_%d", epoch)
-// 		RoleIAMDeveloper = fmt.Sprintf("iam_developer_%d", epoch)
-// 		RoleOther        = fmt.Sprintf("other_role_%d", epoch)
-// 	)
-// 	// roles used for testing
-// 	roles := []string{
-// 		RoleRDSIAM,
-// 		RoleIAMDeveloper,
-// 		RoleOther,
-// 	}
-// 	// bootstrap the database with the roles that can be granted by the controller
-// 	for _, role := range roles {
-// 		dropRole(t, db, role)
-// 		_, err = db.Exec(fmt.Sprintf("CREATE ROLE %s", role))
-// 		if err != nil {
-// 			t.Fatalf("Seeding role %s failed: %v", role, err)
-// 		}
-// 	}
-// 	defer func() {
-// 		for _, role := range roles {
-// 			dropRole(t, db, role)
-// 		}
-// 	}()
-// 	tt := []struct {
-// 		name          string
-// 		createRole    bool
-// 		existingRoles []string
-// 		roles         []string
-// 	}{
-// 		{
-// 			name:          "new user without any roles",
-// 			createRole:    false,
-// 			existingRoles: nil,
-// 			roles:         []string{RoleIAMDeveloper, RoleRDSIAM},
-// 		},
-// 		{
-// 			name:          "existing user without any roles",
-// 			createRole:    true,
-// 			existingRoles: nil,
-// 			roles:         []string{RoleIAMDeveloper, RoleRDSIAM},
-// 		},
-// 		{
-// 			name:          "user exists with correct roles",
-// 			createRole:    true,
-// 			existingRoles: []string{RoleIAMDeveloper, RoleRDSIAM},
-// 			roles:         []string{RoleIAMDeveloper, RoleRDSIAM},
-// 		},
-// 		{
-// 			name:          "user exists with incomplete roles",
-// 			createRole:    true,
-// 			existingRoles: []string{RoleRDSIAM},
-// 			roles:         []string{RoleIAMDeveloper, RoleRDSIAM},
-// 		},
-// 		{
-// 			name:          "user exists with other roles",
-// 			createRole:    true,
-// 			existingRoles: []string{RoleOther},
-// 			roles:         []string{RoleIAMDeveloper, RoleOther, RoleRDSIAM},
-// 		},
-// 	}
-// 	for _, tc := range tt {
-// 		t.Run(tc.name, func(t *testing.T) {
-// 			logger := testLogger{t: t}
-// 			logf.SetLogger(logf.ZapLoggerTo(&logger, true))
-
-// 			userName := fmt.Sprintf("test_user_%d", time.Now().UnixNano())
-// 			t.Logf("Using user name %s", userName)
-
-// 			if tc.createRole {
-// 				createRole(t, db, userName)
-// 			}
-// 			defer dropRole(t, db, userName)
-
-// 			if len(tc.existingRoles) != 0 {
-// 				seedRole(t, db, userName, tc.existingRoles)
-// 			}
-
-// 			r := ReconcilePostgreSQLUser{
-// 				db: db,
-// 				grantRoles: []string{
-// 					RoleRDSIAM,
-// 					RoleIAMDeveloper,
-// 				},
-// 			}
-
-// 			// act
-// 			err = r.ensurePostgreSQLRole(logf.Log, userName)
-
-// 			// assert
-// 			assert.NoError(t, err, "unexpected output error")
-
-// 			roles := storedRoles(t, db, userName)
-// 			t.Logf("Stored roles: %v", roles)
-// 			assert.Equal(t, tc.roles, roles, "roles on user not as expected")
-// 		})
-// 	}
-// }
-
-// var _ io.Writer = &testLogger{}
-
-// // testLogger is an io.Writer used for reporting logs to the test runner.
-// type testLogger struct {
-// 	t *testing.T
-// }
-
-// func (t *testLogger) Write(p []byte) (int, error) {
-// 	t.t.Logf("%s", p)
-// 	return len(p), nil
-// }
-
-// func createRole(t *testing.T, db *sql.DB, userName string) {
-// 	t.Helper()
-// 	query := fmt.Sprintf("CREATE ROLE %s WITH LOGIN", userName)
-// 	_, err := db.Exec(query)
-// 	if err != nil {
-// 		t.Fatalf("create existing user failed: %v", err)
-// 	}
-// }
-
-// func seedRole(t *testing.T, db *sql.DB, userName string, roles []string) {
-// 	t.Helper()
-// 	query := fmt.Sprintf("GRANT %s TO %s", strings.Join(roles, ", "), userName)
-// 	_, err := db.Exec(query)
-// 	if err != nil {
-// 		t.Fatalf("create existing user failed: %v", err)
-// 	}
-// }
-
-// func dropRole(t *testing.T, db *sql.DB, userName string) {
-// 	t.Helper()
-// 	query := fmt.Sprintf("DROP ROLE IF EXISTS %s;", userName)
-// 	_, err := db.Exec(query)
-// 	if err != nil {
-// 		t.Fatalf("drop user failed: %v", err)
-// 	}
-// }
-
-// // storedRoles returns roles for a specific user name sorted by name.
-// func storedRoles(t *testing.T, db *sql.DB, userName string) []string {
-// 	t.Helper()
-
-// 	rows, err := db.Query("SELECT rolname FROM pg_user JOIN pg_auth_members ON (pg_user.usesysid=pg_auth_members.member) JOIN pg_roles ON (pg_roles.oid=pg_auth_members.roleid) WHERE pg_user.usename=$1", fmt.Sprintf("%s", userName))
-// 	if err != nil {
-// 		t.Fatalf("get roles for user query failed: %v", err)
-// 	}
-// 	defer rows.Close()
-// 	var roles []string
-// 	for rows.Next() {
-// 		var rolName string
-// 		err = rows.Scan(&rolName)
-// 		if err != nil {
-// 			t.Fatalf("scan row for user query failed: %v", err)
-// 		}
-// 		roles = append(roles, rolName)
-// 	}
-// 	err = rows.Err()
-// 	if err != nil {
-// 		t.Fatalf("scanning rows for user query failed: %v", err)
-// 	}
-// 	sort.Strings(roles)
-// 	return roles
-// }
