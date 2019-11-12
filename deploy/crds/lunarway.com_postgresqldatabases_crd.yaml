@@ -41,7 +41,18 @@ spec:
                       description: Selects a key of a secret in the pod's namespace
                       properties:
                         key:
-                          description: The key to select.
+                          description: The key of the secret to select from.  Must
+                            be a valid secret key.
+                          type: string
+                      required:
+                      - key
+                      type: object
+                    secretKeyRef:
+                      description: Selects a key of a secret in the pod's namespace
+                      properties:
+                        key:
+                          description: The key of the secret to select from.  Must
+                            be a valid secret key.
                           type: string
                       required:
                       - key
@@ -63,6 +74,16 @@ spec:
                 valueFrom:
                   description: Source for Secret
                   properties:
+                    configMapKeyRef:
+                      description: Selects a key of a secret in the pod's namespace
+                      properties:
+                        key:
+                          description: The key of the secret to select from.  Must
+                            be a valid secret key.
+                          type: string
+                      required:
+                      - key
+                      type: object
                     secretKeyRef:
                       description: Selects a key of a secret in the pod's namespace
                       properties:

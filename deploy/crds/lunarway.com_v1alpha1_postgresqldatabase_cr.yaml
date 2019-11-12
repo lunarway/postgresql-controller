@@ -1,7 +1,10 @@
 apiVersion: lunarway.com/v1alpha1
 kind: PostgreSQLDatabase
 metadata:
-  name: example-postgresqldatabase
+  name: test1db
 spec:
-  # Add fields here
-  size: 3
+  name: test1db
+  password:
+    value: "1234"
+  host:
+    value: "localhost:5432"

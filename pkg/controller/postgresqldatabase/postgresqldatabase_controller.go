@@ -3,11 +3,13 @@ package postgresqldatabase
 import (
 	"context"
 	"database/sql"
+	"fmt"
 
+	"github.com/go-logr/logr"
+	"github.com/lib/pq"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/pkg/apis/lunarway/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -18,11 +20,6 @@ import (
 )
 
 var log = logf.Log.WithName("controller_postgresqldatabase")
-
-/**
-* USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
-* business logic.  Delete these comments after modifying this file.*
- */
 
 // Add creates a new PostgreSQLDatabase Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -39,7 +36,6 @@ func Add(mgr manager.Manager) error {
 func newReconciler(mgr manager.Manager, db *sql.DB) reconcile.Reconciler {
 	return &ReconcilePostgreSQLDatabase{
 		client: mgr.GetClient(),
-		scheme: mgr.GetScheme(),
 		db:     db,
 	}
 }
@@ -79,7 +75,6 @@ type ReconcilePostgreSQLDatabase struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
 	client client.Client
-	scheme *runtime.Scheme
 
 	db *sql.DB
 }
@@ -109,11 +104,19 @@ func (r *ReconcilePostgreSQLDatabase) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 	reqLogger = reqLogger.WithValues("database", database.Spec.Name)
-	reqLogger.Info("Reconciling PostgreSQLDatabase", "database", database.Spec.Name)
+	reqLogger.Info("Reconciling PostgreSQLDatabase")
 
-	// TODO: Implement database resonsiliation
-	// Create the database if it's not there, update if it is
+	// Resolve the password, is the value in a configMap or Secret or just a plain value
+	password, err := r.resolveDatabasePassword(*database)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
 
+	// Ensure the database is in sync with the object
+	err = r.ensurePostgreSQLDatabase(reqLogger, database.Spec.Name, password)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
 	return reconcile.Result{}, nil
 }
 
@@ -128,4 +131,80 @@ func postgresqlConnection(connectionString string) (*sql.DB, error) {
 		return nil, err
 	}
 	return db, nil
+}
+
+func (r *ReconcilePostgreSQLDatabase) resolveDatabasePassword(db lunarwayv1alpha1.PostgreSQLDatabase) (string, error) {
+	if db.Spec.Password.Value != "" {
+		return db.Spec.Password.Value, nil
+	}
+
+	// TODO: Get the value from the secret
+	if db.Spec.Password.ValueFrom.SecretKeyRef.Key != "" {
+		return db.Spec.Password.ValueFrom.SecretKeyRef.Key, nil
+	}
+
+	if db.Spec.Password.ValueFrom.ConfigMapKeyRef.Key != "" {
+		return db.Spec.Password.ValueFrom.ConfigMapKeyRef.Key, nil
+	}
+
+	return "", fmt.Errorf("no password")
+}
+
+func (r *ReconcilePostgreSQLDatabase) ensurePostgreSQLDatabase(log logr.Logger, name, password string) error {
+	log.Info(fmt.Sprintf("Creating service user with name %s and password %s", name, password))
+
+	// Create the service user
+	_, err := r.db.Exec(fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s' NOCREATEROLE VALID UNTIL 'infinity'", name, password))
+	if err != nil {
+		pqError, ok := err.(*pq.Error)
+		if !ok || pqError.Code.Name() != "duplicate_object" {
+			return err
+		}
+		log.Info(fmt.Sprintf("Service user; %s already exists", name), "errorCode", pqError.Code, "errorName", pqError.Code.Name())
+	} else {
+		log.Info(fmt.Sprintf("Service user; %s created", name))
+	}
+
+	// Create the database
+	_, err = r.db.Exec(fmt.Sprintf("CREATE DATABASE %s", name))
+	if err != nil {
+		pqError, ok := err.(*pq.Error)
+		if !ok || pqError.Code.Name() != "duplicate_object" {
+			return err
+		}
+		log.Info(fmt.Sprintf("Database; %s already exists", name), "errorCode", pqError.Code, "errorName", pqError.Code.Name())
+	} else {
+		log.Info(fmt.Sprintf("Database; %s created", name))
+	}
+
+	// Alter ownership of the database to the database user
+	// TODO: Handle the error in a better way
+	_, err = r.db.Exec(fmt.Sprintf("ALTER DATABASE %s OWNER TO %s", name, name))
+	if err != nil {
+		pqError, ok := err.(*pq.Error)
+		if !ok || pqError.Code.Name() != "duplicate_object" {
+			return err
+		}
+		log.Info(fmt.Sprintf("Database; %s already exists", name), "errorCode", pqError.Code, "errorName", pqError.Code.Name())
+	} else {
+		log.Info(fmt.Sprintf("Granted %s owner of the database; %s", name, name))
+	}
+
+	serviceConnection, err := postgresqlConnection(fmt.Sprintf("postgresql://%s:%s@localhost:5432/%s?sslmode=disable", name, password, name))
+	if err != nil {
+		return err
+	}
+
+	// Create schema in the database
+	_, err = serviceConnection.Exec(fmt.Sprintf("CREATE SCHEMA %s", name))
+	if err != nil {
+		pqError, ok := err.(*pq.Error)
+		if !ok || pqError.Code.Name() != "duplicate_object" {
+			return err
+		}
+		log.Info(fmt.Sprintf("Schema; %s already exists in database; %s", name, name), "errorCode", pqError.Code, "errorName", pqError.Code.Name())
+	} else {
+		log.Info(fmt.Sprintf("Schema; %s created in database; %s", name, name))
+	}
+	return nil
 }

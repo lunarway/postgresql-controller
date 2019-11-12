@@ -46,11 +46,10 @@ test/unit:
 	@echo Running tests:
 	go test -v -race -cover ./pkg/...
 
-
 .PHONY: test/integration
 test/integration:
 	@echo Running integration tests against PostgreSQL instance on ${POSTGRESQL_CONTROLLER_INTEGRATION_HOST}:
-	POSTGRESQL_CONTROLLER_INTEGRATION_HOST=${POSTGRESQL_CONTROLLER_INTEGRATION_HOST} make test/unit
+	POSTGRESQL_CONTROLLER_INTEGRATION_HOST=${POSTGRESQL_CONTROLLER_INTEGRATION_HOST} go test -v -race -cover -count=1 ./pkg/...
 
 .PHONY: test/cluster
 test/cluster:

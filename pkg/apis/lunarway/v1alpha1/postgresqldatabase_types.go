@@ -62,18 +62,22 @@ type PasswordVar struct {
 	Value string `json:"value,omitempty"`
 	// Source for Secret
 	// +optional
-	ValueFrom *SecretVarSource `json:"valueFrom,omitempty"`
+	ValueFrom *ResourceVarSource `json:"valueFrom,omitempty"`
 }
 
-// SecretVarSource represents a source for the value of an EnvVar.
-type SecretVarSource struct {
+// ResourceVarSource represents a source for the value of an EnvVar.
+type ResourceVarSource struct {
 	// Selects a key of a secret in the pod's namespace
 	// +optional
-	SecretKeyRef *SecretKeySelector `json:"secretKeyRef,omitempty"`
+	SecretKeyRef *KeySelector `json:"secretKeyRef,omitempty"`
+
+	// Selects a key of a secret in the pod's namespace
+	// +optional
+	ConfigMapKeyRef *KeySelector `json:"configMapKeyRef,omitempty"`
 }
 
-// SecretKeySelector selects a key of a Secret.
-type SecretKeySelector struct {
+// KeySelector selects a key of a Secret or ConfigMap.
+type KeySelector struct {
 	// The key of the secret to select from.  Must be a valid secret key.
 	Key string `json:"key"`
 }
@@ -85,18 +89,5 @@ type HostVar struct {
 	Value string `json:"value,omitempty"`
 	// Selects a key of a ConfigMap.
 	// +optional
-	ConfigMapKeyRef *ConfigVarSource `json:"configMapKeyRef,omitempty"`
-}
-
-// ConfigVarSource represents a source for the value of an EnvVar.
-type ConfigVarSource struct {
-	// Selects a key of a secret in the pod's namespace
-	// +optional
-	ConfigMapKeyRef *ConfigMapKeySelector `json:"configMapKeyRef,omitempty"`
-}
-
-// ConfigMapKeySelector Selects a key from a ConfigMap.
-type ConfigMapKeySelector struct {
-	// The key to select.
-	Key string `json:"key"`
+	ValueFrom *ResourceVarSource `json:"configMapKeyRef,omitempty"`
 }
