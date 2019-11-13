@@ -3,14 +3,13 @@ package postgresqldatabase
 import (
 	"context"
 	"database/sql"
-	"encoding/base64"
 	"fmt"
+
 	"github.com/go-logr/logr"
 	"github.com/lib/pq"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/pkg/apis/lunarway/v1alpha1"
-	corev1 "k8s.io/api/core/v1"
+	"go.lunarway.com/postgresql-controller/pkg/kube"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -98,7 +97,7 @@ func (r *ReconcilePostgreSQLDatabase) Reconcile(request reconcile.Request) (reco
 	reqLogger.Info("Reconciling PostgreSQLDatabase")
 
 	// Resolve the password, is the value in a configMap or Secret or just a plain value
-	password, err := r.resolveDatabasePassword(*database, request.Namespace)
+	password, err := kube.ResourceValue(r.client, database.Spec.Password, request.Namespace)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -122,22 +121,6 @@ func postgresqlConnection(connectionString string) (*sql.DB, error) {
 		return nil, err
 	}
 	return db, nil
-}
-
-func (r *ReconcilePostgreSQLDatabase) resolveDatabasePassword(db lunarwayv1alpha1.PostgreSQLDatabase, namespace string) (string, error) {
-	if db.Spec.Password.Value != "" {
-		return db.Spec.Password.Value, nil
-	}
-
-	if db.Spec.Password.ValueFrom.SecretKeyRef.Key != "" {
-		return r.getSecretValue(types.NamespacedName{Name: db.Spec.Password.ValueFrom.SecretKeyRef.Name, Namespace: namespace}, db.Spec.Password.ValueFrom.SecretKeyRef.Key)
-	}
-
-	if db.Spec.Password.ValueFrom.ConfigMapKeyRef.Key != "" {
-		return r.getConfigMapValue(types.NamespacedName{Name: db.Spec.Password.ValueFrom.ConfigMapKeyRef.Name, Namespace: namespace}, db.Spec.Password.ValueFrom.ConfigMapKeyRef.Key)
-	}
-
-	return "", fmt.Errorf("no password")
 }
 
 func (r *ReconcilePostgreSQLDatabase) ensurePostgreSQLDatabase(log logr.Logger, name, password string) error {
@@ -188,28 +171,4 @@ func (r *ReconcilePostgreSQLDatabase) ensurePostgreSQLDatabase(log logr.Logger, 
 		log.Info(fmt.Sprintf("Schema; %s created in database; %s", name, name))
 	}
 	return nil
-}
-
-func (r *ReconcilePostgreSQLDatabase) getSecretValue(namespacedName types.NamespacedName, key string) (string, error) {
-	secret := &corev1.Secret{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{Name: namespacedName.Name, Namespace: namespacedName.Namespace}, secret)
-	if err != nil {
-		return "", err
-	}
-	//TODO: Add guard against non-existing keys
-	password, err := base64.StdEncoding.DecodeString(string(secret.Data[key]))
-	if err != nil {
-		return "", err
-	}
-	return string(password), nil
-}
-
-func (r *ReconcilePostgreSQLDatabase) getConfigMapValue(namespacedName types.NamespacedName, key string) (string, error) {
-	configMap := &corev1.ConfigMap{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{Name: namespacedName.Name, Namespace: namespacedName.Namespace}, configMap)
-	if err != nil {
-		return "", err
-	}
-	//TODO: Add guard against non-existing keys
-	return string(configMap.Data[key]), nil
 }
