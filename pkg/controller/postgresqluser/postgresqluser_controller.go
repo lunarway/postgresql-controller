@@ -25,19 +25,13 @@ var log = logf.Log.WithName("controller_postgresqluser")
 // Add creates a new PostgreSQLUser Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
-	connectionString := "postgresql://iam_creator:@localhost:5432?sslmode=disable"
-	db, err := postgresqlConnection(connectionString)
-	if err != nil {
-		return err
-	}
-	return add(mgr, newReconciler(mgr, db))
+	return add(mgr, newReconciler(mgr))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, db *sql.DB) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	return &ReconcilePostgreSQLUser{
 		client:           mgr.GetClient(),
-		db:               db,
 		resourceResolver: kube.ResourceValue,
 		grantRoles:       []string{"rds_iam", "iam_developer"},
 		rolePrefix:       "iam_developer_",
@@ -70,8 +64,6 @@ type ReconcilePostgreSQLUser struct {
 	// that reads objects from the cache and writes to the apiserver
 	client           client.Client
 	resourceResolver func(client client.Client, resource lunarwayv1alpha1.ResourceVar, namespace string) (string, error)
-
-	db *sql.DB
 
 	grantRoles []string
 	rolePrefix string
@@ -113,12 +105,23 @@ func (r *ReconcilePostgreSQLUser) Reconcile(request reconcile.Request) (reconcil
 
 	// User instance created or updated
 	reqLogger = reqLogger.WithValues("user", user.Spec.Name)
-	reqLogger.Info("Reconciling PostgreSQLUser", "user", user.Spec.Name)
 
-	err = r.ensurePostgreSQLRole(reqLogger, user.Spec.Name)
+	reqLogger.Info("Reconciling PostgreSQLUser", "user", user.Spec.Name)
+	accesses, err := r.groupAccesses(request.Namespace, user.Spec.Read, user.Spec.Write)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
+
+	hosts, err := r.connectToHosts(accesses)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	err = r.ensurePostgreSQLRoles(reqLogger, user.Spec.Name, accesses, hosts)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
 	return reconcile.Result{}, nil
 }
 
@@ -135,10 +138,27 @@ func postgresqlConnection(connectionString string) (*sql.DB, error) {
 	return db, nil
 }
 
-func (r *ReconcilePostgreSQLUser) ensurePostgreSQLRole(log logr.Logger, name string) error {
+func (r *ReconcilePostgreSQLUser) ensurePostgreSQLRoles(log logr.Logger, name string, accesses HostAccess, hosts map[string]*sql.DB) error {
+	for host, access := range accesses {
+		connection, ok := hosts[host]
+		if !ok {
+			return fmt.Errorf("connection for host %s not found", host)
+		}
+		err := r.ensurePostgreSQLRole(log, connection, name, access)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *ReconcilePostgreSQLUser) ensurePostgreSQLRole(log logr.Logger, db *sql.DB, name string, accesses []ReadWriteAccess) error {
 	name = fmt.Sprintf("%s%s", r.rolePrefix, name)
-	roles := strings.Join(r.grantRoles, ", ")
-	_, err := r.db.Exec(fmt.Sprintf("CREATE ROLE %s WITH LOGIN IN ROLE %s", name, roles))
+	query := fmt.Sprintf("CREATE ROLE %s WITH LOGIN", name)
+	if len(r.grantRoles) != 0 {
+		query += fmt.Sprintf(" IN ROLE %s", strings.Join(r.grantRoles, ", "))
+	}
+	_, err := db.Exec(query)
 	if err != nil {
 		pqError, ok := err.(*pq.Error)
 		if !ok || pqError.Code.Name() != "duplicate_object" {
@@ -148,19 +168,54 @@ func (r *ReconcilePostgreSQLUser) ensurePostgreSQLRole(log logr.Logger, name str
 	} else {
 		log.Info(fmt.Sprintf("Role %s created", name))
 	}
+	if len(r.grantRoles) != 0 {
+		_, err = db.Exec(fmt.Sprintf("GRANT %s TO %s", strings.Join(r.grantRoles, ", "), name))
+		if err != nil {
+			return err
+		}
+	}
 
-	_, err = r.db.Exec(fmt.Sprintf("GRANT %s TO %s", roles, name))
-	if err != nil {
-		return err
+	for _, access := range accesses {
+		if access.Type == AccessTypeRead {
+			// This revokation ensures that the user cannot create any objects in the
+			// PUBLIC role that is assigned to all roles by default.
+			// TODO: We could do this up front by iterating over all unique databases on the
+			// host.
+			_, err = db.Exec(fmt.Sprintf(`REVOKE ALL ON DATABASE %s from PUBLIC;
+			REVOKE ALL ON SCHEMA public from PUBLIC;
+			REVOKE ALL ON ALL TABLES IN SCHEMA public from PUBLIC;`, access.Database))
+			if err != nil {
+				return err
+			}
+
+			// Only needed for testing without rds_iam role that otherwise grants this right
+			_, err = db.Exec(fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO %s", access.Database, name))
+			if err != nil {
+				return err
+			}
+
+			_, err = db.Exec(fmt.Sprintf("GRANT USAGE ON SCHEMA %s TO %s", access.Database, name))
+			if err != nil {
+				return err
+			}
+			_, err = db.Exec(fmt.Sprintf("GRANT SELECT ON ALL TABLES IN SCHEMA %s TO %s", access.Database, name))
+			if err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
 
+// HostAccess represents a map of read and write access requests on host names
+// including the database path.
 type HostAccess map[string][]ReadWriteAccess
 
 type ReadWriteAccess struct {
-	Access lunarwayv1alpha1.AccessSpec
-	Type   AccessType
+	Host     string
+	Database string
+	Access   lunarwayv1alpha1.AccessSpec
+	Type     AccessType
 }
 
 type AccessType int
@@ -223,10 +278,20 @@ func (r *ReconcilePostgreSQLUser) groupByHosts(hosts HostAccess, namespace strin
 			})
 			continue
 		}
-
-		hosts[host] = append(hosts[host], ReadWriteAccess{
-			Access: accesses[i],
-			Type:   accessType,
+		database, err := r.resourceResolver(r.client, access.Database, namespace)
+		if err != nil {
+			errs = multierr.Append(errs, &AccessError{
+				Access: accesses[i],
+				Err:    err,
+			})
+			continue
+		}
+		hostDatabase := fmt.Sprintf("%s/%s", host, database)
+		hosts[hostDatabase] = append(hosts[hostDatabase], ReadWriteAccess{
+			Host:     host,
+			Database: database,
+			Access:   accesses[i],
+			Type:     accessType,
 		})
 	}
 	return errs

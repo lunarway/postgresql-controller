@@ -16,7 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func TestReconcile_ensurePostgreSQLRole(t *testing.T) {
+func TestReconcile_ensurePostgreSQLRole_globalRoles(t *testing.T) {
 	postgresqlHost := os.Getenv("POSTGRESQL_CONTROLLER_INTEGRATION_HOST")
 	if postgresqlHost == "" {
 		t.Skip("Integration test host not specified")
@@ -105,7 +105,6 @@ func TestReconcile_ensurePostgreSQLRole(t *testing.T) {
 			}
 
 			r := ReconcilePostgreSQLUser{
-				db: db,
 				grantRoles: []string{
 					RoleRDSIAM,
 					RoleIAMDeveloper,
@@ -113,7 +112,7 @@ func TestReconcile_ensurePostgreSQLRole(t *testing.T) {
 			}
 
 			// act
-			err = r.ensurePostgreSQLRole(log, userName)
+			err = r.ensurePostgreSQLRole(log, db, userName, nil)
 
 			// assert
 			assert.NoError(t, err, "unexpected output error")
@@ -122,6 +121,82 @@ func TestReconcile_ensurePostgreSQLRole(t *testing.T) {
 			t.Logf("Stored roles: %v", roles)
 			assert.Equal(t, tc.roles, roles, "roles on user not as expected")
 		})
+	}
+}
+
+func dbExec(t *testing.T, db *sql.DB, query string, args ...interface{}) {
+	t.Helper()
+	query = fmt.Sprintf(query, args...)
+	_, err := db.Exec(query)
+	if err != nil {
+		t.Fatalf("DB EXEC failed: Query: %s: %v", query, err)
+	}
+}
+
+func TestReconcile_ensurePostgreSQLRole_accessRoles(t *testing.T) {
+	postgresqlHost := os.Getenv("POSTGRESQL_CONTROLLER_INTEGRATION_HOST")
+	if postgresqlHost == "" {
+		t.Skip("Integration test host not specified")
+	}
+	log := test.SetLogger(t)
+
+	testDatabase := "test"
+	connectionString := fmt.Sprintf("postgresql://iam_creator:@%s?sslmode=disable", postgresqlHost)
+	iamCreatorDB, err := postgresqlConnection(connectionString)
+	if err != nil {
+		t.Fatalf("connect to database failed: %v", err)
+	}
+	defer iamCreatorDB.Close()
+
+	// create a schema and table with another user name than the one created by
+	// the resouce. We use it to assert that we have read/write access according
+	// to our expectations
+	dbExec(t, iamCreatorDB, `DROP DATABASE %[1]s`, testDatabase)
+	dbExec(t, iamCreatorDB, "CREATE DATABASE %s", testDatabase)
+
+	connectionString = fmt.Sprintf("postgresql://iam_creator:@%s/%s?sslmode=disable", postgresqlHost, testDatabase)
+	iamCreatorDB, err = postgresqlConnection(connectionString)
+	if err != nil {
+		t.Fatalf("connect to test database failed: %v", err)
+	}
+	defer iamCreatorDB.Close()
+
+	dbExec(t, iamCreatorDB, "CREATE SCHEMA IF NOT EXISTS %s", testDatabase)
+	dbExec(t, iamCreatorDB, `CREATE TABLE IF NOT EXISTS %s.films (
+    code        char(5) CONSTRAINT firstkey PRIMARY KEY,
+    title       varchar(40) NOT NULL,
+    did         integer NOT NULL,
+    date_prod   date,
+    kind        varchar(10),
+    len         interval hour to minute
+)`, testDatabase)
+
+	userName := fmt.Sprintf("test_user_%d", time.Now().UnixNano())
+	t.Logf("Using user name %s", userName)
+
+	r := ReconcilePostgreSQLUser{}
+
+	// act
+	err = r.ensurePostgreSQLRole(log, iamCreatorDB, userName, []ReadWriteAccess{
+		{
+			Type:     AccessTypeRead,
+			Host:     postgresqlHost,
+			Database: testDatabase,
+		},
+	})
+
+	// assert
+	assert.NoError(t, err, "unexpected output error")
+
+	connectionString = fmt.Sprintf("postgresql://%s:@%s/%s?sslmode=disable", userName, postgresqlHost, testDatabase)
+	userDB, err := postgresqlConnection(connectionString)
+	if err != nil {
+		t.Fatalf("could not connect with new user: %v", err)
+	}
+	defer userDB.Close()
+	_, err = userDB.Query("SELECT * FROM test.films")
+	if err != nil {
+		t.Fatalf("could not select from test.films table: %v", err)
 	}
 }
 
@@ -291,6 +366,9 @@ func TestReconcilePostgreSQLUser_groupAccesses(t *testing.T) {
 			Host: lunarwayv1alpha1.ResourceVar{
 				Value: host,
 			},
+			Database: lunarwayv1alpha1.ResourceVar{
+				Value: "database",
+			},
 			Reason: reason,
 		}
 	}
@@ -313,10 +391,12 @@ func TestReconcilePostgreSQLUser_groupAccesses(t *testing.T) {
 			},
 			writes: nil,
 			output: HostAccess{
-				"localhost:5432": []ReadWriteAccess{
+				"localhost:5432/database": []ReadWriteAccess{
 					{
-						Type:   AccessTypeRead,
-						Access: accessSpec("localhost:5432", "I'am a developer"),
+						Host:     "localhost:5432",
+						Database: "database",
+						Type:     AccessTypeRead,
+						Access:   accessSpec("localhost:5432", "I'am a developer"),
 					},
 				},
 			},
@@ -329,14 +409,18 @@ func TestReconcilePostgreSQLUser_groupAccesses(t *testing.T) {
 			},
 			writes: nil,
 			output: HostAccess{
-				"localhost:5432": []ReadWriteAccess{
+				"localhost:5432/database": []ReadWriteAccess{
 					{
-						Type:   AccessTypeRead,
-						Access: accessSpec("localhost:5432", "I'am a developer"),
+						Host:     "localhost:5432",
+						Database: "database",
+						Type:     AccessTypeRead,
+						Access:   accessSpec("localhost:5432", "I'am a developer"),
 					},
 					{
-						Type:   AccessTypeRead,
-						Access: accessSpec("localhost:5432", "I really am a developer"),
+						Host:     "localhost:5432",
+						Database: "database",
+						Type:     AccessTypeRead,
+						Access:   accessSpec("localhost:5432", "I really am a developer"),
 					},
 				},
 			},
@@ -349,16 +433,20 @@ func TestReconcilePostgreSQLUser_groupAccesses(t *testing.T) {
 			},
 			writes: nil,
 			output: HostAccess{
-				"host1:5432": []ReadWriteAccess{
+				"host1:5432/database": []ReadWriteAccess{
 					{
-						Type:   AccessTypeRead,
-						Access: accessSpec("host1:5432", "I'am a developer"),
+						Host:     "host1:5432",
+						Database: "database",
+						Type:     AccessTypeRead,
+						Access:   accessSpec("host1:5432", "I'am a developer"),
 					},
 				},
-				"host2:5432": []ReadWriteAccess{
+				"host2:5432/database": []ReadWriteAccess{
 					{
-						Type:   AccessTypeRead,
-						Access: accessSpec("host2:5432", "I really am a developer"),
+						Host:     "host2:5432",
+						Database: "database",
+						Type:     AccessTypeRead,
+						Access:   accessSpec("host2:5432", "I really am a developer"),
 					},
 				},
 			},
@@ -374,24 +462,32 @@ func TestReconcilePostgreSQLUser_groupAccesses(t *testing.T) {
 				accessSpec("host2:5432", "I really am a writing developer"),
 			},
 			output: HostAccess{
-				"host1:5432": []ReadWriteAccess{
+				"host1:5432/database": []ReadWriteAccess{
 					{
-						Type:   AccessTypeRead,
-						Access: accessSpec("host1:5432", "I'am a developer"),
+						Host:     "host1:5432",
+						Database: "database",
+						Type:     AccessTypeRead,
+						Access:   accessSpec("host1:5432", "I'am a developer"),
 					},
 					{
-						Type:   AccessTypeWrite,
-						Access: accessSpec("host1:5432", "I'am a writing developer"),
+						Host:     "host1:5432",
+						Database: "database",
+						Type:     AccessTypeWrite,
+						Access:   accessSpec("host1:5432", "I'am a writing developer"),
 					},
 				},
-				"host2:5432": []ReadWriteAccess{
+				"host2:5432/database": []ReadWriteAccess{
 					{
-						Type:   AccessTypeRead,
-						Access: accessSpec("host2:5432", "I really am a developer"),
+						Host:     "host2:5432",
+						Database: "database",
+						Type:     AccessTypeRead,
+						Access:   accessSpec("host2:5432", "I really am a developer"),
 					},
 					{
-						Type:   AccessTypeWrite,
-						Access: accessSpec("host2:5432", "I really am a writing developer"),
+						Host:     "host2:5432",
+						Database: "database",
+						Type:     AccessTypeWrite,
+						Access:   accessSpec("host2:5432", "I really am a writing developer"),
 					},
 				},
 			},
