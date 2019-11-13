@@ -14,6 +14,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
@@ -59,9 +60,8 @@ func TestReconcilePostgreSQLDatabase_ensurePostgreSQLDatabase_sunshine(t *testin
 
 	// Validate owner of database
 	owners := validateOwner(t, r.db, name)
-	t.Log(owners)
+	t.Logf("Owners of database: %v", owners)
 	assert.Equal(t, []string{name}, owners, "owner not as expected")
-
 }
 
 func TestReconcilePostgreSQLDatabase_ensurePostgreSQLDatabase_idempotency(t *testing.T) {
@@ -92,8 +92,8 @@ func TestReconcilePostgreSQLDatabase_ensurePostgreSQLDatabase_idempotency(t *tes
 	// Invoke again with same name
 	err = r.ensurePostgreSQLDatabase(logf.Log, name, password)
 	if err != nil {
-		t.Logf("%#v", err)
-		t.Fatalf("ensurePostgreSQLDatabase failed: %v", err)
+		t.Logf("The error: %#v", err)
+		t.Fatalf("Second ensurePostgreSQLDatabase failed: %v", err)
 	}
 }
 
@@ -152,7 +152,13 @@ func TestReconcilePostgreSQLDatabase_getSecretValue(t *testing.T) {
 			r := &ReconcilePostgreSQLDatabase{
 				client: cl,
 			}
-			password, err := r.getSecretValue(tc.secretName, tc.namespace, tc.key)
+
+			namespacedName := types.NamespacedName{
+				Name:      tc.secretName,
+				Namespace: tc.namespace,
+			}
+
+			password, err := r.getSecretValue(namespacedName, tc.key)
 			if tc.err != nil {
 				assert.EqualErrorf(t, err, tc.err.Error(), "wrong output error: %v", err.Error())
 			} else {
@@ -209,7 +215,12 @@ func TestReconcilePostgreSQLDatabase_getConfigMapValue(t *testing.T) {
 			r := &ReconcilePostgreSQLDatabase{
 				client: cl,
 			}
-			password, err := r.getConfigMapValue(tc.configMapName, tc.namespace, tc.key)
+
+			namespacedName := types.NamespacedName{
+				Name:      tc.configMapName,
+				Namespace: tc.namespace,
+			}
+			password, err := r.getConfigMapValue(namespacedName, tc.key)
 			if tc.err != nil {
 				assert.EqualErrorf(t, err, tc.err.Error(), "wrong output error: %v", err.Error())
 			} else {
@@ -225,6 +236,11 @@ var _ io.Writer = &testLogger{}
 // testLogger is an io.Writer used for reporting logs to the test runner.
 type testLogger struct {
 	t *testing.T
+}
+
+func (t *testLogger) Write(p []byte) (int, error) {
+	t.t.Logf("%s", p)
+	return len(p), nil
 }
 
 func validateOwner(t *testing.T, db *sql.DB, owner string) []string {
@@ -264,9 +280,4 @@ func stringsResult(t *testing.T, rows *sql.Rows) []string {
 	}
 	sort.Strings(results)
 	return results
-}
-
-func (t *testLogger) Write(p []byte) (int, error) {
-	t.t.Logf("%s", p)
-	return len(p), nil
 }

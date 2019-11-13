@@ -5,11 +5,9 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"fmt"
-
 	"github.com/go-logr/logr"
 	"github.com/lib/pq"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/pkg/apis/lunarway/v1alpha1"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -53,16 +51,6 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	// Watch for changes to primary resource PostgreSQLDatabase
 	err = c.Watch(&source.Kind{Type: &lunarwayv1alpha1.PostgreSQLDatabase{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return err
-	}
-
-	// TODO(user): Modify this to be the types you create that are owned by the primary resource
-	// Watch for changes to secondary resource Pods and requeue the owner PostgreSQLDatabase
-	err = c.Watch(&source.Kind{Type: &corev1.Pod{}}, &handler.EnqueueRequestForOwner{
-		IsController: true,
-		OwnerType:    &lunarwayv1alpha1.PostgreSQLDatabase{},
-	})
 	if err != nil {
 		return err
 	}
@@ -136,25 +124,23 @@ func postgresqlConnection(connectionString string) (*sql.DB, error) {
 	return db, nil
 }
 
-func (r *ReconcilePostgreSQLDatabase) resolveDatabasePassword(db lunarwayv1alpha1.PostgreSQLDatabase, namespaceName string) (string, error) {
+func (r *ReconcilePostgreSQLDatabase) resolveDatabasePassword(db lunarwayv1alpha1.PostgreSQLDatabase, namespace string) (string, error) {
 	if db.Spec.Password.Value != "" {
 		return db.Spec.Password.Value, nil
 	}
 
 	if db.Spec.Password.ValueFrom.SecretKeyRef.Key != "" {
-		return r.getSecretValue(db.Spec.Password.ValueFrom.SecretKeyRef.Name, namespaceName, db.Spec.Password.ValueFrom.SecretKeyRef.Key)
+		return r.getSecretValue(types.NamespacedName{Name: db.Spec.Password.ValueFrom.SecretKeyRef.Name, Namespace: namespace}, db.Spec.Password.ValueFrom.SecretKeyRef.Key)
 	}
 
 	if db.Spec.Password.ValueFrom.ConfigMapKeyRef.Key != "" {
-		return r.getConfigMapValue(db.Spec.Password.ValueFrom.ConfigMapKeyRef.Name, namespaceName, db.Spec.Password.ValueFrom.ConfigMapKeyRef.Key)
+		return r.getConfigMapValue(types.NamespacedName{Name: db.Spec.Password.ValueFrom.ConfigMapKeyRef.Name, Namespace: namespace}, db.Spec.Password.ValueFrom.ConfigMapKeyRef.Key)
 	}
 
 	return "", fmt.Errorf("no password")
 }
 
 func (r *ReconcilePostgreSQLDatabase) ensurePostgreSQLDatabase(log logr.Logger, name, password string) error {
-	log.Info(fmt.Sprintf("Creating service user with name %s and password %s", name, password))
-
 	// Create the service user
 	_, err := r.db.Exec(fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s' NOCREATEROLE VALID UNTIL 'infinity'", name, password))
 	if err != nil {
@@ -180,16 +166,9 @@ func (r *ReconcilePostgreSQLDatabase) ensurePostgreSQLDatabase(log logr.Logger, 
 	}
 
 	// Alter ownership of the database to the database user
-	// TODO: Handle the error in a better way
 	_, err = r.db.Exec(fmt.Sprintf("ALTER DATABASE %s OWNER TO %s", name, name))
 	if err != nil {
-		pqError, ok := err.(*pq.Error)
-		if !ok || pqError.Code.Name() != "duplicate_object" {
-			return err
-		}
-		log.Info(fmt.Sprintf("Database; %s already exists", name), "errorCode", pqError.Code, "errorName", pqError.Code.Name())
-	} else {
-		log.Info(fmt.Sprintf("Granted %s owner of the database; %s", name, name))
+		return err
 	}
 
 	serviceConnection, err := postgresqlConnection(fmt.Sprintf("postgresql://%s:%s@localhost:5432/%s?sslmode=disable", name, password, name))
@@ -211,13 +190,13 @@ func (r *ReconcilePostgreSQLDatabase) ensurePostgreSQLDatabase(log logr.Logger, 
 	return nil
 }
 
-func (r *ReconcilePostgreSQLDatabase) getSecretValue(name, namespace, key string) (string, error) {
+func (r *ReconcilePostgreSQLDatabase) getSecretValue(namespacedName types.NamespacedName, key string) (string, error) {
 	secret := &corev1.Secret{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{Name: name, Namespace: namespace}, secret)
+	err := r.client.Get(context.TODO(), types.NamespacedName{Name: namespacedName.Name, Namespace: namespacedName.Namespace}, secret)
 	if err != nil {
 		return "", err
 	}
-
+	//TODO: Add guard against non-existing keys
 	password, err := base64.StdEncoding.DecodeString(string(secret.Data[key]))
 	if err != nil {
 		return "", err
@@ -225,11 +204,12 @@ func (r *ReconcilePostgreSQLDatabase) getSecretValue(name, namespace, key string
 	return string(password), nil
 }
 
-func (r *ReconcilePostgreSQLDatabase) getConfigMapValue(name, namespace, key string) (string, error) {
+func (r *ReconcilePostgreSQLDatabase) getConfigMapValue(namespacedName types.NamespacedName, key string) (string, error) {
 	configMap := &corev1.ConfigMap{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{Name: name, Namespace: namespace}, configMap)
+	err := r.client.Get(context.TODO(), types.NamespacedName{Name: namespacedName.Name, Namespace: namespacedName.Namespace}, configMap)
 	if err != nil {
 		return "", err
 	}
+	//TODO: Add guard against non-existing keys
 	return string(configMap.Data[key]), nil
 }

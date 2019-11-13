@@ -57,26 +57,26 @@ type ResourceVar struct {
 	// Defaults to "".
 	// +optional
 	Value string `json:"value,omitempty"`
-	// Source for Secret
+	// Source to read the value from.
 	// +optional
 	ValueFrom *ResourceVarSource `json:"valueFrom,omitempty"`
 }
 
-// ResourceVarSource represents a source for the value of an EnvVar.
+// ResourceVarSource represents a source for the value of a ResourceVar
 type ResourceVarSource struct {
-	// Selects a key of a secret in the pod's namespace
+	// Selects a key of a secret in the custom resource's namespace
 	// +optional
 	SecretKeyRef *KeySelector `json:"secretKeyRef,omitempty"`
 
-	// Selects a key of a secret in the pod's namespace
+	// Selects a key of a config map in the custom resource's namespace
 	// +optional
 	ConfigMapKeyRef *KeySelector `json:"configMapKeyRef,omitempty"`
 }
 
 // KeySelector selects a key of a Secret or ConfigMap.
 type KeySelector struct {
-	// The name of the secret in the namespace to select from.
+	// The name of the secret or config map in the namespace to select from.
 	Name string `json:"name,omitempty"`
-	// The key of the secret to select from.  Must be a valid secret key.
+	// The key of the secret or config map to select from.  Must be a valid key.
 	Key string `json:"key"`
 }
