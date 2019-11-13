@@ -88,7 +88,8 @@ spec:
           configMapKeyRef:
             name: database
             key: db.host
-      database: user
+      database:
+        value: user
       reason: "Related to support ticket LW-1234"
       start: 2019-09-16T10:00:00Z
       end: 2019-09-16T14:00:00Z

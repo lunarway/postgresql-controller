@@ -12,6 +12,7 @@ import (
 func (in *AccessSpec) DeepCopyInto(out *AccessSpec) {
 	*out = *in
 	in.Host.DeepCopyInto(&out.Host)
+	in.Database.DeepCopyInto(&out.Database)
 	in.Start.DeepCopyInto(&out.Start)
 	in.Stop.DeepCopyInto(&out.Stop)
 	return

@@ -21,8 +21,9 @@ type PostgreSQLUserSpec struct {
 }
 
 type AccessSpec struct {
-	Host   ResourceVar `json:"host"`
-	Reason string      `json:"reason"`
+	Host     ResourceVar `json:"host"`
+	Database ResourceVar `json:"database"`
+	Reason   string      `json:"reason"`
 	// +optional
 	Start metav1.Time `json:"start"`
 	// +optional
