@@ -178,10 +178,46 @@ func schema_pkg_apis_lunarway_v1alpha1_PostgreSQLUserSpec(ref common.ReferenceCa
 							Format:      "",
 						},
 					},
+					"read": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("./pkg/apis/lunarway/v1alpha1.AccessSpec"),
+									},
+								},
+							},
+						},
+					},
+					"write": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("./pkg/apis/lunarway/v1alpha1.AccessSpec"),
+									},
+								},
+							},
+						},
+					},
 				},
 				Required: []string{"name"},
 			},
 		},
+		Dependencies: []string{
+			"./pkg/apis/lunarway/v1alpha1.AccessSpec"},
 	}
 }
 

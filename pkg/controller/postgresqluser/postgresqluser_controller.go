@@ -7,6 +7,8 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/lib/pq"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/pkg/apis/lunarway/v1alpha1"
+	"go.lunarway.com/postgresql-controller/pkg/kube"
+	"go.uber.org/multierr"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -34,10 +36,11 @@ func Add(mgr manager.Manager) error {
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, db *sql.DB) reconcile.Reconciler {
 	return &ReconcilePostgreSQLUser{
-		client:     mgr.GetClient(),
-		db:         db,
-		grantRoles: []string{"rds_iam", "iam_developer"},
-		rolePrefix: "iam_developer_",
+		client:           mgr.GetClient(),
+		db:               db,
+		resourceResolver: kube.ResourceValue,
+		grantRoles:       []string{"rds_iam", "iam_developer"},
+		rolePrefix:       "iam_developer_",
 	}
 }
 
@@ -65,7 +68,8 @@ var _ reconcile.Reconciler = &ReconcilePostgreSQLUser{}
 type ReconcilePostgreSQLUser struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client client.Client
+	client           client.Client
+	resourceResolver func(client client.Client, resource lunarwayv1alpha1.ResourceVar, namespace string) (string, error)
 
 	db *sql.DB
 
@@ -141,4 +145,82 @@ func (r *ReconcilePostgreSQLUser) ensurePostgreSQLRole(log logr.Logger, name str
 		return err
 	}
 	return nil
+}
+
+type HostAccess map[string][]ReadWriteAccess
+
+type ReadWriteAccess struct {
+	Access lunarwayv1alpha1.AccessSpec
+	Type   AccessType
+}
+
+type AccessType int
+
+const (
+	AccessTypeRead  AccessType = iota
+	AccessTypeWrite AccessType = iota
+)
+
+func (r *ReconcilePostgreSQLUser) groupAccesses(namespace string, reads []lunarwayv1alpha1.AccessSpec, writes []lunarwayv1alpha1.AccessSpec) (HostAccess, error) {
+	if len(reads) == 0 {
+		return nil, nil
+	}
+	hosts := make(HostAccess)
+	var errs error
+
+	err := r.groupByHosts(hosts, namespace, reads, AccessTypeRead)
+	if err != nil {
+		errs = multierr.Append(errs, err)
+	}
+	err = r.groupByHosts(hosts, namespace, writes, AccessTypeWrite)
+	if err != nil {
+		errs = multierr.Append(errs, err)
+	}
+
+	if len(hosts) == 0 {
+		return nil, errs
+	}
+	return hosts, errs
+}
+
+func (r *ReconcilePostgreSQLUser) groupByHosts(hosts HostAccess, namespace string, accesses []lunarwayv1alpha1.AccessSpec, accessType AccessType) error {
+	var errs error
+	for i, access := range accesses {
+		host, err := r.resourceResolver(r.client, access.Host, namespace)
+		if err != nil {
+			errs = multierr.Append(errs, &AccessError{
+				Access: accesses[i],
+				Err:    err,
+			})
+			continue
+		}
+
+		hosts[host] = append(hosts[host], ReadWriteAccess{
+			Access: accesses[i],
+			Type:   accessType,
+		})
+	}
+	return errs
+}
+
+type AccessError struct {
+	Access lunarwayv1alpha1.AccessSpec
+	Err    error
+}
+
+var _ error = &AccessError{}
+
+func (err *AccessError) Error() string {
+	host := err.Access.Host.Value
+	if host == "" && err.Access.Host.ValueFrom.SecretKeyRef != nil {
+		host = fmt.Sprintf("from secret '%s' key '%s'", err.Access.Host.ValueFrom.SecretKeyRef.Name, err.Access.Host.ValueFrom.SecretKeyRef.Key)
+	}
+	if host == "" && err.Access.Host.ValueFrom.ConfigMapKeyRef != nil {
+		host = fmt.Sprintf("from config map '%s' key '%s'", err.Access.Host.ValueFrom.ConfigMapKeyRef.Name, err.Access.Host.ValueFrom.ConfigMapKeyRef.Key)
+	}
+	return fmt.Sprintf("access to host %s: %v", host, err.Err)
+}
+
+func (err *AccessError) Unwrap() error {
+	return err.Err
 }
