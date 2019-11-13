@@ -190,6 +190,101 @@ func storedRoles(t *testing.T, db *sql.DB, userName string) []string {
 	return roles
 }
 
+func TestReconcile_connectToHosts(t *testing.T) {
+	test.Integration(t)
+	tt := []struct {
+		name            string
+		credentials     map[string]Credentials
+		hostAccess      HostAccess
+		connectionCount int
+		err             error
+	}{
+		{
+			name: "single host with credentials",
+			credentials: map[string]Credentials{
+				"localhost:5432": Credentials{
+					Name:     "iam_creator",
+					Password: "",
+				},
+			},
+			hostAccess: HostAccess{
+				"localhost:5432": []ReadWriteAccess{},
+			},
+			connectionCount: 1,
+			err:             nil,
+		},
+		{
+			name: "multiple hosts with credentials",
+			credentials: map[string]Credentials{
+				"localhost:5432": Credentials{
+					Name:     "iam_creator",
+					Password: "",
+				},
+			},
+			hostAccess: HostAccess{
+				"localhost:5432": []ReadWriteAccess{},
+			},
+			connectionCount: 1,
+			err:             nil,
+		},
+		{
+			name: "multiple hosts without upstream",
+			credentials: map[string]Credentials{
+				"localhost:5432": Credentials{
+					Name:     "iam_creator",
+					Password: "",
+				},
+				"unknown": Credentials{
+					Name:     "iam_creator",
+					Password: "12345678",
+				},
+			},
+			hostAccess: HostAccess{
+				"localhost:5432": []ReadWriteAccess{},
+				"unknown":        []ReadWriteAccess{},
+			},
+			connectionCount: 1,
+			err:             fmt.Errorf("connect to postgresql://iam_creator:***@unknown?sslmode=disable: dial tcp: lookup unknown: no such host"),
+		},
+		{
+			name:        "missing credentials",
+			credentials: map[string]Credentials{},
+			hostAccess: HostAccess{
+				"localhost:5432": []ReadWriteAccess{},
+			},
+			connectionCount: 0,
+			err:             fmt.Errorf("no credentials for host 'localhost:5432'"),
+		},
+	}
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			_ = test.SetLogger(t)
+
+			r := ReconcilePostgreSQLUser{
+				hostCredentials: tc.credentials,
+			}
+
+			// act
+			connections, err := r.connectToHosts(tc.hostAccess)
+
+			defer func() {
+				for _, db := range connections {
+					db.Close()
+				}
+			}()
+
+			// assert
+			t.Logf("Connections: %v", connections)
+			if tc.err != nil {
+				assert.EqualError(t, err, tc.err.Error(), "error not as expected")
+			} else {
+				assert.NoError(t, err, "unexpected output error")
+			}
+			assert.Len(t, connections, tc.connectionCount, "connection count not as expected")
+		})
+	}
+}
+
 func TestReconcilePostgreSQLUser_groupAccesses(t *testing.T) {
 	accessSpec := func(host, reason string) lunarwayv1alpha1.AccessSpec {
 		return lunarwayv1alpha1.AccessSpec{

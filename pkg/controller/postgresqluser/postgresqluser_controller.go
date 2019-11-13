@@ -75,6 +75,15 @@ type ReconcilePostgreSQLUser struct {
 
 	grantRoles []string
 	rolePrefix string
+	// contains a map of credentials for hosts
+	hostCredentials map[string]Credentials
+}
+
+// Credentials represents connection credentials for a user on a
+// PostgreSQL instance capabable of creating roles.
+type Credentials struct {
+	Name     string
+	Password string
 }
 
 // Reconcile reads that state of the cluster for a PostgreSQLUser object and makes changes based on the state read
@@ -160,6 +169,26 @@ const (
 	AccessTypeRead  AccessType = iota
 	AccessTypeWrite AccessType = iota
 )
+
+func (r *ReconcilePostgreSQLUser) connectToHosts(accesses HostAccess) (map[string]*sql.DB, error) {
+	hosts := make(map[string]*sql.DB)
+	var errs error
+	for host, _ := range accesses {
+		credentials, ok := r.hostCredentials[host]
+		if !ok {
+			errs = multierr.Append(errs, fmt.Errorf("no credentials for host '%s'", host))
+			continue
+		}
+		connectionString := fmt.Sprintf("postgresql://%s:%s@%s?sslmode=disable", credentials.Name, credentials.Password, host)
+		db, err := postgresqlConnection(connectionString)
+		if err != nil {
+			errs = multierr.Append(errs, fmt.Errorf("connect to %s: %w", strings.ReplaceAll(connectionString, credentials.Password, "***"), err))
+			continue
+		}
+		hosts[host] = db
+	}
+	return hosts, errs
+}
 
 func (r *ReconcilePostgreSQLUser) groupAccesses(namespace string, reads []lunarwayv1alpha1.AccessSpec, writes []lunarwayv1alpha1.AccessSpec) (HostAccess, error) {
 	if len(reads) == 0 {
