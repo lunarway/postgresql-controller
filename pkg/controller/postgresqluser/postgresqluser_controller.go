@@ -142,3 +142,10 @@ func (r *ReconcilePostgreSQLUser) ensurePostgreSQLRole(log logr.Logger, name str
 	}
 	return nil
 }
+
+// func (r *ReconcilePostgreSQLUser) buildRights(reads []lunarwayv1alpha1.ReadAccessSpec) {
+// 	hosts := make(map[string][]lunarwayv1alpha1.ReadAccessSpec)
+// 	for _, access := range reads {
+// 		host :=
+// 	}
+// }

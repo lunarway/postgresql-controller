@@ -2,20 +2,14 @@ package postgresqldatabase
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
-	"io"
 	"os"
 	"sort"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"go.lunarway.com/postgresql-controller/test"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
@@ -29,8 +23,7 @@ func TestReconcilePostgreSQLDatabase_ensurePostgreSQLDatabase_sunshine(t *testin
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
 	}
-	logger := testLogger{t: t}
-	logf.SetLogger(logf.ZapLoggerTo(&logger, true))
+	test.SetLogger(t)
 
 	r := ReconcilePostgreSQLDatabase{
 		db: db,
@@ -74,8 +67,7 @@ func TestReconcilePostgreSQLDatabase_ensurePostgreSQLDatabase_idempotency(t *tes
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
 	}
-	logger := testLogger{t: t}
-	logf.SetLogger(logf.ZapLoggerTo(&logger, true))
+	test.SetLogger(t)
 
 	r := ReconcilePostgreSQLDatabase{
 		db: db,
@@ -95,152 +87,6 @@ func TestReconcilePostgreSQLDatabase_ensurePostgreSQLDatabase_idempotency(t *tes
 		t.Logf("The error: %#v", err)
 		t.Fatalf("Second ensurePostgreSQLDatabase failed: %v", err)
 	}
-}
-
-func TestReconcilePostgreSQLDatabase_getSecretValue(t *testing.T) {
-	logger := testLogger{t: t}
-	logf.SetLogger(logf.ZapLoggerTo(&logger, true))
-
-	tt := []struct {
-		name       string
-		secretName string
-		namespace  string
-		key        string
-		value      string
-		output     string
-		err        error
-	}{
-		{
-			name:       "sunshine",
-			secretName: "test",
-			namespace:  "test",
-			key:        "test",
-			value:      "dGVzdA==",
-			output:     "test",
-			err:        nil,
-		},
-		{
-			name:       "illegal base64",
-			secretName: "test",
-			namespace:  "test",
-			key:        "test",
-			value:      "dGVzdA",
-			output:     "",
-			err:        errors.New("illegal base64 data at input byte 4"),
-		},
-	}
-	for _, tc := range tt {
-		t.Run(tc.name, func(t *testing.T) {
-
-			secret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      tc.secretName,
-					Namespace: tc.namespace,
-				},
-				Data: map[string][]byte{
-					tc.key: []byte(tc.value),
-				},
-			}
-			// Objects to track in the fake client.
-			objs := []runtime.Object{
-				secret,
-			}
-
-			// Create a fake client to mock API calls.
-			cl := fake.NewFakeClient(objs...)
-
-			r := &ReconcilePostgreSQLDatabase{
-				client: cl,
-			}
-
-			namespacedName := types.NamespacedName{
-				Name:      tc.secretName,
-				Namespace: tc.namespace,
-			}
-
-			password, err := r.getSecretValue(namespacedName, tc.key)
-			if tc.err != nil {
-				assert.EqualErrorf(t, err, tc.err.Error(), "wrong output error: %v", err.Error())
-			} else {
-				assert.NoError(t, err, "unexpected output error")
-			}
-			assert.Equal(t, tc.output, password, "password not as expected")
-		})
-	}
-}
-
-func TestReconcilePostgreSQLDatabase_getConfigMapValue(t *testing.T) {
-	logger := testLogger{t: t}
-	logf.SetLogger(logf.ZapLoggerTo(&logger, true))
-
-	tt := []struct {
-		name          string
-		configMapName string
-		namespace     string
-		key           string
-		value         string
-		output        string
-		err           error
-	}{
-		{
-			name:          "sunshine",
-			configMapName: "test",
-			namespace:     "test",
-			key:           "test",
-			value:         "test",
-			output:        "test",
-			err:           nil,
-		},
-	}
-	for _, tc := range tt {
-		t.Run(tc.name, func(t *testing.T) {
-
-			configMap := &corev1.ConfigMap{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      tc.configMapName,
-					Namespace: tc.namespace,
-				},
-				Data: map[string]string{
-					tc.key: tc.value,
-				},
-			}
-			// Objects to track in the fake client.
-			objs := []runtime.Object{
-				configMap,
-			}
-
-			// Create a fake client to mock API calls.
-			cl := fake.NewFakeClient(objs...)
-
-			r := &ReconcilePostgreSQLDatabase{
-				client: cl,
-			}
-
-			namespacedName := types.NamespacedName{
-				Name:      tc.configMapName,
-				Namespace: tc.namespace,
-			}
-			password, err := r.getConfigMapValue(namespacedName, tc.key)
-			if tc.err != nil {
-				assert.EqualErrorf(t, err, tc.err.Error(), "wrong output error: %v", err.Error())
-			} else {
-				assert.NoError(t, err, "unexpected output error")
-			}
-			assert.Equal(t, tc.output, password, "password not as expected")
-		})
-	}
-}
-
-var _ io.Writer = &testLogger{}
-
-// testLogger is an io.Writer used for reporting logs to the test runner.
-type testLogger struct {
-	t *testing.T
-}
-
-func (t *testLogger) Write(p []byte) (int, error) {
-	t.t.Logf("%s", p)
-	return len(p), nil
 }
 
 func validateOwner(t *testing.T, db *sql.DB, owner string) []string {

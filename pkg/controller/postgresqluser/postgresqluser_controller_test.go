@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
+	"go.lunarway.com/postgresql-controller/test"
 )
 
 func TestReconcile_ensurePostgreSQLRole(t *testing.T) {
@@ -88,8 +88,7 @@ func TestReconcile_ensurePostgreSQLRole(t *testing.T) {
 	}
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			logger := testLogger{t: t}
-			logf.SetLogger(logf.ZapLoggerTo(&logger, true))
+			log := test.SetLogger(t)
 
 			userName := fmt.Sprintf("test_user_%d", time.Now().UnixNano())
 			t.Logf("Using user name %s", userName)
@@ -112,7 +111,7 @@ func TestReconcile_ensurePostgreSQLRole(t *testing.T) {
 			}
 
 			// act
-			err = r.ensurePostgreSQLRole(logf.Log, userName)
+			err = r.ensurePostgreSQLRole(log, userName)
 
 			// assert
 			assert.NoError(t, err, "unexpected output error")
