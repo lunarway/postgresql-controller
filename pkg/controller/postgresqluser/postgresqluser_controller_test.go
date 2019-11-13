@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
-	"os"
 	"sort"
 	"strings"
 	"testing"
@@ -15,10 +14,7 @@ import (
 )
 
 func TestReconcile_ensurePostgreSQLRole(t *testing.T) {
-	postgresqlHost := os.Getenv("POSTGRESQL_CONTROLLER_INTEGRATION_HOST")
-	if postgresqlHost == "" {
-		t.Skip("Integration test host not specified")
-	}
+	postgresqlHost := test.Integration(t)
 	connectionString := fmt.Sprintf("postgresql://iam_creator:@%s?sslmode=disable", postgresqlHost)
 	db, err := postgresqlConnection(connectionString)
 	if err != nil {
