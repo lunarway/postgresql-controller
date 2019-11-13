@@ -1,0 +1,10 @@
+apiVersion: lunarway.com/v1alpha1
+kind: PostgreSQLDatabase
+metadata:
+  name: test1db
+spec:
+  name: test1db
+  password:
+    value: "1234"
+  host:
+    value: "localhost:5432"
