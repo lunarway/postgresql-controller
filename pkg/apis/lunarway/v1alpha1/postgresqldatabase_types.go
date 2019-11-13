@@ -4,9 +4,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // PostgreSQLDatabaseSpec defines the desired state of PostgreSQLDatabase
 // +k8s:openapi-gen=true
 type PostgreSQLDatabaseSpec struct {
@@ -14,10 +11,10 @@ type PostgreSQLDatabaseSpec struct {
 	Name string `json:"name"`
 
 	// Password
-	Password PasswordVar `json:"password"`
+	Password ResourceVar `json:"password"`
 
 	// Host
-	Host HostVar `json:"host"`
+	Host ResourceVar `json:"host"`
 }
 
 // PostgreSQLDatabaseStatus defines the observed state of PostgreSQLDatabase
@@ -56,7 +53,7 @@ func init() {
 }
 
 // PasswordVar represents an
-type PasswordVar struct {
+type ResourceVar struct {
 	// Defaults to "".
 	// +optional
 	Value string `json:"value,omitempty"`
@@ -82,14 +79,4 @@ type KeySelector struct {
 	Name string `json:"name,omitempty"`
 	// The key of the secret to select from.  Must be a valid secret key.
 	Key string `json:"key"`
-}
-
-// HostVar
-type HostVar struct {
-	// Defaults to "".
-	// +optional
-	Value string `json:"value,omitempty"`
-	// Selects a key of a ConfigMap.
-	// +optional
-	ValueFrom *ResourceVarSource `json:"configMapKeyRef,omitempty"`
 }

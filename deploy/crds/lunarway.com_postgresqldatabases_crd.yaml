@@ -34,8 +34,11 @@ spec:
             host:
               description: Host
               properties:
-                configMapKeyRef:
-                  description: Selects a key of a ConfigMap.
+                value:
+                  description: Defaults to "".
+                  type: string
+                valueFrom:
+                  description: Source for Secret
                   properties:
                     configMapKeyRef:
                       description: Selects a key of a secret in the pod's namespace
@@ -43,6 +46,10 @@ spec:
                         key:
                           description: The key of the secret to select from.  Must
                             be a valid secret key.
+                          type: string
+                        name:
+                          description: The name of the secret in the namespace to
+                            select from.
                           type: string
                       required:
                       - key
@@ -54,13 +61,14 @@ spec:
                           description: The key of the secret to select from.  Must
                             be a valid secret key.
                           type: string
+                        name:
+                          description: The name of the secret in the namespace to
+                            select from.
+                          type: string
                       required:
                       - key
                       type: object
                   type: object
-                value:
-                  description: Defaults to "".
-                  type: string
               type: object
             name:
               description: Name of the database
@@ -81,6 +89,10 @@ spec:
                           description: The key of the secret to select from.  Must
                             be a valid secret key.
                           type: string
+                        name:
+                          description: The name of the secret in the namespace to
+                            select from.
+                          type: string
                       required:
                       - key
                       type: object
@@ -90,6 +102,10 @@ spec:
                         key:
                           description: The key of the secret to select from.  Must
                             be a valid secret key.
+                          type: string
+                        name:
+                          description: The name of the secret in the namespace to
+                            select from.
                           type: string
                       required:
                       - key
