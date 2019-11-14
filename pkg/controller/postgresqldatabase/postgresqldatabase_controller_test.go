@@ -3,7 +3,6 @@ package postgresqldatabase
 import (
 	"database/sql"
 	"fmt"
-	"os"
 	"sort"
 	"testing"
 	"time"
@@ -14,10 +13,7 @@ import (
 )
 
 func TestReconcilePostgreSQLDatabase_ensurePostgreSQLDatabase_sunshine(t *testing.T) {
-	postgresqlHost := os.Getenv("POSTGRESQL_CONTROLLER_INTEGRATION_HOST")
-	if postgresqlHost == "" {
-		t.Skip("Integration test host not specified")
-	}
+	postgresqlHost := test.Integration(t)
 	connectionString := fmt.Sprintf("postgresql://iam_creator:@%s?sslmode=disable", postgresqlHost)
 	db, err := postgresqlConnection(connectionString)
 	if err != nil {
@@ -58,10 +54,7 @@ func TestReconcilePostgreSQLDatabase_ensurePostgreSQLDatabase_sunshine(t *testin
 }
 
 func TestReconcilePostgreSQLDatabase_ensurePostgreSQLDatabase_idempotency(t *testing.T) {
-	postgresqlHost := os.Getenv("POSTGRESQL_CONTROLLER_INTEGRATION_HOST")
-	if postgresqlHost == "" {
-		t.Skip("Integration test host not specified")
-	}
+	postgresqlHost := test.Integration(t)
 	connectionString := fmt.Sprintf("postgresql://iam_creator:@%s?sslmode=disable", postgresqlHost)
 	db, err := postgresqlConnection(connectionString)
 	if err != nil {
