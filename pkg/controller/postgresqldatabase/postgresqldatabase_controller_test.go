@@ -13,7 +13,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
-func TestReconcilePostgreSQLDatabase_ensurePostgreSQLDatabase_sunshine(t *testing.T) {
+func TestReconcilePostgreSQLDatabase_EnsurePostgreSQLDatabase_sunshine(t *testing.T) {
 	postgresqlHost := os.Getenv("POSTGRESQL_CONTROLLER_INTEGRATION_HOST")
 	if postgresqlHost == "" {
 		t.Skip("Integration test host not specified")
@@ -26,15 +26,15 @@ func TestReconcilePostgreSQLDatabase_ensurePostgreSQLDatabase_sunshine(t *testin
 	test.SetLogger(t)
 
 	r := ReconcilePostgreSQLDatabase{
-		db: db,
+		DB: db,
 	}
 
 	name := fmt.Sprintf("test_%d", time.Now().UnixNano())
 	password := "test"
 
-	err = r.ensurePostgreSQLDatabase(logf.Log, name, password)
+	err = r.EnsurePostgreSQLDatabase(logf.Log, name, password)
 	if err != nil {
-		t.Fatalf("ensurePostgreSQLDatabase failed: %v", err)
+		t.Fatalf("EnsurePostgreSQLDatabase failed: %v", err)
 	}
 
 	serviceConnectionString := fmt.Sprintf("postgresql://%s:%s@%s/%s?sslmode=disable", name, password, postgresqlHost, name)
@@ -48,16 +48,16 @@ func TestReconcilePostgreSQLDatabase_ensurePostgreSQLDatabase_sunshine(t *testin
 	assert.Equal(t, []string{name}, schemas, "schema not as expected")
 
 	// Validate iam_creator not able to see schema
-	schemas = storedSchema(t, r.db, name)
+	schemas = storedSchema(t, r.DB, name)
 	assert.Equal(t, []string(nil), schemas, "schema not as expected")
 
 	// Validate owner of database
-	owners := validateOwner(t, r.db, name)
+	owners := validateOwner(t, r.DB, name)
 	t.Logf("Owners of database: %v", owners)
 	assert.Equal(t, []string{name}, owners, "owner not as expected")
 }
 
-func TestReconcilePostgreSQLDatabase_ensurePostgreSQLDatabase_idempotency(t *testing.T) {
+func TestReconcilePostgreSQLDatabase_EnsurePostgreSQLDatabase_idempotency(t *testing.T) {
 	postgresqlHost := os.Getenv("POSTGRESQL_CONTROLLER_INTEGRATION_HOST")
 	if postgresqlHost == "" {
 		t.Skip("Integration test host not specified")
@@ -70,22 +70,22 @@ func TestReconcilePostgreSQLDatabase_ensurePostgreSQLDatabase_idempotency(t *tes
 	test.SetLogger(t)
 
 	r := ReconcilePostgreSQLDatabase{
-		db: db,
+		DB: db,
 	}
 
 	name := fmt.Sprintf("test_%d", time.Now().UnixNano())
 	password := "test"
 
-	err = r.ensurePostgreSQLDatabase(logf.Log, name, password)
+	err = r.EnsurePostgreSQLDatabase(logf.Log, name, password)
 	if err != nil {
-		t.Fatalf("ensurePostgreSQLDatabase failed: %v", err)
+		t.Fatalf("EnsurePostgreSQLDatabase failed: %v", err)
 	}
 
 	// Invoke again with same name
-	err = r.ensurePostgreSQLDatabase(logf.Log, name, password)
+	err = r.EnsurePostgreSQLDatabase(logf.Log, name, password)
 	if err != nil {
 		t.Logf("The error: %#v", err)
-		t.Fatalf("Second ensurePostgreSQLDatabase failed: %v", err)
+		t.Fatalf("Second EnsurePostgreSQLDatabase failed: %v", err)
 	}
 }
 
