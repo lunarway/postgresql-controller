@@ -154,6 +154,8 @@ func (r *ReconcilePostgreSQLUser) ensurePostgreSQLRoles(log logr.Logger, name st
 
 func (r *ReconcilePostgreSQLUser) ensurePostgreSQLRole(log logr.Logger, db *sql.DB, name string, accesses []ReadWriteAccess) error {
 	name = fmt.Sprintf("%s%s", r.rolePrefix, name)
+	log = log.WithValues("operation", "ensurePostgreSQLRole", "name", name)
+	log.Info(fmt.Sprintf("Creating role %s", name))
 	query := fmt.Sprintf("CREATE ROLE %s WITH LOGIN", name)
 	if len(r.grantRoles) != 0 {
 		query += fmt.Sprintf(" IN ROLE %s", strings.Join(r.grantRoles, ", "))
@@ -176,32 +178,31 @@ func (r *ReconcilePostgreSQLUser) ensurePostgreSQLRole(log logr.Logger, db *sql.
 	}
 
 	for _, access := range accesses {
+		// Only needed for testing without rds_iam role that otherwise grants this right
+		log.Info(fmt.Sprintf("Granting CONNECT to database '%s'", access.Database))
+		_, err = db.Exec(fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO %s", access.Database, name))
+		if err != nil {
+			return fmt.Errorf("grant connect on database '%s': %w", access.Database, err)
+		}
+		log.Info(fmt.Sprintf("Granting USAGE of schema '%s'", access.Database))
+		_, err = db.Exec(fmt.Sprintf("GRANT USAGE ON SCHEMA %s TO %s", access.Database, name))
+		if err != nil {
+			return fmt.Errorf("grant usage on schema '%s': %w", access.Database, err)
+		}
+		var schemaPrivileges string
 		if access.Type == AccessTypeRead {
-			// This revokation ensures that the user cannot create any objects in the
-			// PUBLIC role that is assigned to all roles by default.
-			// TODO: We could do this up front by iterating over all unique databases on the
-			// host.
-			_, err = db.Exec(fmt.Sprintf(`REVOKE ALL ON DATABASE %s from PUBLIC;
-			REVOKE ALL ON SCHEMA public from PUBLIC;
-			REVOKE ALL ON ALL TABLES IN SCHEMA public from PUBLIC;`, access.Database))
-			if err != nil {
-				return err
-			}
-
-			// Only needed for testing without rds_iam role that otherwise grants this right
-			_, err = db.Exec(fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO %s", access.Database, name))
-			if err != nil {
-				return err
-			}
-
-			_, err = db.Exec(fmt.Sprintf("GRANT USAGE ON SCHEMA %s TO %s", access.Database, name))
-			if err != nil {
-				return err
-			}
-			_, err = db.Exec(fmt.Sprintf("GRANT SELECT ON ALL TABLES IN SCHEMA %s TO %s", access.Database, name))
-			if err != nil {
-				return err
-			}
+			schemaPrivileges = "SELECT"
+		}
+		if access.Type == AccessTypeWrite {
+			schemaPrivileges += "INSERT, UPDATE, DELETE"
+		}
+		if len(schemaPrivileges) == 0 {
+			continue
+		}
+		log.Info(fmt.Sprintf("Granting %s to tables in schema '%s'", schemaPrivileges, access.Database))
+		_, err = db.Exec(fmt.Sprintf("GRANT %s ON ALL TABLES IN SCHEMA %s TO %s", schemaPrivileges, access.Database, name))
+		if err != nil {
+			return fmt.Errorf("grant access privileges '%s' on schema '%s': %w", schemaPrivileges, access.Database, err)
 		}
 	}
 	return nil

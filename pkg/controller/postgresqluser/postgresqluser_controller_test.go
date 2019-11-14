@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/pkg/apis/lunarway/v1alpha1"
+	"go.lunarway.com/postgresql-controller/pkg/controller/postgresqldatabase"
 	"go.lunarway.com/postgresql-controller/test"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -140,64 +141,117 @@ func TestReconcile_ensurePostgreSQLRole_accessRoles(t *testing.T) {
 	}
 	log := test.SetLogger(t)
 
-	testDatabase := "test"
-	connectionString := fmt.Sprintf("postgresql://iam_creator:@%s?sslmode=disable", postgresqlHost)
-	iamCreatorDB, err := postgresqlConnection(connectionString)
+	iamCreatorRootDatabase := fmt.Sprintf("postgresql://iam_creator:@%s?sslmode=disable", postgresqlHost)
+	iamCreatorRootDB, err := postgresqlConnection(iamCreatorRootDatabase)
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
 	}
-	defer iamCreatorDB.Close()
+	defer iamCreatorRootDB.Close()
 
-	// create a schema and table with another user name than the one created by
-	// the resouce. We use it to assert that we have read/write access according
-	// to our expectations
-	dbExec(t, iamCreatorDB, `DROP DATABASE %[1]s`, testDatabase)
-	dbExec(t, iamCreatorDB, "CREATE DATABASE %s", testDatabase)
+	var (
+		now           = time.Now().UnixNano()
+		serviceUser1  = fmt.Sprintf("test_svc_1_%d", now)
+		serviceUser2  = fmt.Sprintf("test_svc_2_%d", now)
+		developerUser = fmt.Sprintf("test_user_%d", now)
+	)
+	log.Info(fmt.Sprintf("Running test with service users %s, %s and developer %s", serviceUser1, serviceUser2, developerUser))
 
-	connectionString = fmt.Sprintf("postgresql://iam_creator:@%s/%s?sslmode=disable", postgresqlHost, testDatabase)
-	iamCreatorDB, err = postgresqlConnection(connectionString)
-	if err != nil {
-		t.Fatalf("connect to test database failed: %v", err)
-	}
-	defer iamCreatorDB.Close()
-
-	dbExec(t, iamCreatorDB, "CREATE SCHEMA IF NOT EXISTS %s", testDatabase)
-	dbExec(t, iamCreatorDB, `CREATE TABLE IF NOT EXISTS %s.films (
-    code        char(5) CONSTRAINT firstkey PRIMARY KEY,
-    title       varchar(40) NOT NULL,
-    did         integer NOT NULL,
-    date_prod   date,
-    kind        varchar(10),
-    len         interval hour to minute
-)`, testDatabase)
-
-	userName := fmt.Sprintf("test_user_%d", time.Now().UnixNano())
-	t.Logf("Using user name %s", userName)
+	// create service databases and tables for testing access rights
+	createServiceDatabase(t, iamCreatorRootDB, postgresqlHost, serviceUser1)
+	createServiceDatabase(t, iamCreatorRootDB, postgresqlHost, serviceUser2)
 
 	r := ReconcilePostgreSQLUser{}
 
-	// act
-	err = r.ensurePostgreSQLRole(log, iamCreatorDB, userName, []ReadWriteAccess{
+	//
+	// test read access to serviceUser1
+	//
+
+	// reconnect to start a new session with grants from above database creation
+	iamCreatorUserDB, err := postgresqlConnection(fmt.Sprintf("postgresql://iam_creator:@%s/%s?sslmode=disable", postgresqlHost, serviceUser1))
+	if err != nil {
+		t.Fatalf("connect to database failed: %v", err)
+	}
+	defer iamCreatorUserDB.Close()
+	err = r.ensurePostgreSQLRole(log, iamCreatorUserDB, developerUser, []ReadWriteAccess{
 		{
 			Type:     AccessTypeRead,
-			Host:     postgresqlHost,
-			Database: testDatabase,
+			Database: serviceUser1,
 		},
 	})
+	if !assert.NoError(t, err, "unexpected output error") {
+		return
+	}
 
-	// assert
-	assert.NoError(t, err, "unexpected output error")
-
-	connectionString = fmt.Sprintf("postgresql://%s:@%s/%s?sslmode=disable", userName, postgresqlHost, testDatabase)
-	userDB, err := postgresqlConnection(connectionString)
+	userDB, err := postgresqlConnection(fmt.Sprintf("postgresql://%s:@%s/%s?sslmode=disable", developerUser, postgresqlHost, serviceUser1))
 	if err != nil {
 		t.Fatalf("could not connect with new user: %v", err)
 	}
 	defer userDB.Close()
-	_, err = userDB.Query("SELECT * FROM test.films")
+	_, err = userDB.Query(fmt.Sprintf("SELECT * FROM %s.films", serviceUser1))
 	if err != nil {
-		t.Fatalf("could not select from test.films table: %v", err)
+		t.Fatalf("could not select from %s.films table: %v", serviceUser1, err)
 	}
+	// this should not work as we only requested read rights
+	_, err = userDB.Query(fmt.Sprintf("INSERT INTO %s.films VALUES('new title')", serviceUser1))
+	if err == nil {
+		t.Fatalf("could insert into %s.films table when it should not", serviceUser1)
+	}
+
+	//
+	// test read and write access to serviceUser2
+	//
+
+	// reconnect to start a new session with grants from above database creation
+	iamCreatorUserDB, err = postgresqlConnection(fmt.Sprintf("postgresql://iam_creator:@%s/%s?sslmode=disable", postgresqlHost, serviceUser2))
+	if err != nil {
+		t.Fatalf("connect to database failed: %v", err)
+	}
+	defer iamCreatorUserDB.Close()
+	err = r.ensurePostgreSQLRole(log, iamCreatorUserDB, developerUser, []ReadWriteAccess{
+		{
+			Type:     AccessTypeRead,
+			Database: serviceUser2,
+		},
+		{
+			Type:     AccessTypeWrite,
+			Database: serviceUser2,
+		},
+	})
+	if !assert.NoError(t, err, "unexpected output error") {
+		return
+	}
+
+	userDB, err = postgresqlConnection(fmt.Sprintf("postgresql://%s:@%s/%s?sslmode=disable", developerUser, postgresqlHost, serviceUser2))
+	if err != nil {
+		t.Fatalf("could not connect with new user: %v", err)
+	}
+	defer userDB.Close()
+	_, err = userDB.Query(fmt.Sprintf("SELECT * FROM %s.films", serviceUser2))
+	if err != nil {
+		t.Fatalf("could not select from %s.films table: %v", serviceUser2, err)
+	}
+	_, err = userDB.Query(fmt.Sprintf("INSERT INTO %s.films VALUES('new title')", serviceUser2))
+	if err != nil {
+		t.Fatalf("could not insert into %s.films table when it should not", serviceUser2)
+	}
+}
+
+func createServiceDatabase(t *testing.T, database *sql.DB, host, service string) {
+	databaseController := postgresqldatabase.ReconcilePostgreSQLDatabase{
+		DB: database,
+	}
+	err := databaseController.EnsurePostgreSQLDatabase(log, service, "")
+	if err != nil {
+		t.Fatalf("Failed to create database: %v", err)
+	}
+
+	serviceUserDatabase := fmt.Sprintf("postgresql://%s:@%s/%s?sslmode=disable", service, host, service)
+	serviceUserDB, err := postgresqlConnection(serviceUserDatabase)
+	if err != nil {
+		t.Fatalf("connect to service user failed: %v", err)
+	}
+	defer serviceUserDB.Close()
+	dbExec(t, serviceUserDB, `CREATE TABLE IF NOT EXISTS %s.films (title varchar(40) NOT NULL)`, service)
 }
 
 var _ io.Writer = &testLogger{}
