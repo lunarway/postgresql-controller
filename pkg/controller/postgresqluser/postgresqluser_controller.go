@@ -3,7 +3,16 @@ package postgresqluser
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"net/url"
+	"os"
+	"strings"
+
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/iam"
 	"github.com/go-logr/logr"
 	"github.com/lib/pq"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/pkg/apis/lunarway/v1alpha1"
@@ -15,7 +24,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-	"strings"
 )
 
 var log = logf.Log.WithName("controller_postgresqluser")
@@ -106,6 +114,12 @@ func (r *ReconcilePostgreSQLUser) Reconcile(request reconcile.Request) (reconcil
 	if err != nil {
 		return reconcile.Result{}, err
 	}
+
+	// TODO
+	err = r.ensureAWSIAMPolicy(user.Spec.Name)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
 	return reconcile.Result{}, nil
 }
 
@@ -141,4 +155,103 @@ func (r *ReconcilePostgreSQLUser) ensurePostgreSQLRole(log logr.Logger, name str
 		return err
 	}
 	return nil
+}
+
+type PolicyDocument struct {
+	Version   string           `json:"Version,omitempty"`
+	Statement []StatementEntry `json:"Statement,omitempty"`
+}
+type StatementEntry struct {
+	Effect    string     `json:"Effect,omitempty"`
+	Action    []string   `json:"Action,omitempty"`
+	Resource  []string   `json:"Resource,omitempty"`
+	Condition StringLike `json:"Condition,omitempty"`
+}
+
+type StringLike struct {
+	StringLike UserID `json:"StringLike,omitempty"`
+}
+
+type UserID struct {
+	AWSUserID string `json:"aws:userid,omitempty"`
+}
+
+func (r *ReconcilePostgreSQLUser) ensureAWSIAMPolicy(userID string) error {
+	region := "eu-west-1"
+	awsProfile := os.Getenv("AWS_PROFILE")
+	awsAccountID := "660013655494"
+	policyName := "postgresql-controller-users"
+
+	awsConfig := &aws.Config{
+		Region:      aws.String(region),
+		Credentials: credentials.NewSharedCredentials("", awsProfile),
+	}
+	sess, err := session.NewSession(awsConfig)
+	if err != nil {
+		return err
+	}
+	_, err = sess.Config.Credentials.Get()
+	if err != nil {
+		return err
+	}
+	svc := iam.New(sess)
+
+	arn := fmt.Sprintf("arn:aws:iam::%s:policy/%s", awsAccountID, policyName)
+
+	policy, err := svc.GetPolicy(&iam.GetPolicyInput{
+		PolicyArn: &arn,
+	})
+
+	fmt.Printf("Policy: %+v\n", policy)
+
+	if err != nil {
+		fmt.Println("Error", err)
+		return err
+	}
+
+	version, err := svc.GetPolicyVersion(&iam.GetPolicyVersionInput{VersionId: policy.Policy.DefaultVersionId, PolicyArn: aws.String(arn)})
+	if err != nil {
+		fmt.Println("Error", err)
+		return err
+	}
+	fmt.Printf("Version: %+v\n", version)
+
+	jsonDocument, err := url.QueryUnescape(*version.PolicyVersion.Document)
+	if err != nil {
+		return err
+	}
+	document := PolicyDocument{}
+	json.Unmarshal([]byte(jsonDocument), &document)
+	document.appendStatement(userID, awsAccountID, region)
+
+	jsonMarshal, err := json.Marshal(document)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("%s\n", string(jsonMarshal))
+	urlEncodedDocument := url.QueryEscape(string(jsonMarshal))
+	fmt.Printf("%s\n", urlEncodedDocument)
+
+	true := true
+	result, err := svc.CreatePolicyVersion(&iam.CreatePolicyVersionInput{PolicyArn: aws.String(arn), PolicyDocument: aws.String(string(jsonMarshal)), SetAsDefault: &true})
+	if err != nil {
+		return err
+	}
+	fmt.Printf("CreatePolicyVersion: %+v\n", result)
+
+	_, err = svc.DeletePolicyVersion(&iam.DeletePolicyVersionInput{PolicyArn: aws.String(arn), VersionId: version.PolicyVersion.VersionId})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p *PolicyDocument) appendStatement(userID, awsAccountID, region string) {
+	s := StatementEntry{
+		Effect:    "Allow",
+		Action:    []string{"rds-db:connect"},
+		Resource:  []string{fmt.Sprintf("arn:aws:rds-db:%s:%s:dbuser:*/iam_developer_%s", region, awsAccountID, userID)},
+		Condition: StringLike{StringLike: UserID{AWSUserID: fmt.Sprintf("*:%s@lunarway.com", userID)}},
+	}
+	p.Statement = append(p.Statement, s)
 }
