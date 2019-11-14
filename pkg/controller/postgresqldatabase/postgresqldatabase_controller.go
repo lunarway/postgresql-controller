@@ -170,5 +170,15 @@ func (r *ReconcilePostgreSQLDatabase) EnsurePostgreSQLDatabase(log logr.Logger, 
 	} else {
 		log.Info(fmt.Sprintf("Schema; %s created in database; %s", name, name))
 	}
+	// This revokation ensures that the user cannot create any objects in the
+	// PUBLIC role that is assigned to all roles by default.
+	log.Info(fmt.Sprintf("Revoke ALL on role PUBLIC for database '%s'", name))
+	_, err = serviceConnection.Exec(fmt.Sprintf(`REVOKE ALL ON DATABASE %s from PUBLIC;
+	REVOKE ALL ON SCHEMA public from PUBLIC;
+	REVOKE ALL ON ALL TABLES IN SCHEMA public from PUBLIC;`, name))
+	if err != nil {
+		return fmt.Errorf("revoke all for role PUBLIC on database '%s': %w", name, err)
+	}
+
 	return nil
 }
