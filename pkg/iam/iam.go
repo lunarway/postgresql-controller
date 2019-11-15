@@ -67,7 +67,6 @@ func SetAWSPolicy(log logr.Logger, policy AWSPolicy, userID string) error {
 	// Retrieve the current Policy version
 	currentVersion, err := svc.GetPolicyVersion(&iam.GetPolicyVersionInput{VersionId: receivedPolicy.Policy.DefaultVersionId, PolicyArn: aws.String(policyARN)})
 	if err != nil {
-		fmt.Println("Error", err)
 		return fmt.Errorf("retrieve policy version %s with policy ARN %s: %w", *receivedPolicy.Policy.DefaultVersionId, policyARN, err)
 	}
 	log.Info(fmt.Sprintf("Current Policy Version: %+v\n", currentVersion))
