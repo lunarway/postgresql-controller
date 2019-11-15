@@ -2,28 +2,14 @@ package postgresqluser
 
 import (
 	"fmt"
-	"io"
 	"testing"
-
-	"go.lunarway.com/postgresql-controller/pkg/postgres"
 
 	"github.com/stretchr/testify/assert"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/pkg/apis/lunarway/v1alpha1"
+	"go.lunarway.com/postgresql-controller/pkg/postgres"
 	"go.lunarway.com/postgresql-controller/test"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
-
-var _ io.Writer = &testLogger{}
-
-// testLogger is an io.Writer used for reporting logs to the test runner.
-type testLogger struct {
-	t *testing.T
-}
-
-func (t *testLogger) Write(p []byte) (int, error) {
-	t.t.Logf("%s", p)
-	return len(p), nil
-}
 
 func TestReconcile_connectToHosts(t *testing.T) {
 	test.Integration(t)

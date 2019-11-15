@@ -3,7 +3,6 @@ package postgresqldatabase
 import (
 	"database/sql"
 	"fmt"
-	"os"
 	"sort"
 	"testing"
 	"time"
@@ -13,11 +12,8 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
-func TestReconcilePostgreSQLDatabase_EnsurePostgreSQLDatabase_sunshine(t *testing.T) {
-	postgresqlHost := os.Getenv("POSTGRESQL_CONTROLLER_INTEGRATION_HOST")
-	if postgresqlHost == "" {
-		t.Skip("Integration test host not specified")
-	}
+func TestReconcilePostgreSQLDatabase_ensurePostgreSQLDatabase_sunshine(t *testing.T) {
+	postgresqlHost := test.Integration(t)
 	connectionString := fmt.Sprintf("postgresql://iam_creator:@%s?sslmode=disable", postgresqlHost)
 	db, err := postgresqlConnection(connectionString)
 	if err != nil {
@@ -57,11 +53,8 @@ func TestReconcilePostgreSQLDatabase_EnsurePostgreSQLDatabase_sunshine(t *testin
 	assert.Equal(t, []string{name}, owners, "owner not as expected")
 }
 
-func TestReconcilePostgreSQLDatabase_EnsurePostgreSQLDatabase_idempotency(t *testing.T) {
-	postgresqlHost := os.Getenv("POSTGRESQL_CONTROLLER_INTEGRATION_HOST")
-	if postgresqlHost == "" {
-		t.Skip("Integration test host not specified")
-	}
+func TestReconcilePostgreSQLDatabase_ensurePostgreSQLDatabase_idempotency(t *testing.T) {
+	postgresqlHost := test.Integration(t)
 	connectionString := fmt.Sprintf("postgresql://iam_creator:@%s?sslmode=disable", postgresqlHost)
 	db, err := postgresqlConnection(connectionString)
 	if err != nil {
