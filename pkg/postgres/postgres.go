@@ -59,12 +59,6 @@ func Role(log logr.Logger, db *sql.DB, name string, roles []string, databases []
 	}
 
 	for _, database := range databases {
-		// Only needed for testing without rds_iam role that otherwise grants this right
-		log.Info(fmt.Sprintf("Granting CONNECT to database '%s'", database.Name))
-		_, err = db.Exec(fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO %s", database.Name, name))
-		if err != nil {
-			return fmt.Errorf("grant connect on database '%s': %w", database.Name, err)
-		}
 		log.Info(fmt.Sprintf("Granting USAGE of schema '%s'", database.Name))
 		_, err = db.Exec(fmt.Sprintf("GRANT USAGE ON SCHEMA %s TO %s", database.Name, name))
 		if err != nil {

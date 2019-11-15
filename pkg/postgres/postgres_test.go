@@ -48,6 +48,8 @@ func TestRole_staticRoles(t *testing.T) {
 			dropRole(t, db, role)
 		}
 	}()
+	dbExec(t, db, "GRANT CONNECT ON DATABASE %s TO %s", "postgres", RoleRDSIAM)
+	defer dbExec(t, db, "REVOKE CONNECT ON DATABASE %s FROM %s", "postgres", RoleRDSIAM)
 	tt := []struct {
 		name          string
 		createRole    bool
@@ -133,12 +135,16 @@ func TestRole_priviliges(t *testing.T) {
 		serviceUser1  = fmt.Sprintf("test_svc_1_%d", now)
 		serviceUser2  = fmt.Sprintf("test_svc_2_%d", now)
 		developerUser = fmt.Sprintf("test_user_%d", now)
+		roleRDSIAM    = fmt.Sprintf("rds_iam_%d", now)
 	)
 	log.Info(fmt.Sprintf("Running test with service users %s, %s and developer %s", serviceUser1, serviceUser2, developerUser))
 
 	// create service databases and tables for testing access rights
 	createServiceDatabase(t, log, iamCreatorRootDB, postgresqlHost, serviceUser1)
 	createServiceDatabase(t, log, iamCreatorRootDB, postgresqlHost, serviceUser2)
+	createRole(t, iamCreatorRootDB, roleRDSIAM)
+	dbExec(t, iamCreatorRootDB, "GRANT CONNECT ON DATABASE %s TO %s", serviceUser1, roleRDSIAM)
+	dbExec(t, iamCreatorRootDB, "GRANT CONNECT ON DATABASE %s TO %s", serviceUser2, roleRDSIAM)
 
 	//
 	// test read access to serviceUser1
@@ -150,7 +156,7 @@ func TestRole_priviliges(t *testing.T) {
 		t.Fatalf("connect to database failed: %v", err)
 	}
 	defer iamCreatorUserDB.Close()
-	err = postgres.Role(log, iamCreatorUserDB, developerUser, nil, []postgres.DatabaseSchema{
+	err = postgres.Role(log, iamCreatorUserDB, developerUser, []string{roleRDSIAM}, []postgres.DatabaseSchema{
 		{
 			Name:       serviceUser1,
 			Schema:     serviceUser1,
