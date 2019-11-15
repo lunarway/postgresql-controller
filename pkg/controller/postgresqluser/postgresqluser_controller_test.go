@@ -119,15 +119,6 @@ func TestReconcile_ensurePostgreSQLRole(t *testing.T) {
 	}
 }
 
-func TestReconcile_ensureAWSIAMPolicy(t *testing.T) {
-	test.Integration(t)
-	r := ReconcilePostgreSQLUser{}
-	err := r.ensureAWSIAMPolicy("test")
-	if err != nil {
-		t.Fatalf("Failed: %v", err)
-	}
-}
-
 var _ io.Writer = &testLogger{}
 
 // testLogger is an io.Writer used for reporting logs to the test runner.
