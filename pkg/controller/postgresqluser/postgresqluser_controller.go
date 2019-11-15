@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
+
 	"github.com/go-logr/logr"
-	"github.com/lib/pq"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/pkg/apis/lunarway/v1alpha1"
 	"go.lunarway.com/postgresql-controller/pkg/kube"
+	"go.lunarway.com/postgresql-controller/pkg/postgres"
 	"go.uber.org/multierr"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -17,7 +19,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-	"strings"
 )
 
 var log = logf.Log.WithName("controller_postgresqluser")
@@ -125,19 +126,6 @@ func (r *ReconcilePostgreSQLUser) Reconcile(request reconcile.Request) (reconcil
 	return reconcile.Result{}, nil
 }
 
-func postgresqlConnection(connectionString string) (*sql.DB, error) {
-	log.Info("Connecting to database", "url", connectionString)
-	db, err := sql.Open("postgres", connectionString)
-	if err != nil {
-		return nil, err
-	}
-	err = db.Ping()
-	if err != nil {
-		return nil, err
-	}
-	return db, nil
-}
-
 func (r *ReconcilePostgreSQLUser) ensurePostgreSQLRoles(log logr.Logger, name string, accesses HostAccess, hosts map[string]*sql.DB) error {
 	for host, access := range accesses {
 		connection, ok := hosts[host]
@@ -152,58 +140,24 @@ func (r *ReconcilePostgreSQLUser) ensurePostgreSQLRoles(log logr.Logger, name st
 	return nil
 }
 
+func databaseSchemas(accesses []ReadWriteAccess) []postgres.DatabaseSchema {
+	var ds []postgres.DatabaseSchema
+	for _, access := range accesses {
+		ds = append(ds, postgres.DatabaseSchema{
+			Name:       access.Database.Name,
+			Schema:     access.Database.Schema,
+			Privileges: access.Database.Privileges,
+		})
+	}
+	return ds
+}
+
 func (r *ReconcilePostgreSQLUser) ensurePostgreSQLRole(log logr.Logger, db *sql.DB, name string, accesses []ReadWriteAccess) error {
 	name = fmt.Sprintf("%s%s", r.rolePrefix, name)
 	log = log.WithValues("operation", "ensurePostgreSQLRole", "name", name)
-	log.Info(fmt.Sprintf("Creating role %s", name))
-	query := fmt.Sprintf("CREATE ROLE %s WITH LOGIN", name)
-	if len(r.grantRoles) != 0 {
-		query += fmt.Sprintf(" IN ROLE %s", strings.Join(r.grantRoles, ", "))
-	}
-	_, err := db.Exec(query)
+	err := postgres.Role(log, db, name, r.grantRoles, databaseSchemas(accesses))
 	if err != nil {
-		pqError, ok := err.(*pq.Error)
-		if !ok || pqError.Code.Name() != "duplicate_object" {
-			return err
-		}
-		log.Info(fmt.Sprintf("Role %s already exists", name), "errorCode", pqError.Code, "errorName", pqError.Code.Name())
-	} else {
-		log.Info(fmt.Sprintf("Role %s created", name))
-	}
-	if len(r.grantRoles) != 0 {
-		_, err = db.Exec(fmt.Sprintf("GRANT %s TO %s", strings.Join(r.grantRoles, ", "), name))
-		if err != nil {
-			return err
-		}
-	}
-
-	for _, access := range accesses {
-		// Only needed for testing without rds_iam role that otherwise grants this right
-		log.Info(fmt.Sprintf("Granting CONNECT to database '%s'", access.Database))
-		_, err = db.Exec(fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO %s", access.Database, name))
-		if err != nil {
-			return fmt.Errorf("grant connect on database '%s': %w", access.Database, err)
-		}
-		log.Info(fmt.Sprintf("Granting USAGE of schema '%s'", access.Database))
-		_, err = db.Exec(fmt.Sprintf("GRANT USAGE ON SCHEMA %s TO %s", access.Database, name))
-		if err != nil {
-			return fmt.Errorf("grant usage on schema '%s': %w", access.Database, err)
-		}
-		var schemaPrivileges string
-		if access.Type == AccessTypeRead {
-			schemaPrivileges = "SELECT"
-		}
-		if access.Type == AccessTypeWrite {
-			schemaPrivileges += "INSERT, UPDATE, DELETE"
-		}
-		if len(schemaPrivileges) == 0 {
-			continue
-		}
-		log.Info(fmt.Sprintf("Granting %s to tables in schema '%s'", schemaPrivileges, access.Database))
-		_, err = db.Exec(fmt.Sprintf("GRANT %s ON ALL TABLES IN SCHEMA %s TO %s", schemaPrivileges, access.Database, name))
-		if err != nil {
-			return fmt.Errorf("grant access privileges '%s' on schema '%s': %w", schemaPrivileges, access.Database, err)
-		}
+		return err
 	}
 	return nil
 }
@@ -214,17 +168,9 @@ type HostAccess map[string][]ReadWriteAccess
 
 type ReadWriteAccess struct {
 	Host     string
-	Database string
+	Database postgres.DatabaseSchema
 	Access   lunarwayv1alpha1.AccessSpec
-	Type     AccessType
 }
-
-type AccessType int
-
-const (
-	AccessTypeRead  AccessType = iota
-	AccessTypeWrite AccessType = iota
-)
 
 func (r *ReconcilePostgreSQLUser) connectToHosts(accesses HostAccess) (map[string]*sql.DB, error) {
 	hosts := make(map[string]*sql.DB)
@@ -236,7 +182,7 @@ func (r *ReconcilePostgreSQLUser) connectToHosts(accesses HostAccess) (map[strin
 			continue
 		}
 		connectionString := fmt.Sprintf("postgresql://%s:%s@%s?sslmode=disable", credentials.Name, credentials.Password, host)
-		db, err := postgresqlConnection(connectionString)
+		db, err := postgres.Connect(log, connectionString)
 		if err != nil {
 			errs = multierr.Append(errs, fmt.Errorf("connect to %s: %w", strings.ReplaceAll(connectionString, credentials.Password, "***"), err))
 			continue
@@ -253,11 +199,11 @@ func (r *ReconcilePostgreSQLUser) groupAccesses(namespace string, reads []lunarw
 	hosts := make(HostAccess)
 	var errs error
 
-	err := r.groupByHosts(hosts, namespace, reads, AccessTypeRead)
+	err := r.groupByHosts(hosts, namespace, reads, postgres.PrivilegeRead)
 	if err != nil {
 		errs = multierr.Append(errs, err)
 	}
-	err = r.groupByHosts(hosts, namespace, writes, AccessTypeWrite)
+	err = r.groupByHosts(hosts, namespace, writes, postgres.PrivilegeWrite)
 	if err != nil {
 		errs = multierr.Append(errs, err)
 	}
@@ -268,7 +214,7 @@ func (r *ReconcilePostgreSQLUser) groupAccesses(namespace string, reads []lunarw
 	return hosts, errs
 }
 
-func (r *ReconcilePostgreSQLUser) groupByHosts(hosts HostAccess, namespace string, accesses []lunarwayv1alpha1.AccessSpec, accessType AccessType) error {
+func (r *ReconcilePostgreSQLUser) groupByHosts(hosts HostAccess, namespace string, accesses []lunarwayv1alpha1.AccessSpec, privilege postgres.Privilege) error {
 	var errs error
 	for i, access := range accesses {
 		host, err := r.resourceResolver(r.client, access.Host, namespace)
@@ -287,12 +233,23 @@ func (r *ReconcilePostgreSQLUser) groupByHosts(hosts HostAccess, namespace strin
 			})
 			continue
 		}
+		schema, err := r.resourceResolver(r.client, access.Schema, namespace)
+		if err != nil {
+			errs = multierr.Append(errs, &AccessError{
+				Access: accesses[i],
+				Err:    err,
+			})
+			continue
+		}
 		hostDatabase := fmt.Sprintf("%s/%s", host, database)
 		hosts[hostDatabase] = append(hosts[hostDatabase], ReadWriteAccess{
-			Host:     host,
-			Database: database,
-			Access:   accesses[i],
-			Type:     accessType,
+			Host: host,
+			Database: postgres.DatabaseSchema{
+				Name:       database,
+				Schema:     schema,
+				Privileges: privilege,
+			},
+			Access: accesses[i],
 		})
 	}
 	return errs
