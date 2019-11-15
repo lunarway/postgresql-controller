@@ -101,7 +101,7 @@ func SetAWSPolicy(log logr.Logger, policy AWSPolicy, userID string) error {
 	// Delete the policy version to ensure that we don't succeed the maxium of 5 versions
 	_, err = svc.DeletePolicyVersion(&iam.DeletePolicyVersionInput{PolicyArn: aws.String(policyARN), VersionId: currentVersion.PolicyVersion.VersionId})
 	if err != nil {
-		return fmt.Errorf("delete policy version with arn %s: %w", policyARN, err)
+		return fmt.Errorf("delete policy version %s with arn %s: %w", currentVersion.PolicyVersion.VersionId, policyARN, err)
 	}
 	return nil
 
