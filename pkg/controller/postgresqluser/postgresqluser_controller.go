@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/go-logr/logr"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/pkg/apis/lunarway/v1alpha1"
+	"go.lunarway.com/postgresql-controller/pkg/iam"
 	"go.lunarway.com/postgresql-controller/pkg/kube"
 	"go.lunarway.com/postgresql-controller/pkg/postgres"
 	"go.uber.org/multierr"
@@ -34,8 +36,14 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	return &ReconcilePostgreSQLUser{
 		client:           mgr.GetClient(),
 		resourceResolver: kube.ResourceValue,
-		grantRoles:       []string{"rds_iam", "iam_developer"},
-		rolePrefix:       "iam_developer_",
+		setAWSPolicy:     iam.SetAWSPolicy,
+
+		grantRoles:    []string{"rds_iam", "iam_developer"},
+		rolePrefix:    "iam_developer_",
+		awsPolicyName: "postgresql-controller-users",
+		awsRegion:     "eu-west-1",
+		awsAccountID:  "660013655494",
+		awsProfile:    os.Getenv("AWS_PROFILE"),
 	}
 }
 
@@ -65,9 +73,15 @@ type ReconcilePostgreSQLUser struct {
 	// that reads objects from the cache and writes to the apiserver
 	client           client.Client
 	resourceResolver func(client client.Client, resource lunarwayv1alpha1.ResourceVar, namespace string) (string, error)
+	setAWSPolicy     func(log logr.Logger, policy iam.AWSPolicy, userID string) error
 
-	grantRoles []string
-	rolePrefix string
+	grantRoles    []string
+	rolePrefix    string
+	awsPolicyName string
+	awsRegion     string
+	awsAccountID  string
+	awsProfile    string
+
 	// contains a map of credentials for hosts
 	hostCredentials map[string]Credentials
 }
@@ -119,6 +133,11 @@ func (r *ReconcilePostgreSQLUser) Reconcile(request reconcile.Request) (reconcil
 	}
 
 	err = r.ensurePostgreSQLRoles(reqLogger, user.Spec.Name, accesses, hosts)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	err = r.setAWSPolicy(reqLogger, iam.AWSPolicy{Name: r.awsPolicyName, Region: r.awsRegion, Profile: r.awsProfile, AccountID: r.awsAccountID}, user.Spec.Name)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
