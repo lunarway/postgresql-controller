@@ -69,7 +69,7 @@ test/cluster/postgresql:
 
 .PHONY: release
 release:
-	sed -i "" 's|REPLACE_IMAGE|${REG}/${ORG}/${PROJECT}:${TAG}|g' deploy/operator.yaml
+	sed -i "" 's|${REG}/${ORG}/${PROJECT}.*|${REG}/${ORG}/${PROJECT}:${TAG}|g' deploy/operator.yaml
 	git add deploy/operator.yaml
 	git commit -m"Release ${TAG}"
 	git tag ${TAG}
