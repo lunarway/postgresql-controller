@@ -1,12 +1,20 @@
 module go.lunarway.com/postgresql-controller
 
 require (
+	github.com/aws/aws-sdk-go v1.25.34
+	github.com/go-ini/ini v1.51.0 // indirect
 	github.com/go-logr/logr v0.1.0
 	github.com/go-openapi/spec v0.17.2
+	github.com/gucumber/gucumber v0.0.0-20180127021336-7d5c79e832a2 // indirect
 	github.com/lib/pq v1.1.1
 	github.com/operator-framework/operator-sdk v0.12.1-0.20191030232758-662d20b8a76e
+	github.com/shiena/ansicolor v0.0.0-20151119151921-a422bbe96644 // indirect
 	github.com/spf13/pflag v1.0.3
 	github.com/stretchr/testify v1.3.0
+	golang.org/x/net v0.0.0-20191112182307-2180aed22343 // indirect
+	golang.org/x/tools v0.0.0-20191113232020-e2727e816f5a // indirect
+	google.golang.org/api v0.3.2
+	google.golang.org/appengine v1.6.5 // indirect
 	k8s.io/api v0.0.0-20190918195907-bd6ac527cfd2
 	k8s.io/apimachinery v0.0.0-20190913080033-27d36303b655
 	k8s.io/client-go v11.0.1-0.20190409021438-1a26190bd76a+incompatible

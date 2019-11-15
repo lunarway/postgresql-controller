@@ -4,9 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
+	"strings"
+
 	"github.com/go-logr/logr"
 	"github.com/lib/pq"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/pkg/apis/lunarway/v1alpha1"
+	"go.lunarway.com/postgresql-controller/pkg/iam"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -15,7 +19,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-	"strings"
 )
 
 var log = logf.Log.WithName("controller_postgresqluser")
@@ -34,10 +37,15 @@ func Add(mgr manager.Manager) error {
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, db *sql.DB) reconcile.Reconciler {
 	return &ReconcilePostgreSQLUser{
-		client:     mgr.GetClient(),
-		db:         db,
-		grantRoles: []string{"rds_iam", "iam_developer"},
-		rolePrefix: "iam_developer_",
+		client:        mgr.GetClient(),
+		db:            db,
+		grantRoles:    []string{"rds_iam", "iam_developer"},
+		setAWSPolicy:  iam.SetAWSPolicy,
+		rolePrefix:    "iam_developer_",
+		awsPolicyName: "postgresql-controller-users",
+		awsRegion:     "eu-west-1",
+		awsAccountID:  "660013655494",
+		awsProfile:    os.Getenv("AWS_PROFILE"),
 	}
 }
 
@@ -67,10 +75,16 @@ type ReconcilePostgreSQLUser struct {
 	// that reads objects from the cache and writes to the apiserver
 	client client.Client
 
-	db *sql.DB
+	db           *sql.DB
+	setAWSPolicy func(log logr.Logger, policy iam.AWSPolicy, userID string) error
 
 	grantRoles []string
 	rolePrefix string
+
+	awsPolicyName string
+	awsRegion     string
+	awsAccountID  string
+	awsProfile    string
 }
 
 // Reconcile reads that state of the cluster for a PostgreSQLUser object and makes changes based on the state read
@@ -103,6 +117,11 @@ func (r *ReconcilePostgreSQLUser) Reconcile(request reconcile.Request) (reconcil
 	reqLogger.Info("Reconciling PostgreSQLUser", "user", user.Spec.Name)
 
 	err = r.ensurePostgreSQLRole(reqLogger, user.Spec.Name)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	err = r.setAWSPolicy(reqLogger, iam.AWSPolicy{Name: r.awsPolicyName, Region: r.awsRegion, Profile: r.awsProfile, AccountID: r.awsAccountID}, user.Spec.Name)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
