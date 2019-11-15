@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -36,11 +37,15 @@ func Add(mgr manager.Manager) error {
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, db *sql.DB) reconcile.Reconciler {
 	return &ReconcilePostgreSQLUser{
-		client:       mgr.GetClient(),
-		db:           db,
-		grantRoles:   []string{"rds_iam", "iam_developer"},
-		setAWSPolicy: iam.SetAWSPolicy,
-		rolePrefix:   "iam_developer_",
+		client:        mgr.GetClient(),
+		db:            db,
+		grantRoles:    []string{"rds_iam", "iam_developer"},
+		setAWSPolicy:  iam.SetAWSPolicy,
+		rolePrefix:    "iam_developer_",
+		awsPolicyName: "postgresql-controller-users",
+		awsRegion:     "eu-west-1",
+		awsAccountID:  "660013655494",
+		awsProfile:    os.Getenv("AWS_PROFILE"),
 	}
 }
 
@@ -75,6 +80,11 @@ type ReconcilePostgreSQLUser struct {
 
 	grantRoles []string
 	rolePrefix string
+
+	awsPolicyName string
+	awsRegion     string
+	awsAccountID  string
+	awsProfile    string
 }
 
 // Reconcile reads that state of the cluster for a PostgreSQLUser object and makes changes based on the state read
@@ -111,7 +121,7 @@ func (r *ReconcilePostgreSQLUser) Reconcile(request reconcile.Request) (reconcil
 		return reconcile.Result{}, err
 	}
 
-	err = r.setAWSPolicy(reqLogger, iam.AWSPolicy{}, user.Spec.Name)
+	err = r.setAWSPolicy(reqLogger, iam.AWSPolicy{Name: r.awsPolicyName, Region: r.awsRegion, Profile: r.awsProfile, AccountID: r.awsAccountID}, user.Spec.Name)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
