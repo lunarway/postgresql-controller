@@ -77,7 +77,10 @@ func SetAWSPolicy(log logr.Logger, policy AWSPolicy, userID string) error {
 		return fmt.Errorf("query unescape of: %s: %w", *currentVersion.PolicyVersion.Document, err)
 	}
 	document := PolicyDocument{}
-	json.Unmarshal([]byte(jsonDocument), &document)
+	err = json.Unmarshal([]byte(jsonDocument), &document)
+	if err != nil {
+		return fmt.Errorf("unmarshal document %s: %w", *currentVersion.PolicyVersion.Document, err)
+	}
 
 	// Append the new user to the Policy
 	document.appendStatement(userID, policy.AccountID, policy.Region)
