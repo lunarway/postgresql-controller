@@ -37,17 +37,8 @@ func TestRole_staticRoles(t *testing.T) {
 	}
 	// bootstrap the database with the roles that can be granted by the controller
 	for _, role := range roles {
-		dropRole(t, db, role)
-		_, err = db.Exec(fmt.Sprintf("CREATE ROLE %s", role))
-		if err != nil {
-			t.Fatalf("Seeding role %s failed: %v", role, err)
-		}
+		dbExec(t, db, "CREATE ROLE %s", role)
 	}
-	defer func() {
-		for _, role := range roles {
-			dropRole(t, db, role)
-		}
-	}()
 	dbExec(t, db, "GRANT CONNECT ON DATABASE %s TO %s", "postgres", RoleRDSIAM)
 	defer dbExec(t, db, "REVOKE CONNECT ON DATABASE %s FROM %s", "postgres", RoleRDSIAM)
 	tt := []struct {
@@ -97,7 +88,6 @@ func TestRole_staticRoles(t *testing.T) {
 			if tc.createRole {
 				createRole(t, db, userName)
 			}
-			defer dropRole(t, db, userName)
 
 			if len(tc.existingRoles) != 0 {
 				seedRole(t, db, userName, tc.existingRoles)
@@ -243,29 +233,12 @@ func createServiceDatabase(t *testing.T, log logr.Logger, database *sql.DB, host
 
 func createRole(t *testing.T, db *sql.DB, userName string) {
 	t.Helper()
-	query := fmt.Sprintf("CREATE ROLE %s WITH LOGIN", userName)
-	_, err := db.Exec(query)
-	if err != nil {
-		t.Fatalf("create existing user failed: %v", err)
-	}
+	dbExec(t, db, "CREATE ROLE %s WITH LOGIN", userName)
 }
 
 func seedRole(t *testing.T, db *sql.DB, userName string, roles []string) {
 	t.Helper()
-	query := fmt.Sprintf("GRANT %s TO %s", strings.Join(roles, ", "), userName)
-	_, err := db.Exec(query)
-	if err != nil {
-		t.Fatalf("create existing user failed: %v", err)
-	}
-}
-
-func dropRole(t *testing.T, db *sql.DB, userName string) {
-	t.Helper()
-	query := fmt.Sprintf("DROP ROLE IF EXISTS %s;", userName)
-	_, err := db.Exec(query)
-	if err != nil {
-		t.Fatalf("drop user failed: %v", err)
-	}
+	dbExec(t, db, "GRANT %s TO %s", strings.Join(roles, ", "), userName)
 }
 
 // storedRoles returns roles for a specific user name sorted by name.
