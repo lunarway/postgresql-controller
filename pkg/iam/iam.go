@@ -101,18 +101,36 @@ func SetAWSPolicy(log logr.Logger, policy AWSPolicy, userID string) error {
 	// Delete the policy version to ensure that we don't succeed the maxium of 5 versions
 	_, err = svc.DeletePolicyVersion(&iam.DeletePolicyVersionInput{PolicyArn: aws.String(policyARN), VersionId: currentVersion.PolicyVersion.VersionId})
 	if err != nil {
-		return fmt.Errorf("delete policy version %s with arn %s: %w", currentVersion.PolicyVersion.VersionId, policyARN, err)
+		return fmt.Errorf("delete policy version %s with arn %s: %w", *currentVersion.PolicyVersion.VersionId, policyARN, err)
 	}
 	return nil
 
 }
 
 func (p *PolicyDocument) appendStatement(userID, awsAccountID, region string) {
+	awsUserID := fmt.Sprintf("*:%s@lunarway.com", userID)
 	s := StatementEntry{
 		Effect:    "Allow",
 		Action:    []string{"rds-db:connect"},
 		Resource:  []string{fmt.Sprintf("arn:aws:rds-db:%s:%s:dbuser:*/iam_developer_%s", region, awsAccountID, userID)},
-		Condition: StringLike{StringLike: UserID{AWSUserID: fmt.Sprintf("*:%s@lunarway.com", userID)}},
+		Condition: StringLike{StringLike: UserID{AWSUserID: awsUserID}},
+	}
+
+	// Check if the user already exists
+	exists := any(p.Statement, func(s StatementEntry) bool {
+		return s.Condition.StringLike.AWSUserID == awsUserID
+	})
+	if exists {
+		return
 	}
 	p.Statement = append(p.Statement, s)
+}
+
+func any(vs []StatementEntry, f func(StatementEntry) bool) bool {
+	for _, v := range vs {
+		if f(v) {
+			return true
+		}
+	}
+	return false
 }
