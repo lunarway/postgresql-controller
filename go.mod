@@ -11,6 +11,7 @@ require (
 	github.com/shiena/ansicolor v0.0.0-20151119151921-a422bbe96644 // indirect
 	github.com/spf13/pflag v1.0.3
 	github.com/stretchr/testify v1.3.0
+	go.uber.org/multierr v1.1.0
 	golang.org/x/net v0.0.0-20191112182307-2180aed22343 // indirect
 	golang.org/x/tools v0.0.0-20191113232020-e2727e816f5a // indirect
 	google.golang.org/api v0.3.2

@@ -68,7 +68,7 @@ This ensures no unnecessary capabilities are left on a user ie. after completing
 For reads, it will default to all databases on the instance and requires no time limit.
 We generally do not limit access to data but instead rely on strong audits.
 
-This is an example of a user `bso` that has read access to all databases and write access to the `user` database between 10 AM to 2 PM on september 9th.
+This is an example of a user `bso` that has read access to all databases and write access to the `user` database in schema `user` between 10 AM to 2 PM on september 9th.
 The read capability uses a static host name `some.host.com` and the write capability references a `database` ConfigMap on key `db.host`.
 
 ```yaml
@@ -88,7 +88,10 @@ spec:
           configMapKeyRef:
             name: database
             key: db.host
-      database: user
+      database:
+        value: user
+      schema:
+        value: user
       reason: "Related to support ticket LW-1234"
       start: 2019-09-16T10:00:00Z
       end: 2019-09-16T14:00:00Z

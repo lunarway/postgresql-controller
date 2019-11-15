@@ -36,6 +36,288 @@ spec:
                 code after modifying this file Add custom validation using kubebuilder
                 tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html'
               type: string
+            read:
+              items:
+                properties:
+                  database:
+                    description: PasswordVar represents an
+                    properties:
+                      value:
+                        description: Defaults to "".
+                        type: string
+                      valueFrom:
+                        description: Source to read the value from.
+                        properties:
+                          configMapKeyRef:
+                            description: Selects a key of a config map in the custom
+                              resource's namespace
+                            properties:
+                              key:
+                                description: The key of the secret or config map to
+                                  select from.  Must be a valid key.
+                                type: string
+                              name:
+                                description: The name of the secret or config map
+                                  in the namespace to select from.
+                                type: string
+                            required:
+                            - key
+                            type: object
+                          secretKeyRef:
+                            description: Selects a key of a secret in the custom resource's
+                              namespace
+                            properties:
+                              key:
+                                description: The key of the secret or config map to
+                                  select from.  Must be a valid key.
+                                type: string
+                              name:
+                                description: The name of the secret or config map
+                                  in the namespace to select from.
+                                type: string
+                            required:
+                            - key
+                            type: object
+                        type: object
+                    type: object
+                  host:
+                    description: PasswordVar represents an
+                    properties:
+                      value:
+                        description: Defaults to "".
+                        type: string
+                      valueFrom:
+                        description: Source to read the value from.
+                        properties:
+                          configMapKeyRef:
+                            description: Selects a key of a config map in the custom
+                              resource's namespace
+                            properties:
+                              key:
+                                description: The key of the secret or config map to
+                                  select from.  Must be a valid key.
+                                type: string
+                              name:
+                                description: The name of the secret or config map
+                                  in the namespace to select from.
+                                type: string
+                            required:
+                            - key
+                            type: object
+                          secretKeyRef:
+                            description: Selects a key of a secret in the custom resource's
+                              namespace
+                            properties:
+                              key:
+                                description: The key of the secret or config map to
+                                  select from.  Must be a valid key.
+                                type: string
+                              name:
+                                description: The name of the secret or config map
+                                  in the namespace to select from.
+                                type: string
+                            required:
+                            - key
+                            type: object
+                        type: object
+                    type: object
+                  reason:
+                    type: string
+                  schema:
+                    description: PasswordVar represents an
+                    properties:
+                      value:
+                        description: Defaults to "".
+                        type: string
+                      valueFrom:
+                        description: Source to read the value from.
+                        properties:
+                          configMapKeyRef:
+                            description: Selects a key of a config map in the custom
+                              resource's namespace
+                            properties:
+                              key:
+                                description: The key of the secret or config map to
+                                  select from.  Must be a valid key.
+                                type: string
+                              name:
+                                description: The name of the secret or config map
+                                  in the namespace to select from.
+                                type: string
+                            required:
+                            - key
+                            type: object
+                          secretKeyRef:
+                            description: Selects a key of a secret in the custom resource's
+                              namespace
+                            properties:
+                              key:
+                                description: The key of the secret or config map to
+                                  select from.  Must be a valid key.
+                                type: string
+                              name:
+                                description: The name of the secret or config map
+                                  in the namespace to select from.
+                                type: string
+                            required:
+                            - key
+                            type: object
+                        type: object
+                    type: object
+                  start:
+                    format: date-time
+                    type: string
+                  stop:
+                    format: date-time
+                    type: string
+                required:
+                - database
+                - host
+                - reason
+                - schema
+                type: object
+              type: array
+            write:
+              items:
+                properties:
+                  database:
+                    description: PasswordVar represents an
+                    properties:
+                      value:
+                        description: Defaults to "".
+                        type: string
+                      valueFrom:
+                        description: Source to read the value from.
+                        properties:
+                          configMapKeyRef:
+                            description: Selects a key of a config map in the custom
+                              resource's namespace
+                            properties:
+                              key:
+                                description: The key of the secret or config map to
+                                  select from.  Must be a valid key.
+                                type: string
+                              name:
+                                description: The name of the secret or config map
+                                  in the namespace to select from.
+                                type: string
+                            required:
+                            - key
+                            type: object
+                          secretKeyRef:
+                            description: Selects a key of a secret in the custom resource's
+                              namespace
+                            properties:
+                              key:
+                                description: The key of the secret or config map to
+                                  select from.  Must be a valid key.
+                                type: string
+                              name:
+                                description: The name of the secret or config map
+                                  in the namespace to select from.
+                                type: string
+                            required:
+                            - key
+                            type: object
+                        type: object
+                    type: object
+                  host:
+                    description: PasswordVar represents an
+                    properties:
+                      value:
+                        description: Defaults to "".
+                        type: string
+                      valueFrom:
+                        description: Source to read the value from.
+                        properties:
+                          configMapKeyRef:
+                            description: Selects a key of a config map in the custom
+                              resource's namespace
+                            properties:
+                              key:
+                                description: The key of the secret or config map to
+                                  select from.  Must be a valid key.
+                                type: string
+                              name:
+                                description: The name of the secret or config map
+                                  in the namespace to select from.
+                                type: string
+                            required:
+                            - key
+                            type: object
+                          secretKeyRef:
+                            description: Selects a key of a secret in the custom resource's
+                              namespace
+                            properties:
+                              key:
+                                description: The key of the secret or config map to
+                                  select from.  Must be a valid key.
+                                type: string
+                              name:
+                                description: The name of the secret or config map
+                                  in the namespace to select from.
+                                type: string
+                            required:
+                            - key
+                            type: object
+                        type: object
+                    type: object
+                  reason:
+                    type: string
+                  schema:
+                    description: PasswordVar represents an
+                    properties:
+                      value:
+                        description: Defaults to "".
+                        type: string
+                      valueFrom:
+                        description: Source to read the value from.
+                        properties:
+                          configMapKeyRef:
+                            description: Selects a key of a config map in the custom
+                              resource's namespace
+                            properties:
+                              key:
+                                description: The key of the secret or config map to
+                                  select from.  Must be a valid key.
+                                type: string
+                              name:
+                                description: The name of the secret or config map
+                                  in the namespace to select from.
+                                type: string
+                            required:
+                            - key
+                            type: object
+                          secretKeyRef:
+                            description: Selects a key of a secret in the custom resource's
+                              namespace
+                            properties:
+                              key:
+                                description: The key of the secret or config map to
+                                  select from.  Must be a valid key.
+                                type: string
+                              name:
+                                description: The name of the secret or config map
+                                  in the namespace to select from.
+                                type: string
+                            required:
+                            - key
+                            type: object
+                        type: object
+                    type: object
+                  start:
+                    format: date-time
+                    type: string
+                  stop:
+                    format: date-time
+                    type: string
+                required:
+                - database
+                - host
+                - reason
+                - schema
+                type: object
+              type: array
           required:
           - name
           type: object

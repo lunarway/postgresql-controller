@@ -36,7 +36,7 @@ func Add(mgr manager.Manager) error {
 func newReconciler(mgr manager.Manager, db *sql.DB) reconcile.Reconciler {
 	return &ReconcilePostgreSQLDatabase{
 		client: mgr.GetClient(),
-		db:     db,
+		DB:     db,
 	}
 }
 
@@ -66,7 +66,7 @@ type ReconcilePostgreSQLDatabase struct {
 	// that reads objects from the cache and writes to the apiserver
 	client client.Client
 
-	db *sql.DB
+	DB *sql.DB
 }
 
 // Reconcile reads that state of the cluster for a PostgreSQLDatabase object and makes changes based on the state read
@@ -103,7 +103,7 @@ func (r *ReconcilePostgreSQLDatabase) Reconcile(request reconcile.Request) (reco
 	}
 
 	// Ensure the database is in sync with the object
-	err = r.ensurePostgreSQLDatabase(reqLogger, database.Spec.Name, password)
+	err = r.EnsurePostgreSQLDatabase(reqLogger, database.Spec.Name, password)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -123,9 +123,9 @@ func postgresqlConnection(connectionString string) (*sql.DB, error) {
 	return db, nil
 }
 
-func (r *ReconcilePostgreSQLDatabase) ensurePostgreSQLDatabase(log logr.Logger, name, password string) error {
+func (r *ReconcilePostgreSQLDatabase) EnsurePostgreSQLDatabase(log logr.Logger, name, password string) error {
 	// Create the service user
-	_, err := r.db.Exec(fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s' NOCREATEROLE VALID UNTIL 'infinity'", name, password))
+	_, err := r.DB.Exec(fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s' NOCREATEROLE VALID UNTIL 'infinity'", name, password))
 	if err != nil {
 		pqError, ok := err.(*pq.Error)
 		if !ok || pqError.Code.Name() != "duplicate_object" {
@@ -137,7 +137,7 @@ func (r *ReconcilePostgreSQLDatabase) ensurePostgreSQLDatabase(log logr.Logger, 
 	}
 
 	// Create the database
-	_, err = r.db.Exec(fmt.Sprintf("CREATE DATABASE %s", name))
+	_, err = r.DB.Exec(fmt.Sprintf("CREATE DATABASE %s", name))
 	if err != nil {
 		pqError, ok := err.(*pq.Error)
 		if !ok || pqError.Code.Name() != "duplicate_database" {
@@ -149,7 +149,7 @@ func (r *ReconcilePostgreSQLDatabase) ensurePostgreSQLDatabase(log logr.Logger, 
 	}
 
 	// Alter ownership of the database to the database user
-	_, err = r.db.Exec(fmt.Sprintf("ALTER DATABASE %s OWNER TO %s", name, name))
+	_, err = r.DB.Exec(fmt.Sprintf("ALTER DATABASE %s OWNER TO %s", name, name))
 	if err != nil {
 		return err
 	}
@@ -170,5 +170,15 @@ func (r *ReconcilePostgreSQLDatabase) ensurePostgreSQLDatabase(log logr.Logger, 
 	} else {
 		log.Info(fmt.Sprintf("Schema; %s created in database; %s", name, name))
 	}
+	// This revokation ensures that the user cannot create any objects in the
+	// PUBLIC role that is assigned to all roles by default.
+	log.Info(fmt.Sprintf("Revoke ALL on role PUBLIC for database '%s'", name))
+	_, err = serviceConnection.Exec(fmt.Sprintf(`REVOKE ALL ON DATABASE %s from PUBLIC;
+	REVOKE ALL ON SCHEMA public from PUBLIC;
+	REVOKE ALL ON ALL TABLES IN SCHEMA public from PUBLIC;`, name))
+	if err != nil {
+		return fmt.Errorf("revoke all for role PUBLIC on database '%s': %w", name, err)
+	}
+
 	return nil
 }

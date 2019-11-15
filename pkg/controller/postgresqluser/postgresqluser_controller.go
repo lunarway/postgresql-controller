@@ -8,9 +8,11 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
-	"github.com/lib/pq"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/pkg/apis/lunarway/v1alpha1"
 	"go.lunarway.com/postgresql-controller/pkg/iam"
+	"go.lunarway.com/postgresql-controller/pkg/kube"
+	"go.lunarway.com/postgresql-controller/pkg/postgres"
+	"go.uber.org/multierr"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -26,21 +28,17 @@ var log = logf.Log.WithName("controller_postgresqluser")
 // Add creates a new PostgreSQLUser Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
-	connectionString := "postgresql://iam_creator:@localhost:5432?sslmode=disable"
-	db, err := postgresqlConnection(connectionString)
-	if err != nil {
-		return err
-	}
-	return add(mgr, newReconciler(mgr, db))
+	return add(mgr, newReconciler(mgr))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, db *sql.DB) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	return &ReconcilePostgreSQLUser{
-		client:        mgr.GetClient(),
-		db:            db,
+		client:           mgr.GetClient(),
+		resourceResolver: kube.ResourceValue,
+		setAWSPolicy:     iam.SetAWSPolicy,
+
 		grantRoles:    []string{"rds_iam", "iam_developer"},
-		setAWSPolicy:  iam.SetAWSPolicy,
 		rolePrefix:    "iam_developer_",
 		awsPolicyName: "postgresql-controller-users",
 		awsRegion:     "eu-west-1",
@@ -73,18 +71,26 @@ var _ reconcile.Reconciler = &ReconcilePostgreSQLUser{}
 type ReconcilePostgreSQLUser struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client client.Client
+	client           client.Client
+	resourceResolver func(client client.Client, resource lunarwayv1alpha1.ResourceVar, namespace string) (string, error)
+	setAWSPolicy     func(log logr.Logger, policy iam.AWSPolicy, userID string) error
 
-	db           *sql.DB
-	setAWSPolicy func(log logr.Logger, policy iam.AWSPolicy, userID string) error
-
-	grantRoles []string
-	rolePrefix string
-
+	grantRoles    []string
+	rolePrefix    string
 	awsPolicyName string
 	awsRegion     string
 	awsAccountID  string
 	awsProfile    string
+
+	// contains a map of credentials for hosts
+	hostCredentials map[string]Credentials
+}
+
+// Credentials represents connection credentials for a user on a
+// PostgreSQL instance capabable of creating roles.
+type Credentials struct {
+	Name     string
+	Password string
 }
 
 // Reconcile reads that state of the cluster for a PostgreSQLUser object and makes changes based on the state read
@@ -114,9 +120,19 @@ func (r *ReconcilePostgreSQLUser) Reconcile(request reconcile.Request) (reconcil
 
 	// User instance created or updated
 	reqLogger = reqLogger.WithValues("user", user.Spec.Name)
-	reqLogger.Info("Reconciling PostgreSQLUser", "user", user.Spec.Name)
 
-	err = r.ensurePostgreSQLRole(reqLogger, user.Spec.Name)
+	reqLogger.Info("Reconciling PostgreSQLUser", "user", user.Spec.Name)
+	accesses, err := r.groupAccesses(request.Namespace, user.Spec.Read, user.Spec.Write)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	hosts, err := r.connectToHosts(accesses)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	err = r.ensurePostgreSQLRoles(reqLogger, user.Spec.Name, accesses, hosts)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -125,39 +141,157 @@ func (r *ReconcilePostgreSQLUser) Reconcile(request reconcile.Request) (reconcil
 	if err != nil {
 		return reconcile.Result{}, err
 	}
+
 	return reconcile.Result{}, nil
 }
 
-func postgresqlConnection(connectionString string) (*sql.DB, error) {
-	log.Info("Connecting to database", "url", connectionString)
-	db, err := sql.Open("postgres", connectionString)
-	if err != nil {
-		return nil, err
-	}
-	err = db.Ping()
-	if err != nil {
-		return nil, err
-	}
-	return db, nil
-}
-
-func (r *ReconcilePostgreSQLUser) ensurePostgreSQLRole(log logr.Logger, name string) error {
-	name = fmt.Sprintf("%s%s", r.rolePrefix, name)
-	roles := strings.Join(r.grantRoles, ", ")
-	_, err := r.db.Exec(fmt.Sprintf("CREATE ROLE %s WITH LOGIN IN ROLE %s", name, roles))
-	if err != nil {
-		pqError, ok := err.(*pq.Error)
-		if !ok || pqError.Code.Name() != "duplicate_object" {
+func (r *ReconcilePostgreSQLUser) ensurePostgreSQLRoles(log logr.Logger, name string, accesses HostAccess, hosts map[string]*sql.DB) error {
+	for host, access := range accesses {
+		connection, ok := hosts[host]
+		if !ok {
+			return fmt.Errorf("connection for host %s not found", host)
+		}
+		err := r.ensurePostgreSQLRole(log, connection, name, access)
+		if err != nil {
 			return err
 		}
-		log.Info(fmt.Sprintf("Role %s already exists", name), "errorCode", pqError.Code, "errorName", pqError.Code.Name())
-	} else {
-		log.Info(fmt.Sprintf("Role %s created", name))
 	}
+	return nil
+}
 
-	_, err = r.db.Exec(fmt.Sprintf("GRANT %s TO %s", roles, name))
+func databaseSchemas(accesses []ReadWriteAccess) []postgres.DatabaseSchema {
+	var ds []postgres.DatabaseSchema
+	for _, access := range accesses {
+		ds = append(ds, postgres.DatabaseSchema{
+			Name:       access.Database.Name,
+			Schema:     access.Database.Schema,
+			Privileges: access.Database.Privileges,
+		})
+	}
+	return ds
+}
+
+func (r *ReconcilePostgreSQLUser) ensurePostgreSQLRole(log logr.Logger, db *sql.DB, name string, accesses []ReadWriteAccess) error {
+	name = fmt.Sprintf("%s%s", r.rolePrefix, name)
+	log = log.WithValues("operation", "ensurePostgreSQLRole", "name", name)
+	err := postgres.Role(log, db, name, r.grantRoles, databaseSchemas(accesses))
 	if err != nil {
 		return err
 	}
 	return nil
+}
+
+// HostAccess represents a map of read and write access requests on host names
+// including the database path.
+type HostAccess map[string][]ReadWriteAccess
+
+type ReadWriteAccess struct {
+	Host     string
+	Database postgres.DatabaseSchema
+	Access   lunarwayv1alpha1.AccessSpec
+}
+
+func (r *ReconcilePostgreSQLUser) connectToHosts(accesses HostAccess) (map[string]*sql.DB, error) {
+	hosts := make(map[string]*sql.DB)
+	var errs error
+	for host, _ := range accesses {
+		credentials, ok := r.hostCredentials[host]
+		if !ok {
+			errs = multierr.Append(errs, fmt.Errorf("no credentials for host '%s'", host))
+			continue
+		}
+		connectionString := fmt.Sprintf("postgresql://%s:%s@%s?sslmode=disable", credentials.Name, credentials.Password, host)
+		db, err := postgres.Connect(log, connectionString)
+		if err != nil {
+			errs = multierr.Append(errs, fmt.Errorf("connect to %s: %w", strings.ReplaceAll(connectionString, credentials.Password, "***"), err))
+			continue
+		}
+		hosts[host] = db
+	}
+	return hosts, errs
+}
+
+func (r *ReconcilePostgreSQLUser) groupAccesses(namespace string, reads []lunarwayv1alpha1.AccessSpec, writes []lunarwayv1alpha1.AccessSpec) (HostAccess, error) {
+	if len(reads) == 0 {
+		return nil, nil
+	}
+	hosts := make(HostAccess)
+	var errs error
+
+	err := r.groupByHosts(hosts, namespace, reads, postgres.PrivilegeRead)
+	if err != nil {
+		errs = multierr.Append(errs, err)
+	}
+	err = r.groupByHosts(hosts, namespace, writes, postgres.PrivilegeWrite)
+	if err != nil {
+		errs = multierr.Append(errs, err)
+	}
+
+	if len(hosts) == 0 {
+		return nil, errs
+	}
+	return hosts, errs
+}
+
+func (r *ReconcilePostgreSQLUser) groupByHosts(hosts HostAccess, namespace string, accesses []lunarwayv1alpha1.AccessSpec, privilege postgres.Privilege) error {
+	var errs error
+	for i, access := range accesses {
+		host, err := r.resourceResolver(r.client, access.Host, namespace)
+		if err != nil {
+			errs = multierr.Append(errs, &AccessError{
+				Access: accesses[i],
+				Err:    err,
+			})
+			continue
+		}
+		database, err := r.resourceResolver(r.client, access.Database, namespace)
+		if err != nil {
+			errs = multierr.Append(errs, &AccessError{
+				Access: accesses[i],
+				Err:    err,
+			})
+			continue
+		}
+		schema, err := r.resourceResolver(r.client, access.Schema, namespace)
+		if err != nil {
+			errs = multierr.Append(errs, &AccessError{
+				Access: accesses[i],
+				Err:    err,
+			})
+			continue
+		}
+		hostDatabase := fmt.Sprintf("%s/%s", host, database)
+		hosts[hostDatabase] = append(hosts[hostDatabase], ReadWriteAccess{
+			Host: host,
+			Database: postgres.DatabaseSchema{
+				Name:       database,
+				Schema:     schema,
+				Privileges: privilege,
+			},
+			Access: accesses[i],
+		})
+	}
+	return errs
+}
+
+type AccessError struct {
+	Access lunarwayv1alpha1.AccessSpec
+	Err    error
+}
+
+var _ error = &AccessError{}
+
+func (err *AccessError) Error() string {
+	host := err.Access.Host.Value
+	if host == "" && err.Access.Host.ValueFrom.SecretKeyRef != nil {
+		host = fmt.Sprintf("from secret '%s' key '%s'", err.Access.Host.ValueFrom.SecretKeyRef.Name, err.Access.Host.ValueFrom.SecretKeyRef.Key)
+	}
+	if host == "" && err.Access.Host.ValueFrom.ConfigMapKeyRef != nil {
+		host = fmt.Sprintf("from config map '%s' key '%s'", err.Access.Host.ValueFrom.ConfigMapKeyRef.Name, err.Access.Host.ValueFrom.ConfigMapKeyRef.Key)
+	}
+	return fmt.Sprintf("access to host %s: %v", host, err.Err)
+}
+
+func (err *AccessError) Unwrap() error {
+	return err.Err
 }

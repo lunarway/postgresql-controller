@@ -12,6 +12,23 @@ type PostgreSQLUserSpec struct {
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
 	Name string `json:"name"`
+	// +listType=set
+	// +optional
+	Read []AccessSpec `json:"read"`
+	// +listType=set
+	// +optional
+	Write []AccessSpec `json:"write"`
+}
+
+type AccessSpec struct {
+	Host     ResourceVar `json:"host"`
+	Database ResourceVar `json:"database"`
+	Schema   ResourceVar `json:"schema"`
+	Reason   string      `json:"reason"`
+	// +optional
+	Start metav1.Time `json:"start"`
+	// +optional
+	Stop metav1.Time `json:"stop"`
 }
 
 // PostgreSQLUserStatus defines the observed state of PostgreSQLUser
