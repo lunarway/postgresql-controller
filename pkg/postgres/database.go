@@ -46,6 +46,8 @@ func Database(log logr.Logger, db *sql.DB, credentials Credentials) error {
 		return err
 	}
 
+	// Connect with the newly created role to create the schema with that role. This ensures
+	// that the object is in fact owned by the service and not the creator role.
 	serviceConnection, err := Connect(log, fmt.Sprintf("postgresql://%s:%s@localhost:5432/%s?sslmode=disable", credentials.Name, credentials.Password, credentials.Name))
 	if err != nil {
 		return err
