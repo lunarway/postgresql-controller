@@ -1,4 +1,4 @@
-package postgresqldatabase
+package postgres_test
 
 import (
 	"database/sql"
@@ -8,74 +8,76 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"go.lunarway.com/postgresql-controller/pkg/postgres"
 	"go.lunarway.com/postgresql-controller/test"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
-func TestReconcilePostgreSQLDatabase_ensurePostgreSQLDatabase_sunshine(t *testing.T) {
+func TestDatabase_sunshine(t *testing.T) {
 	postgresqlHost := test.Integration(t)
+	log := test.SetLogger(t)
 	connectionString := fmt.Sprintf("postgresql://iam_creator:@%s?sslmode=disable", postgresqlHost)
-	db, err := postgresqlConnection(connectionString)
+	db, err := postgres.Connect(log, connectionString)
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
-	}
-	test.SetLogger(t)
-
-	r := ReconcilePostgreSQLDatabase{
-		DB: db,
 	}
 
 	name := fmt.Sprintf("test_%d", time.Now().UnixNano())
 	password := "test"
 
-	err = r.EnsurePostgreSQLDatabase(logf.Log, name, password)
+	err = postgres.Database(logf.Log, db, postgres.Credentials{
+		Name:     name,
+		Password: password,
+	})
 	if err != nil {
 		t.Fatalf("EnsurePostgreSQLDatabase failed: %v", err)
 	}
 
 	serviceConnectionString := fmt.Sprintf("postgresql://%s:%s@%s/%s?sslmode=disable", name, password, postgresqlHost, name)
-	db, err = postgresqlConnection(serviceConnectionString)
+	newDB, err := postgres.Connect(log, serviceConnectionString)
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
 	}
 
 	// Validate Schema
-	schemas := storedSchema(t, db, name)
+	schemas := storedSchema(t, newDB, name)
 	assert.Equal(t, []string{name}, schemas, "schema not as expected")
 
 	// Validate iam_creator not able to see schema
-	schemas = storedSchema(t, r.DB, name)
+	schemas = storedSchema(t, db, name)
 	assert.Equal(t, []string(nil), schemas, "schema not as expected")
 
 	// Validate owner of database
-	owners := validateOwner(t, r.DB, name)
+	owners := validateOwner(t, db, name)
 	t.Logf("Owners of database: %v", owners)
 	assert.Equal(t, []string{name}, owners, "owner not as expected")
 }
 
-func TestReconcilePostgreSQLDatabase_ensurePostgreSQLDatabase_idempotency(t *testing.T) {
+func TestDatabase_idempotency(t *testing.T) {
 	postgresqlHost := test.Integration(t)
+	log := test.SetLogger(t)
 	connectionString := fmt.Sprintf("postgresql://iam_creator:@%s?sslmode=disable", postgresqlHost)
-	db, err := postgresqlConnection(connectionString)
+	db, err := postgres.Connect(log, connectionString)
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
-	}
-	test.SetLogger(t)
-
-	r := ReconcilePostgreSQLDatabase{
-		DB: db,
 	}
 
 	name := fmt.Sprintf("test_%d", time.Now().UnixNano())
 	password := "test"
 
-	err = r.EnsurePostgreSQLDatabase(logf.Log, name, password)
+	err = postgres.Database(log, db, postgres.Credentials{
+		Name:     name,
+		Password: password,
+	})
 	if err != nil {
 		t.Fatalf("EnsurePostgreSQLDatabase failed: %v", err)
 	}
 
 	// Invoke again with same name
-	err = r.EnsurePostgreSQLDatabase(logf.Log, name, password)
+	err = postgres.Database(log, db, postgres.Credentials{
+		Name:     name,
+		Password: password,
+	})
 	if err != nil {
 		t.Logf("The error: %#v", err)
 		t.Fatalf("Second EnsurePostgreSQLDatabase failed: %v", err)

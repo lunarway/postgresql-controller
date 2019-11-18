@@ -2,13 +2,12 @@ package postgresqldatabase
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 
 	"github.com/go-logr/logr"
-	"github.com/lib/pq"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/pkg/apis/lunarway/v1alpha1"
 	"go.lunarway.com/postgresql-controller/pkg/kube"
+	"go.lunarway.com/postgresql-controller/pkg/postgres"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -24,19 +23,13 @@ var log = logf.Log.WithName("controller_postgresqldatabase")
 // Add creates a new PostgreSQLDatabase Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
-	connectionString := "postgresql://iam_creator:@localhost:5432?sslmode=disable"
-	db, err := postgresqlConnection(connectionString)
-	if err != nil {
-		return err
-	}
-	return add(mgr, newReconciler(mgr, db))
+	return add(mgr, newReconciler(mgr))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, db *sql.DB) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	return &ReconcilePostgreSQLDatabase{
 		client: mgr.GetClient(),
-		DB:     db,
 	}
 }
 
@@ -66,7 +59,8 @@ type ReconcilePostgreSQLDatabase struct {
 	// that reads objects from the cache and writes to the apiserver
 	client client.Client
 
-	DB *sql.DB
+	// contains a map of credentials for hosts
+	hostCredentials map[string]postgres.Credentials
 }
 
 // Reconcile reads that state of the cluster for a PostgreSQLDatabase object and makes changes based on the state read
@@ -96,89 +90,38 @@ func (r *ReconcilePostgreSQLDatabase) Reconcile(request reconcile.Request) (reco
 	reqLogger = reqLogger.WithValues("database", database.Spec.Name)
 	reqLogger.Info("Reconciling PostgreSQLDatabase")
 
-	// Resolve the password, is the value in a configMap or Secret or just a plain value
+	host, err := kube.ResourceValue(r.client, database.Spec.Host, request.Namespace)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
 	password, err := kube.ResourceValue(r.client, database.Spec.Password, request.Namespace)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 
 	// Ensure the database is in sync with the object
-	err = r.EnsurePostgreSQLDatabase(reqLogger, database.Spec.Name, password)
+	err = r.EnsurePostgreSQLDatabase(reqLogger, host, database.Spec.Name, password)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
 }
 
-func postgresqlConnection(connectionString string) (*sql.DB, error) {
-	log.Info("Connecting to database", "url", connectionString)
-	db, err := sql.Open("postgres", connectionString)
-	if err != nil {
-		return nil, err
+func (r *ReconcilePostgreSQLDatabase) EnsurePostgreSQLDatabase(log logr.Logger, host, name, password string) error {
+	credentials, ok := r.hostCredentials[host]
+	if !ok {
+		return fmt.Errorf("unknown credentials for host %s", host)
 	}
-	err = db.Ping()
+	db, err := postgres.Connect(log, fmt.Sprintf("postgresql://%s:%s@%s?sslmode=disable", credentials.Name, credentials.Password, host))
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("connect to host: %w", err)
 	}
-	return db, nil
-}
-
-func (r *ReconcilePostgreSQLDatabase) EnsurePostgreSQLDatabase(log logr.Logger, name, password string) error {
-	// Create the service user
-	_, err := r.DB.Exec(fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s' NOCREATEROLE VALID UNTIL 'infinity'", name, password))
+	err = postgres.Database(log, db, postgres.Credentials{
+		Name:     name,
+		Password: password,
+	})
 	if err != nil {
-		pqError, ok := err.(*pq.Error)
-		if !ok || pqError.Code.Name() != "duplicate_object" {
-			return err
-		}
-		log.Info(fmt.Sprintf("Service user; %s already exists", name), "errorCode", pqError.Code, "errorName", pqError.Code.Name())
-	} else {
-		log.Info(fmt.Sprintf("Service user; %s created", name))
+		return fmt.Errorf("create database %s on host %s: %w", name, host, err)
 	}
-
-	// Create the database
-	_, err = r.DB.Exec(fmt.Sprintf("CREATE DATABASE %s", name))
-	if err != nil {
-		pqError, ok := err.(*pq.Error)
-		if !ok || pqError.Code.Name() != "duplicate_database" {
-			return err
-		}
-		log.Info(fmt.Sprintf("Database; %s already exists", name), "errorCode", pqError.Code, "errorName", pqError.Code.Name())
-	} else {
-		log.Info(fmt.Sprintf("Database; %s created", name))
-	}
-
-	// Alter ownership of the database to the database user
-	_, err = r.DB.Exec(fmt.Sprintf("ALTER DATABASE %s OWNER TO %s", name, name))
-	if err != nil {
-		return err
-	}
-
-	serviceConnection, err := postgresqlConnection(fmt.Sprintf("postgresql://%s:%s@localhost:5432/%s?sslmode=disable", name, password, name))
-	if err != nil {
-		return err
-	}
-
-	// Create schema in the database
-	_, err = serviceConnection.Exec(fmt.Sprintf("CREATE SCHEMA %s", name))
-	if err != nil {
-		pqError, ok := err.(*pq.Error)
-		if !ok || pqError.Code.Name() != "duplicate_schema" {
-			return err
-		}
-		log.Info(fmt.Sprintf("Schema; %s already exists in database; %s", name, name), "errorCode", pqError.Code, "errorName", pqError.Code.Name())
-	} else {
-		log.Info(fmt.Sprintf("Schema; %s created in database; %s", name, name))
-	}
-	// This revokation ensures that the user cannot create any objects in the
-	// PUBLIC role that is assigned to all roles by default.
-	log.Info(fmt.Sprintf("Revoke ALL on role PUBLIC for database '%s'", name))
-	_, err = serviceConnection.Exec(fmt.Sprintf(`REVOKE ALL ON DATABASE %s from PUBLIC;
-	REVOKE ALL ON SCHEMA public from PUBLIC;
-	REVOKE ALL ON ALL TABLES IN SCHEMA public from PUBLIC;`, name))
-	if err != nil {
-		return fmt.Errorf("revoke all for role PUBLIC on database '%s': %w", name, err)
-	}
-
 	return nil
 }

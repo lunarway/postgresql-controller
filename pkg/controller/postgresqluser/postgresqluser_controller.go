@@ -83,14 +83,7 @@ type ReconcilePostgreSQLUser struct {
 	awsProfile    string
 
 	// contains a map of credentials for hosts
-	hostCredentials map[string]Credentials
-}
-
-// Credentials represents connection credentials for a user on a
-// PostgreSQL instance capabable of creating roles.
-type Credentials struct {
-	Name     string
-	Password string
+	hostCredentials map[string]postgres.Credentials
 }
 
 // Reconcile reads that state of the cluster for a PostgreSQLUser object and makes changes based on the state read
