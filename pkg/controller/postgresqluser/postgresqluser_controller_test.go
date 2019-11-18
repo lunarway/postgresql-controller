@@ -15,15 +15,15 @@ func TestReconcile_connectToHosts(t *testing.T) {
 	test.Integration(t)
 	tt := []struct {
 		name            string
-		credentials     map[string]Credentials
+		credentials     map[string]postgres.Credentials
 		hostAccess      HostAccess
 		connectionCount int
 		err             error
 	}{
 		{
 			name: "single host with credentials",
-			credentials: map[string]Credentials{
-				"localhost:5432": Credentials{
+			credentials: map[string]postgres.Credentials{
+				"localhost:5432": postgres.Credentials{
 					Name:     "iam_creator",
 					Password: "",
 				},
@@ -36,8 +36,8 @@ func TestReconcile_connectToHosts(t *testing.T) {
 		},
 		{
 			name: "multiple hosts with credentials",
-			credentials: map[string]Credentials{
-				"localhost:5432": Credentials{
+			credentials: map[string]postgres.Credentials{
+				"localhost:5432": postgres.Credentials{
 					Name:     "iam_creator",
 					Password: "",
 				},
@@ -50,12 +50,12 @@ func TestReconcile_connectToHosts(t *testing.T) {
 		},
 		{
 			name: "multiple hosts without upstream",
-			credentials: map[string]Credentials{
-				"localhost:5432": Credentials{
+			credentials: map[string]postgres.Credentials{
+				"localhost:5432": postgres.Credentials{
 					Name:     "iam_creator",
 					Password: "",
 				},
-				"unknown": Credentials{
+				"unknown": postgres.Credentials{
 					Name:     "iam_creator",
 					Password: "12345678",
 				},
@@ -69,7 +69,7 @@ func TestReconcile_connectToHosts(t *testing.T) {
 		},
 		{
 			name:        "missing credentials",
-			credentials: map[string]Credentials{},
+			credentials: map[string]postgres.Credentials{},
 			hostAccess: HostAccess{
 				"localhost:5432": []ReadWriteAccess{},
 			},

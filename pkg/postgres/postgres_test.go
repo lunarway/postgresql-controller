@@ -10,7 +10,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
-	"go.lunarway.com/postgresql-controller/pkg/controller/postgresqldatabase"
 	"go.lunarway.com/postgresql-controller/pkg/postgres"
 	"go.lunarway.com/postgresql-controller/test"
 )
@@ -214,10 +213,10 @@ func TestRole_priviliges(t *testing.T) {
 }
 
 func createServiceDatabase(t *testing.T, log logr.Logger, database *sql.DB, host, service string) {
-	databaseController := postgresqldatabase.ReconcilePostgreSQLDatabase{
-		DB: database,
-	}
-	err := databaseController.EnsurePostgreSQLDatabase(log, service, "")
+	err := postgres.Database(log, database, postgres.Credentials{
+		Name:     service,
+		Password: "",
+	})
 	if err != nil {
 		t.Fatalf("Failed to create database: %v", err)
 	}
