@@ -1,6 +1,7 @@
 package postgresqluser
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
@@ -266,4 +267,69 @@ func TestReconcilePostgreSQLUser_groupAccesses_errors(t *testing.T) {
 
 	assert.EqualError(t, err, expectedError, "output error not as exepcted")
 	assert.Equal(t, HostAccess(nil), output, "output map not as expected")
+}
+
+func TestParseHostCredentials(t *testing.T) {
+	tt := []struct {
+		name   string
+		input  map[string]string
+		output map[string]postgres.Credentials
+		err    error
+	}{
+		{
+			name:   "nil map",
+			input:  nil,
+			output: nil,
+		},
+		{
+			name: "single host",
+			input: map[string]string{
+				"host:5432": "user:password",
+			},
+			output: map[string]postgres.Credentials{
+				"host:5432": postgres.Credentials{
+					Name:     "user",
+					Password: "password",
+				},
+			},
+			err: nil,
+		},
+		{
+			name: "multiple hosts",
+			input: map[string]string{
+				"host1:5432": "user1:password1",
+				"host2:5432": "user2:password2",
+			},
+			output: map[string]postgres.Credentials{
+				"host1:5432": postgres.Credentials{
+					Name:     "user1",
+					Password: "password1",
+				},
+				"host2:5432": postgres.Credentials{
+					Name:     "user2",
+					Password: "password2",
+				},
+			},
+			err: nil,
+		},
+		{
+			name: "single host without user or password",
+			input: map[string]string{
+				"host:5432": "",
+			},
+			output: nil,
+			err:    errors.New("username empty"),
+		},
+	}
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			output, err := parseHostCredentials(tc.input)
+			if tc.err != nil {
+				assert.EqualError(t, err, tc.err.Error(), "output error not as expected")
+			} else {
+				assert.NoError(t, err, "unexpected error")
+			}
+			assert.Equal(t, tc.output, output, "output not as expected")
+		})
+	}
 }

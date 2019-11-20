@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"sort"
 	"testing"
@@ -12,6 +13,70 @@ import (
 	"go.lunarway.com/postgresql-controller/test"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
+
+func TestParseHostCredentials(t *testing.T) {
+	type input struct {
+	}
+	type output struct {
+	}
+	tt := []struct {
+		name   string
+		input  string
+		output postgres.Credentials
+		err    error
+	}{
+		{
+			name:   "empty string",
+			input:  "",
+			output: postgres.Credentials{},
+			err:    errors.New("username empty"),
+		},
+		{
+			name:  "complete",
+			input: "user:password",
+			output: postgres.Credentials{
+				Name:     "user",
+				Password: "password",
+			},
+			err: nil,
+		},
+		{
+			name:  "no password",
+			input: "user",
+			output: postgres.Credentials{
+				Name:     "user",
+				Password: "",
+			},
+			err: nil,
+		},
+		{
+			name:  "empty password",
+			input: "user:",
+			output: postgres.Credentials{
+				Name:     "user",
+				Password: "",
+			},
+			err: nil,
+		},
+		{
+			name:   "empty username and password",
+			input:  ":",
+			output: postgres.Credentials{},
+			err:    errors.New("username empty"),
+		},
+	}
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			output, err := postgres.ParseUsernamePassword(tc.input)
+			if tc.err != nil {
+				assert.EqualError(t, err, tc.err.Error(), "output error not as expected")
+			} else {
+				assert.NoError(t, err, "unexpected error")
+			}
+			assert.Equal(t, tc.output, output, "output not as expected")
+		})
+	}
+}
 
 func TestDatabase_sunshine(t *testing.T) {
 	postgresqlHost := test.Integration(t)

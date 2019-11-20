@@ -3,8 +3,10 @@ package postgresqldatabase
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/go-logr/logr"
+	"github.com/spf13/pflag"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/pkg/apis/lunarway/v1alpha1"
 	"go.lunarway.com/postgresql-controller/pkg/kube"
 	"go.lunarway.com/postgresql-controller/pkg/postgres"
@@ -18,7 +20,51 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var log = logf.Log.WithName("controller_postgresqldatabase")
+var log = logf.Log.WithName("controller_postgresqldatabase").WithValues("controller", "postgresqldatabase-controller")
+
+var FlagSet *pflag.FlagSet
+
+func init() {
+	FlagSet = pflag.NewFlagSet("controller_postgresqldatabase", pflag.ExitOnError)
+	FlagSet.StringToString("host-credentials", nil, "Host and credential pairs in the form hostname=user:password. Use comma separated pairs for multiple hosts")
+}
+
+func parseFlags(c *ReconcilePostgreSQLDatabase) {
+	hosts, err := FlagSet.GetStringToString("host-credentials")
+	parseError(err, "host-credentials")
+	fmt.Println(hosts)
+	c.hostCredentials, err = parseHostCredentials(hosts)
+	parseError(err, "host-credentials: invalid format")
+	var hostNames []string
+	for host := range c.hostCredentials {
+		hostNames = append(hostNames, host)
+	}
+	log.Info("Controller configured",
+		"hosts", hostNames,
+	)
+}
+
+func parseError(err error, flag string) {
+	if err != nil {
+		log.Error(err, fmt.Sprintf("error parsing flag %s", flag))
+		os.Exit(1)
+	}
+}
+
+func parseHostCredentials(hosts map[string]string) (map[string]postgres.Credentials, error) {
+	if len(hosts) == 0 {
+		return nil, nil
+	}
+	hostCredentials := make(map[string]postgres.Credentials)
+	for host, credentials := range hosts {
+		var err error
+		hostCredentials[host], err = postgres.ParseUsernamePassword(credentials)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return hostCredentials, nil
+}
 
 // Add creates a new PostgreSQLDatabase Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -28,9 +74,11 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcilePostgreSQLDatabase{
+	c := &ReconcilePostgreSQLDatabase{
 		client: mgr.GetClient(),
 	}
+	parseFlags(c)
+	return c
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler

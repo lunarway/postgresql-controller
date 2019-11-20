@@ -3,6 +3,7 @@ package postgres
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"github.com/lib/pq"
@@ -13,6 +14,25 @@ import (
 type Credentials struct {
 	Name     string
 	Password string
+}
+
+// ParseUsernamePassword parses string s as a PostgreSQL user name and password
+// pair. If the user name is determined to be empty an error is returned.
+func ParseUsernamePassword(s string) (Credentials, error) {
+	if len(s) == 0 {
+		return Credentials{}, fmt.Errorf("username empty")
+	}
+	pair := strings.SplitN(strings.TrimSpace(s), ":", 2)
+	if len(pair[0]) == 0 {
+		return Credentials{}, fmt.Errorf("username empty")
+	}
+	c := Credentials{
+		Name: pair[0],
+	}
+	if len(pair) == 2 {
+		c.Password = pair[1]
+	}
+	return c, nil
 }
 
 func Database(log logr.Logger, db *sql.DB, credentials Credentials) error {
