@@ -14,7 +14,6 @@ import (
 
 type AWSPolicy struct {
 	Region    string
-	Profile   string
 	AccountID string
 	Name      string
 }
@@ -38,17 +37,17 @@ type UserID struct {
 	AWSUserID string `json:"aws:userid,omitempty"`
 }
 
-func SetAWSPolicy(log logr.Logger, policy AWSPolicy, userID string) error {
+func SetAWSPolicy(log logr.Logger, credentials *credentials.Credentials, policy AWSPolicy, userID string) error {
 	// AWS Config Object to create a session
 	awsConfig := &aws.Config{
 		Region:      aws.String(policy.Region),
-		Credentials: credentials.NewSharedCredentials("", policy.Profile),
+		Credentials: credentials,
 	}
 
 	// Initialize session to AWS
 	sess, err := session.NewSession(awsConfig)
 	if err != nil {
-		return fmt.Errorf("session initialization for region %s and profile %s: %w", policy.Region, policy.Profile, err)
+		return fmt.Errorf("session initialization for region %s: %w", policy.Region, err)
 	}
 	svc := iam.New(sess)
 

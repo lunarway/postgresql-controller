@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/go-logr/logr"
 	"github.com/spf13/pflag"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/pkg/apis/lunarway/v1alpha1"
@@ -36,6 +37,8 @@ func init() {
 	FlagSet.String("aws-region", "eu-west-1", "AWS Region where IAM policies are located")
 	FlagSet.String("aws-account-id", "660013655494", "AWS Account id where IAM policies are located")
 	FlagSet.String("aws-profile", "", "AWS Profile to use for credentials")
+	FlagSet.String("aws-access-key-id", "", "AWS access key id to use for credentials")
+	FlagSet.String("aws-secret-access-key", "", "AWS secret access key to use for credentials")
 	FlagSet.StringToString("host-credentials-user", nil, "Host and credential pairs in the form hostname=user:password. Use comma separated pairs for multiple hosts")
 }
 
@@ -53,6 +56,10 @@ func parseFlags(c *ReconcilePostgreSQLUser) {
 	parseError(err, "aws-account")
 	c.awsProfile, err = FlagSet.GetString("aws-profile")
 	parseError(err, "aws-profile")
+	c.awsAccessKeyID, err = FlagSet.GetString("aws-access-key-id")
+	parseError(err, "aws-access-key-id")
+	c.awsSecretAccessKey, err = FlagSet.GetString("aws-secret-access-key")
+	parseError(err, "aws-secret-access-key")
 	hosts, err := FlagSet.GetStringToString("host-credentials-user")
 	parseError(err, "host-credentials-user")
 	c.hostCredentials, err = parseHostCredentials(hosts)
@@ -137,14 +144,16 @@ type ReconcilePostgreSQLUser struct {
 	// that reads objects from the cache and writes to the apiserver
 	client           client.Client
 	resourceResolver func(client client.Client, resource lunarwayv1alpha1.ResourceVar, namespace string) (string, error)
-	setAWSPolicy     func(log logr.Logger, policy iam.AWSPolicy, userID string) error
+	setAWSPolicy     func(log logr.Logger, credentials *credentials.Credentials, policy iam.AWSPolicy, userID string) error
 
-	grantRoles    []string
-	rolePrefix    string
-	awsPolicyName string
-	awsRegion     string
-	awsAccountID  string
-	awsProfile    string
+	grantRoles         []string
+	rolePrefix         string
+	awsPolicyName      string
+	awsRegion          string
+	awsAccountID       string
+	awsProfile         string
+	awsAccessKeyID     string
+	awsSecretAccessKey string
 
 	// contains a map of credentials for hosts
 	hostCredentials map[string]postgres.Credentials
@@ -194,7 +203,17 @@ func (r *ReconcilePostgreSQLUser) Reconcile(request reconcile.Request) (reconcil
 		return reconcile.Result{}, err
 	}
 
-	err = r.setAWSPolicy(reqLogger, iam.AWSPolicy{Name: r.awsPolicyName, Region: r.awsRegion, Profile: r.awsProfile, AccountID: r.awsAccountID}, user.Spec.Name)
+	var awsCredentials *credentials.Credentials
+	if len(r.awsProfile) != 0 {
+		awsCredentials = credentials.NewSharedCredentials("", r.awsProfile)
+	} else {
+		awsCredentials = credentials.NewStaticCredentials(r.awsAccessKeyID, r.awsSecretAccessKey, "")
+	}
+	err = r.setAWSPolicy(reqLogger, awsCredentials, iam.AWSPolicy{
+		Name:      r.awsPolicyName,
+		Region:    r.awsRegion,
+		AccountID: r.awsAccountID,
+	}, user.Spec.Name)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
