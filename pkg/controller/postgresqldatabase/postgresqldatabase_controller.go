@@ -26,12 +26,12 @@ var FlagSet *pflag.FlagSet
 
 func init() {
 	FlagSet = pflag.NewFlagSet("controller_postgresqldatabase", pflag.ExitOnError)
-	FlagSet.StringToString("host-credentials", nil, "Host and credential pairs in the form hostname=user:password. Use comma separated pairs for multiple hosts")
+	FlagSet.StringToString("host-credentials-database", nil, "Host and credential pairs in the form hostname=user:password. Use comma separated pairs for multiple hosts")
 }
 
 func parseFlags(c *ReconcilePostgreSQLDatabase) {
-	hosts, err := FlagSet.GetStringToString("host-credentials")
-	parseError(err, "host-credentials")
+	hosts, err := FlagSet.GetStringToString("host-credentials-database")
+	parseError(err, "host-credentials-database")
 	fmt.Println(hosts)
 	c.hostCredentials, err = parseHostCredentials(hosts)
 	parseError(err, "host-credentials: invalid format")

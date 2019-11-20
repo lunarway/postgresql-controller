@@ -36,7 +36,7 @@ func init() {
 	FlagSet.String("aws-region", "eu-west-1", "AWS Region where IAM policies are located")
 	FlagSet.String("aws-account-id", "660013655494", "AWS Account id where IAM policies are located")
 	FlagSet.String("aws-profile", "", "AWS Profile to use for credentials")
-	FlagSet.StringToString("host-credentials", nil, "Host and credential pairs in the form hostname=user:password. Use comma separated pairs for multiple hosts")
+	FlagSet.StringToString("host-credentials-user", nil, "Host and credential pairs in the form hostname=user:password. Use comma separated pairs for multiple hosts")
 }
 
 func parseFlags(c *ReconcilePostgreSQLUser) {
@@ -53,8 +53,8 @@ func parseFlags(c *ReconcilePostgreSQLUser) {
 	parseError(err, "aws-account")
 	c.awsProfile, err = FlagSet.GetString("aws-profile")
 	parseError(err, "aws-profile")
-	hosts, err := FlagSet.GetStringToString("host-credentials")
-	parseError(err, "host-credentials")
+	hosts, err := FlagSet.GetStringToString("host-credentials-user")
+	parseError(err, "host-credentials-user")
 	c.hostCredentials, err = parseHostCredentials(hosts)
 	parseError(err, "host-credentials: invalid format")
 	var hostNames []string
