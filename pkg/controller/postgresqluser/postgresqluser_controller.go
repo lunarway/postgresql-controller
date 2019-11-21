@@ -257,7 +257,8 @@ func (r *ReconcilePostgreSQLUser) ensurePostgreSQLRole(log logr.Logger, db *sql.
 	return nil
 }
 
-// HostAccess represents a map of read and write access requests on host names.
+// HostAccess represents a map of read and write access requests on host names
+// including the database path.
 type HostAccess map[string][]ReadWriteAccess
 
 type ReadWriteAccess struct {
@@ -269,17 +270,13 @@ type ReadWriteAccess struct {
 func (r *ReconcilePostgreSQLUser) connectToHosts(accesses HostAccess) (map[string]*sql.DB, error) {
 	hosts := make(map[string]*sql.DB)
 	var errs error
-	for host, accesses := range accesses {
+	for host := range accesses {
 		credentials, ok := r.hostCredentials[host]
 		if !ok {
 			errs = multierr.Append(errs, fmt.Errorf("no credentials for host '%s'", host))
 			continue
 		}
-		if len(accesses) == 0 {
-			continue
-		}
-		database := accesses[0].Database
-		connectionString := fmt.Sprintf("postgresql://%s:%s@%s/%s?sslmode=disable", credentials.Name, credentials.Password, host, database.Name)
+		connectionString := fmt.Sprintf("postgresql://%s:%s@%s?sslmode=disable", credentials.Name, credentials.Password, host)
 		db, err := postgres.Connect(log, connectionString)
 		if err != nil {
 			if len(credentials.Password) != 0 {
@@ -342,7 +339,8 @@ func (r *ReconcilePostgreSQLUser) groupByHosts(hosts HostAccess, namespace strin
 			})
 			continue
 		}
-		hosts[host] = append(hosts[host], ReadWriteAccess{
+		hostDatabase := fmt.Sprintf("%s/%s", host, database)
+		hosts[hostDatabase] = append(hosts[hostDatabase], ReadWriteAccess{
 			Host: host,
 			Database: postgres.DatabaseSchema{
 				Name:       database,
