@@ -32,7 +32,6 @@ func init() {
 func parseFlags(c *ReconcilePostgreSQLDatabase) {
 	hosts, err := FlagSet.GetStringToString("host-credentials-database")
 	parseError(err, "host-credentials-database")
-	fmt.Println(hosts)
 	c.hostCredentials, err = parseHostCredentials(hosts)
 	parseError(err, "host-credentials: invalid format")
 	var hostNames []string
