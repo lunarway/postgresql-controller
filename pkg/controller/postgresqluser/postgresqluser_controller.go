@@ -279,7 +279,10 @@ func (r *ReconcilePostgreSQLUser) connectToHosts(accesses HostAccess) (map[strin
 		connectionString := fmt.Sprintf("postgresql://%s:%s@%s?sslmode=disable", credentials.Name, credentials.Password, host)
 		db, err := postgres.Connect(log, connectionString)
 		if err != nil {
-			errs = multierr.Append(errs, fmt.Errorf("connect to %s: %w", strings.ReplaceAll(connectionString, credentials.Password, "***"), err))
+			if len(credentials.Password) != 0 {
+				connectionString = strings.ReplaceAll(connectionString, credentials.Password, "***")
+			}
+			errs = multierr.Append(errs, fmt.Errorf("connect to %s: %w", connectionString, err))
 			continue
 		}
 		hosts[host] = db
