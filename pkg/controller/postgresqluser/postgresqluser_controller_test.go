@@ -30,21 +30,7 @@ func TestReconcile_connectToHosts(t *testing.T) {
 				},
 			},
 			hostAccess: HostAccess{
-				"localhost:5432": []ReadWriteAccess{},
-			},
-			connectionCount: 1,
-			err:             nil,
-		},
-		{
-			name: "multiple hosts with credentials",
-			credentials: map[string]postgres.Credentials{
-				"localhost:5432": postgres.Credentials{
-					Name:     "iam_creator",
-					Password: "",
-				},
-			},
-			hostAccess: HostAccess{
-				"localhost:5432": []ReadWriteAccess{},
+				"localhost:5432/postgres": []ReadWriteAccess{},
 			},
 			connectionCount: 1,
 			err:             nil,
@@ -62,17 +48,17 @@ func TestReconcile_connectToHosts(t *testing.T) {
 				},
 			},
 			hostAccess: HostAccess{
-				"localhost:5432": []ReadWriteAccess{},
-				"unknown":        []ReadWriteAccess{},
+				"localhost:5432/postgres": []ReadWriteAccess{},
+				"unknown/postgres":        []ReadWriteAccess{},
 			},
 			connectionCount: 1,
-			err:             fmt.Errorf("connect to postgresql://iam_creator:***@unknown?sslmode=disable: dial tcp: lookup unknown: no such host"),
+			err:             fmt.Errorf("connect to postgresql://iam_creator:***@unknown/postgres?sslmode=disable: dial tcp: lookup unknown: no such host"),
 		},
 		{
 			name:        "missing credentials",
 			credentials: map[string]postgres.Credentials{},
 			hostAccess: HostAccess{
-				"localhost:5432": []ReadWriteAccess{},
+				"localhost:5432/postgres": []ReadWriteAccess{},
 			},
 			connectionCount: 0,
 			err:             fmt.Errorf("no credentials for host 'localhost:5432'"),

@@ -270,13 +270,17 @@ type ReadWriteAccess struct {
 func (r *ReconcilePostgreSQLUser) connectToHosts(accesses HostAccess) (map[string]*sql.DB, error) {
 	hosts := make(map[string]*sql.DB)
 	var errs error
-	for host := range accesses {
+	for hostDatabase := range accesses {
+		// hostDatabase contains the host name and the database but we expect host
+		// credentials to be without the database part
+		// This will not work for hosts with multiple / characters
+		host := strings.Split(hostDatabase, "/")[0]
 		credentials, ok := r.hostCredentials[host]
 		if !ok {
 			errs = multierr.Append(errs, fmt.Errorf("no credentials for host '%s'", host))
 			continue
 		}
-		connectionString := fmt.Sprintf("postgresql://%s:%s@%s?sslmode=disable", credentials.Name, credentials.Password, host)
+		connectionString := fmt.Sprintf("postgresql://%s:%s@%s?sslmode=disable", credentials.Name, credentials.Password, hostDatabase)
 		db, err := postgres.Connect(log, connectionString)
 		if err != nil {
 			if len(credentials.Password) != 0 {
@@ -285,7 +289,7 @@ func (r *ReconcilePostgreSQLUser) connectToHosts(accesses HostAccess) (map[strin
 			errs = multierr.Append(errs, fmt.Errorf("connect to %s: %w", connectionString, err))
 			continue
 		}
-		hosts[host] = db
+		hosts[hostDatabase] = db
 	}
 	return hosts, errs
 }
