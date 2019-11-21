@@ -303,7 +303,7 @@ func seedRole(t *testing.T, db *sql.DB, userName string, roles []string) {
 func storedRoles(t *testing.T, db *sql.DB, userName string) []string {
 	t.Helper()
 
-	rows, err := db.Query("SELECT rolname FROM pg_user JOIN pg_auth_members ON (pg_user.usesysid=pg_auth_members.member) JOIN pg_roles ON (pg_roles.oid=pg_auth_members.roleid) WHERE pg_user.usename=$1", fmt.Sprintf("%s", userName))
+	rows, err := db.Query("SELECT rolname FROM pg_user JOIN pg_auth_members ON (pg_user.usesysid=pg_auth_members.member) JOIN pg_roles ON (pg_roles.oid=pg_auth_members.roleid) WHERE pg_user.usename=$1", userName)
 	if err != nil {
 		t.Fatalf("get roles for user query failed: %v", err)
 	}
