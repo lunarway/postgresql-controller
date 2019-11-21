@@ -108,6 +108,64 @@ func TestRole_staticRoles(t *testing.T) {
 	}
 }
 
+// TestRole_priviliges_databaseNameAndSchemaDiffers tests that Role can grant
+// access to another schema than that of the same name as the database. Normally
+// a schema with the same name as the database is expected but some services
+// uses the public schema.
+func TestRole_priviliges_databaseNameAndSchemaDiffers(t *testing.T) {
+	postgresqlHost := test.Integration(t)
+	log := test.SetLogger(t)
+
+	iamCreatorRootDatabase := fmt.Sprintf("postgresql://iam_creator:@%s?sslmode=disable", postgresqlHost)
+	iamCreatorRootDB, err := postgres.Connect(log, iamCreatorRootDatabase)
+	if err != nil {
+		t.Fatalf("connect to database failed: %v", err)
+	}
+	defer iamCreatorRootDB.Close()
+
+	var (
+		now           = time.Now().UnixNano()
+		serviceUser1  = fmt.Sprintf("test_svc_1_%d", now)
+		developerUser = fmt.Sprintf("test_user_%d", now)
+		roleRDSIAM    = fmt.Sprintf("rds_iam_%d", now)
+	)
+	log.Info(fmt.Sprintf("Running test with service user %s and developer %s", serviceUser1, developerUser))
+
+	// create service databases and tables for testing access rights
+	createServiceDatabase(t, log, iamCreatorRootDB, postgresqlHost, serviceUser1)
+	createRole(t, iamCreatorRootDB, roleRDSIAM)
+	dbExec(t, iamCreatorRootDB, "GRANT CONNECT ON DATABASE %s TO %s", serviceUser1, roleRDSIAM)
+
+	// reconnect to start a new session with grants from above database creation
+	iamCreatorUserDB, err := postgres.Connect(log, fmt.Sprintf("postgresql://iam_creator:@%s/%s?sslmode=disable", postgresqlHost, serviceUser1))
+	if err != nil {
+		t.Fatalf("connect to database failed: %v", err)
+	}
+	defer iamCreatorUserDB.Close()
+
+	dbExec(t, iamCreatorRootDB, "GRANT CONNECT ON DATABASE %s TO %s", serviceUser1, roleRDSIAM)
+	err = postgres.Role(log, iamCreatorUserDB, developerUser, []string{roleRDSIAM}, []postgres.DatabaseSchema{
+		{
+			Name:       serviceUser1,
+			Schema:     "public",
+			Privileges: postgres.PrivilegeRead,
+		},
+	})
+	if !assert.NoError(t, err, "unexpected output error") {
+		return
+	}
+
+	userDB, err := postgres.Connect(log, fmt.Sprintf("postgresql://%s:@%s/%s?sslmode=disable", developerUser, postgresqlHost, serviceUser1))
+	if err != nil {
+		t.Fatalf("could not connect with new user: %v", err)
+	}
+	defer userDB.Close()
+	_, err = userDB.Query("SELECT * FROM public.public_films")
+	if err != nil {
+		t.Fatalf("could not select from public.public_films table: %v", err)
+	}
+}
+
 func TestRole_priviliges(t *testing.T) {
 	postgresqlHost := test.Integration(t)
 	log := test.SetLogger(t)
@@ -228,6 +286,7 @@ func createServiceDatabase(t *testing.T, log logr.Logger, database *sql.DB, host
 	}
 	defer serviceUserDB.Close()
 	dbExec(t, serviceUserDB, `CREATE TABLE IF NOT EXISTS %s.films (title varchar(40) NOT NULL)`, service)
+	dbExec(t, serviceUserDB, `CREATE TABLE IF NOT EXISTS public.public_films (title varchar(40) NOT NULL)`)
 }
 
 func createRole(t *testing.T, db *sql.DB, userName string) {

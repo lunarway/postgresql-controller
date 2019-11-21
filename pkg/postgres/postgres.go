@@ -59,10 +59,10 @@ func Role(log logr.Logger, db *sql.DB, name string, roles []string, databases []
 	}
 
 	for _, database := range databases {
-		log.Info(fmt.Sprintf("Granting USAGE of schema '%s'", database.Name))
-		_, err = db.Exec(fmt.Sprintf("GRANT USAGE ON SCHEMA %s TO %s", database.Name, name))
+		log.Info(fmt.Sprintf("Granting USAGE of schema '%s'", database.Schema))
+		_, err = db.Exec(fmt.Sprintf("GRANT USAGE ON SCHEMA %s TO %s", database.Schema, name))
 		if err != nil {
-			return fmt.Errorf("grant usage on schema '%s': %w", database.Name, err)
+			return fmt.Errorf("grant usage on schema '%s': %w", database.Schema, err)
 		}
 		var schemaPrivileges string
 		if database.Privileges == PrivilegeRead {
@@ -74,10 +74,10 @@ func Role(log logr.Logger, db *sql.DB, name string, roles []string, databases []
 		if len(schemaPrivileges) == 0 {
 			continue
 		}
-		log.Info(fmt.Sprintf("Granting %s to tables in schema '%s'", schemaPrivileges, database.Name))
-		_, err = db.Exec(fmt.Sprintf("GRANT %s ON ALL TABLES IN SCHEMA %s TO %s", schemaPrivileges, database.Name, name))
+		log.Info(fmt.Sprintf("Granting %s to tables in schema '%s'", schemaPrivileges, database.Schema))
+		_, err = db.Exec(fmt.Sprintf("GRANT %s ON ALL TABLES IN SCHEMA %s TO %s", schemaPrivileges, database.Schema, name))
 		if err != nil {
-			return fmt.Errorf("grant access privileges '%s' on schema '%s': %w", schemaPrivileges, database.Name, err)
+			return fmt.Errorf("grant access privileges '%s' on schema '%s': %w", schemaPrivileges, database.Schema, err)
 		}
 	}
 	return nil
