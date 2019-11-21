@@ -41,7 +41,7 @@ func Database(log logr.Logger, db *sql.DB, credentials Credentials) error {
 	if err != nil {
 		pqError, ok := err.(*pq.Error)
 		if !ok || pqError.Code.Name() != "duplicate_object" {
-			return err
+			return fmt.Errorf("create user %s: %w", credentials.Name, err)
 		}
 		log.Info(fmt.Sprintf("Service user; %s already exists", credentials.Name), "errorCode", pqError.Code, "errorName", pqError.Code.Name())
 	} else {
@@ -53,7 +53,7 @@ func Database(log logr.Logger, db *sql.DB, credentials Credentials) error {
 	if err != nil {
 		pqError, ok := err.(*pq.Error)
 		if !ok || pqError.Code.Name() != "duplicate_database" {
-			return err
+			return fmt.Errorf("create database %s: %w", credentials.Name, err)
 		}
 		log.Info(fmt.Sprintf("Database; %s already exists", credentials.Name), "errorCode", pqError.Code, "errorName", pqError.Code.Name())
 	} else {
@@ -63,14 +63,14 @@ func Database(log logr.Logger, db *sql.DB, credentials Credentials) error {
 	// Alter ownership of the database to the database user
 	_, err = db.Exec(fmt.Sprintf("ALTER DATABASE %s OWNER TO %s", credentials.Name, credentials.Name))
 	if err != nil {
-		return err
+		return fmt.Errorf("alter owner of database %s: %w", credentials.Name, err)
 	}
 
 	// Connect with the newly created role to create the schema with that role. This ensures
 	// that the object is in fact owned by the service and not the creator role.
 	serviceConnection, err := Connect(log, fmt.Sprintf("postgresql://%s:%s@localhost:5432/%s?sslmode=disable", credentials.Name, credentials.Password, credentials.Name))
 	if err != nil {
-		return err
+		return fmt.Errorf("connect with new user %s: %w", credentials.Name, err)
 	}
 
 	// Create schema in the database
@@ -78,7 +78,7 @@ func Database(log logr.Logger, db *sql.DB, credentials Credentials) error {
 	if err != nil {
 		pqError, ok := err.(*pq.Error)
 		if !ok || pqError.Code.Name() != "duplicate_schema" {
-			return err
+			return fmt.Errorf("create default schema %s: %w", credentials.Name, err)
 		}
 		log.Info(fmt.Sprintf("Schema; %s already exists in database; %s", credentials.Name, credentials.Name), "errorCode", pqError.Code, "errorName", pqError.Code.Name())
 	} else {

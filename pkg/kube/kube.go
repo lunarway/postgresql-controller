@@ -32,12 +32,12 @@ func SecretValue(client client.Client, namespacedName types.NamespacedName, key 
 	secret := &corev1.Secret{}
 	err := client.Get(context.TODO(), types.NamespacedName{Name: namespacedName.Name, Namespace: namespacedName.Namespace}, secret)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("get secret %s/%s: %w", namespacedName.Namespace, namespacedName.Name, err)
 	}
 	//TODO: Add guard against non-existing keys
 	password, err := base64.StdEncoding.DecodeString(string(secret.Data[key]))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("base64 decode secret %s/%s key %s: %w", namespacedName.Namespace, namespacedName.Name, key, err)
 	}
 	return string(password), nil
 }
@@ -46,7 +46,7 @@ func ConfigMapValue(client client.Client, namespacedName types.NamespacedName, k
 	configMap := &corev1.ConfigMap{}
 	err := client.Get(context.TODO(), types.NamespacedName{Name: namespacedName.Name, Namespace: namespacedName.Namespace}, configMap)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("get config map %s/%s: %w", namespacedName.Namespace, namespacedName.Name, err)
 	}
 	//TODO: Add guard against non-existing keys
 	return string(configMap.Data[key]), nil

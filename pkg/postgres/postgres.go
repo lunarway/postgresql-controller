@@ -45,7 +45,7 @@ func Role(log logr.Logger, db *sql.DB, name string, roles []string, databases []
 	if err != nil {
 		pqError, ok := err.(*pq.Error)
 		if !ok || pqError.Code.Name() != "duplicate_object" {
-			return err
+			return fmt.Errorf("create role %s: %w", name, err)
 		}
 		log.Info(fmt.Sprintf("Role %s already exists", name), "errorCode", pqError.Code, "errorName", pqError.Code.Name())
 	} else {
@@ -54,7 +54,7 @@ func Role(log logr.Logger, db *sql.DB, name string, roles []string, databases []
 	if len(roles) != 0 {
 		_, err = db.Exec(fmt.Sprintf("GRANT %s TO %s", strings.Join(roles, ", "), name))
 		if err != nil {
-			return err
+			return fmt.Errorf("grant static roles '%v': %w", roles, err)
 		}
 	}
 
