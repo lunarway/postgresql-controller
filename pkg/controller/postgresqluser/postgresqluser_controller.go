@@ -190,17 +190,17 @@ func (r *ReconcilePostgreSQLUser) Reconcile(request reconcile.Request) (reconcil
 	reqLogger.Info("Reconciling PostgreSQLUser", "user", user.Spec.Name)
 	accesses, err := r.groupAccesses(request.Namespace, user.Spec.Read, user.Spec.Write)
 	if err != nil {
-		return reconcile.Result{}, err
+		return reconcile.Result{}, fmt.Errorf("group accesses: %w", err)
 	}
 
 	hosts, err := r.connectToHosts(accesses)
 	if err != nil {
-		return reconcile.Result{}, err
+		return reconcile.Result{}, fmt.Errorf("connect to hosts: %w", err)
 	}
 
 	err = r.ensurePostgreSQLRoles(reqLogger, user.Spec.Name, accesses, hosts)
 	if err != nil {
-		return reconcile.Result{}, err
+		return reconcile.Result{}, fmt.Errorf("ensure postgresql roles: %w", err)
 	}
 
 	var awsCredentials *credentials.Credentials
@@ -215,7 +215,7 @@ func (r *ReconcilePostgreSQLUser) Reconcile(request reconcile.Request) (reconcil
 		AccountID: r.awsAccountID,
 	}, user.Spec.Name)
 	if err != nil {
-		return reconcile.Result{}, err
+		return reconcile.Result{}, fmt.Errorf("set aws policy: %w", err)
 	}
 
 	return reconcile.Result{}, nil

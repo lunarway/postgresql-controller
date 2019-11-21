@@ -139,11 +139,11 @@ func (r *ReconcilePostgreSQLDatabase) Reconcile(request reconcile.Request) (reco
 
 	host, err := kube.ResourceValue(r.client, database.Spec.Host, request.Namespace)
 	if err != nil {
-		return reconcile.Result{}, err
+		return reconcile.Result{}, fmt.Errorf("resolve host reference: %w", err)
 	}
 	password, err := kube.ResourceValue(r.client, database.Spec.Password, request.Namespace)
 	if err != nil {
-		return reconcile.Result{}, err
+		return reconcile.Result{}, fmt.Errorf("resolve password reference: %w", err)
 	}
 
 	// Ensure the database is in sync with the object
