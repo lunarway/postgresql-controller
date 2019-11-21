@@ -11,14 +11,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.lunarway.com/postgresql-controller/pkg/postgres"
 	"go.lunarway.com/postgresql-controller/test"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func TestParseHostCredentials(t *testing.T) {
-	type input struct {
-	}
-	type output struct {
-	}
 	tt := []struct {
 		name   string
 		input  string
