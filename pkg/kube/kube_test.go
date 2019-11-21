@@ -40,7 +40,7 @@ func TestSecretValue(t *testing.T) {
 			key:        "test",
 			value:      "dGVzdA",
 			output:     "",
-			err:        errors.New("illegal base64 data at input byte 4"),
+			err:        errors.New("base64 decode secret test/test key 'test': illegal base64 data at input byte 4"),
 		},
 	}
 	for _, tc := range tt {

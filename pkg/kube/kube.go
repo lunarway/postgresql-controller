@@ -37,7 +37,7 @@ func SecretValue(client client.Client, namespacedName types.NamespacedName, key 
 	//TODO: Add guard against non-existing keys
 	password, err := base64.StdEncoding.DecodeString(string(secret.Data[key]))
 	if err != nil {
-		return "", fmt.Errorf("base64 decode secret %s/%s key %s: %w", namespacedName.Namespace, namespacedName.Name, key, err)
+		return "", fmt.Errorf("base64 decode secret %s/%s key '%s': %w", namespacedName.Namespace, namespacedName.Name, key, err)
 	}
 	return string(password), nil
 }
