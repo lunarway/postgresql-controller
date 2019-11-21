@@ -13,6 +13,8 @@ import (
 
 	"go.lunarway.com/postgresql-controller/pkg/apis"
 	"go.lunarway.com/postgresql-controller/pkg/controller"
+	"go.lunarway.com/postgresql-controller/pkg/controller/postgresqldatabase"
+	"go.lunarway.com/postgresql-controller/pkg/controller/postgresqluser"
 
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	kubemetrics "github.com/operator-framework/operator-sdk/pkg/kube-metrics"
@@ -52,6 +54,9 @@ func main() {
 	// Add flags registered by imported packages (e.g. glog and
 	// controller-runtime)
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
+
+	pflag.CommandLine.AddFlagSet(postgresqldatabase.FlagSet)
+	pflag.CommandLine.AddFlagSet(postgresqluser.FlagSet)
 
 	pflag.Parse()
 

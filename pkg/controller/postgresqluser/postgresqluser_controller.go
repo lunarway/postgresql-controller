@@ -7,7 +7,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/go-logr/logr"
+	"github.com/spf13/pflag"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/pkg/apis/lunarway/v1alpha1"
 	"go.lunarway.com/postgresql-controller/pkg/iam"
 	"go.lunarway.com/postgresql-controller/pkg/kube"
@@ -23,7 +25,81 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var log = logf.Log.WithName("controller_postgresqluser")
+var log = logf.Log.WithName("controller_postgresqluser").WithValues("controller", "postgresqluser-controller")
+
+var FlagSet *pflag.FlagSet
+
+func init() {
+	FlagSet = pflag.NewFlagSet("controller_postgresqluser", pflag.ExitOnError)
+	FlagSet.StringSlice("user-roles", []string{"rds_iam"}, "Roles granted to all users")
+	FlagSet.String("user-role-prefix", "iam_developer_", "Prefix of roles created in PostgreSQL for users")
+	FlagSet.String("aws-policy-name", "postgres-controller-users", "AWS Policy name to update IAM statements on")
+	FlagSet.String("aws-region", "eu-west-1", "AWS Region where IAM policies are located")
+	FlagSet.String("aws-account-id", "660013655494", "AWS Account id where IAM policies are located")
+	FlagSet.String("aws-profile", "", "AWS Profile to use for credentials")
+	FlagSet.String("aws-access-key-id", "", "AWS access key id to use for credentials")
+	FlagSet.String("aws-secret-access-key", "", "AWS secret access key to use for credentials")
+	FlagSet.StringToString("host-credentials-user", nil, "Host and credential pairs in the form hostname=user:password. Use comma separated pairs for multiple hosts")
+}
+
+func parseFlags(c *ReconcilePostgreSQLUser) {
+	var err error
+	c.grantRoles, err = FlagSet.GetStringSlice("user-roles")
+	parseError(err, "user-roles")
+	c.rolePrefix, err = FlagSet.GetString("user-role-prefix")
+	parseError(err, "user-role-prefix")
+	c.awsPolicyName, err = FlagSet.GetString("aws-policy-name")
+	parseError(err, "aws-policy-name")
+	c.awsRegion, err = FlagSet.GetString("aws-region")
+	parseError(err, "aws-region")
+	c.awsAccountID, err = FlagSet.GetString("aws-account-id")
+	parseError(err, "aws-account")
+	c.awsProfile, err = FlagSet.GetString("aws-profile")
+	parseError(err, "aws-profile")
+	c.awsAccessKeyID, err = FlagSet.GetString("aws-access-key-id")
+	parseError(err, "aws-access-key-id")
+	c.awsSecretAccessKey, err = FlagSet.GetString("aws-secret-access-key")
+	parseError(err, "aws-secret-access-key")
+	hosts, err := FlagSet.GetStringToString("host-credentials-user")
+	parseError(err, "host-credentials-user")
+	c.hostCredentials, err = parseHostCredentials(hosts)
+	parseError(err, "host-credentials: invalid format")
+	var hostNames []string
+	for host := range c.hostCredentials {
+		hostNames = append(hostNames, host)
+	}
+
+	log.Info("Controller configured",
+		"hosts", hostNames,
+		"roles", c.grantRoles,
+		"prefix", c.rolePrefix,
+		"awsPolicyName", c.awsPolicyName,
+		"awsRegion", c.awsRegion,
+		"awsAccountID", c.awsAccountID,
+	)
+}
+
+func parseError(err error, flag string) {
+	if err != nil {
+		log.Error(err, fmt.Sprintf("error parsing flag %s", flag))
+		os.Exit(1)
+	}
+}
+
+func parseHostCredentials(hosts map[string]string) (map[string]postgres.Credentials, error) {
+	if len(hosts) == 0 {
+		return nil, nil
+	}
+	hostCredentials := make(map[string]postgres.Credentials)
+	for host, credentials := range hosts {
+		var err error
+		hostCredentials[host], err = postgres.ParseUsernamePassword(credentials)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return hostCredentials, nil
+}
 
 // Add creates a new PostgreSQLUser Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -33,18 +109,13 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcilePostgreSQLUser{
+	c := &ReconcilePostgreSQLUser{
 		client:           mgr.GetClient(),
 		resourceResolver: kube.ResourceValue,
 		setAWSPolicy:     iam.SetAWSPolicy,
-
-		grantRoles:    []string{"rds_iam", "iam_developer"},
-		rolePrefix:    "iam_developer_",
-		awsPolicyName: "postgresql-controller-users",
-		awsRegion:     "eu-west-1",
-		awsAccountID:  "660013655494",
-		awsProfile:    os.Getenv("AWS_PROFILE"),
 	}
+	parseFlags(c)
+	return c
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -73,14 +144,16 @@ type ReconcilePostgreSQLUser struct {
 	// that reads objects from the cache and writes to the apiserver
 	client           client.Client
 	resourceResolver func(client client.Client, resource lunarwayv1alpha1.ResourceVar, namespace string) (string, error)
-	setAWSPolicy     func(log logr.Logger, policy iam.AWSPolicy, userID string) error
+	setAWSPolicy     func(log logr.Logger, credentials *credentials.Credentials, policy iam.AWSPolicy, userID string) error
 
-	grantRoles    []string
-	rolePrefix    string
-	awsPolicyName string
-	awsRegion     string
-	awsAccountID  string
-	awsProfile    string
+	grantRoles         []string
+	rolePrefix         string
+	awsPolicyName      string
+	awsRegion          string
+	awsAccountID       string
+	awsProfile         string
+	awsAccessKeyID     string
+	awsSecretAccessKey string
 
 	// contains a map of credentials for hosts
 	hostCredentials map[string]postgres.Credentials
@@ -130,7 +203,17 @@ func (r *ReconcilePostgreSQLUser) Reconcile(request reconcile.Request) (reconcil
 		return reconcile.Result{}, err
 	}
 
-	err = r.setAWSPolicy(reqLogger, iam.AWSPolicy{Name: r.awsPolicyName, Region: r.awsRegion, Profile: r.awsProfile, AccountID: r.awsAccountID}, user.Spec.Name)
+	var awsCredentials *credentials.Credentials
+	if len(r.awsProfile) != 0 {
+		awsCredentials = credentials.NewSharedCredentials("", r.awsProfile)
+	} else {
+		awsCredentials = credentials.NewStaticCredentials(r.awsAccessKeyID, r.awsSecretAccessKey, "")
+	}
+	err = r.setAWSPolicy(reqLogger, awsCredentials, iam.AWSPolicy{
+		Name:      r.awsPolicyName,
+		Region:    r.awsRegion,
+		AccountID: r.awsAccountID,
+	}, user.Spec.Name)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
