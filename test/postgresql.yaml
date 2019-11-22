@@ -23,3 +23,15 @@ spec:
         env:
           - name: POSTGRES_USER
             value: iam_creator
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgresql
+spec:
+  ports:
+    - protocol: TCP
+      port: 5432
+      targetPort: 5432
+  selector:
+    app: postgresql
