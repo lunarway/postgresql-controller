@@ -271,7 +271,7 @@ func TestRole_priviliges(t *testing.T) {
 }
 
 func createServiceDatabase(t *testing.T, log logr.Logger, database *sql.DB, host, service string) {
-	err := postgres.Database(log, database, postgres.Credentials{
+	err := postgres.Database(log, database, host, postgres.Credentials{
 		Name:     service,
 		Password: "",
 	})
