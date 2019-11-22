@@ -86,7 +86,7 @@ func TestDatabase_sunshine(t *testing.T) {
 	name := fmt.Sprintf("test_%d", time.Now().UnixNano())
 	password := "test"
 
-	err = postgres.Database(logf.Log, db, postgres.Credentials{
+	err = postgres.Database(logf.Log, db, postgresqlHost, postgres.Credentials{
 		Name:     name,
 		Password: password,
 	})
@@ -126,7 +126,7 @@ func TestDatabase_idempotency(t *testing.T) {
 	name := fmt.Sprintf("test_%d", time.Now().UnixNano())
 	password := "test"
 
-	err = postgres.Database(log, db, postgres.Credentials{
+	err = postgres.Database(log, db, postgresqlHost, postgres.Credentials{
 		Name:     name,
 		Password: password,
 	})
@@ -135,7 +135,7 @@ func TestDatabase_idempotency(t *testing.T) {
 	}
 
 	// Invoke again with same name
-	err = postgres.Database(log, db, postgres.Credentials{
+	err = postgres.Database(log, db, postgresqlHost, postgres.Credentials{
 		Name:     name,
 		Password: password,
 	})

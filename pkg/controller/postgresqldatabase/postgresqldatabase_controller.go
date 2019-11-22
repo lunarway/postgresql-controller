@@ -163,7 +163,7 @@ func (r *ReconcilePostgreSQLDatabase) EnsurePostgreSQLDatabase(log logr.Logger, 
 	if err != nil {
 		return fmt.Errorf("connect to host: %w", err)
 	}
-	err = postgres.Database(log, db, postgres.Credentials{
+	err = postgres.Database(log, db, host, postgres.Credentials{
 		Name:     name,
 		Password: password,
 	})
