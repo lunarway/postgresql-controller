@@ -17,11 +17,11 @@ func ResourceValue(client client.Client, resource lunarwayv1alpha1.ResourceVar, 
 		return resource.Value, nil
 	}
 
-	if resource.ValueFrom.SecretKeyRef.Key != "" {
+	if resource.ValueFrom != nil && resource.ValueFrom.SecretKeyRef != nil && resource.ValueFrom.SecretKeyRef.Key != "" {
 		return SecretValue(client, types.NamespacedName{Name: resource.ValueFrom.SecretKeyRef.Name, Namespace: namespace}, resource.ValueFrom.SecretKeyRef.Key)
 	}
 
-	if resource.ValueFrom.ConfigMapKeyRef.Key != "" {
+	if resource.ValueFrom != nil && resource.ValueFrom.ConfigMapKeyRef != nil && resource.ValueFrom.ConfigMapKeyRef.Key != "" {
 		return ConfigMapValue(client, types.NamespacedName{Name: resource.ValueFrom.ConfigMapKeyRef.Name, Namespace: namespace}, resource.ValueFrom.ConfigMapKeyRef.Key)
 	}
 
