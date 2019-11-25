@@ -3,6 +3,7 @@ package kube
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/pkg/apis/lunarway/v1alpha1"
@@ -17,11 +18,11 @@ func ResourceValue(client client.Client, resource lunarwayv1alpha1.ResourceVar, 
 		return resource.Value, nil
 	}
 
-	if resource.ValueFrom.SecretKeyRef.Key != "" {
+	if resource.ValueFrom != nil && resource.ValueFrom.SecretKeyRef != nil && resource.ValueFrom.SecretKeyRef.Key != "" {
 		return SecretValue(client, types.NamespacedName{Name: resource.ValueFrom.SecretKeyRef.Name, Namespace: namespace}, resource.ValueFrom.SecretKeyRef.Key)
 	}
 
-	if resource.ValueFrom.ConfigMapKeyRef.Key != "" {
+	if resource.ValueFrom != nil && resource.ValueFrom.ConfigMapKeyRef != nil && resource.ValueFrom.ConfigMapKeyRef.Key != "" {
 		return ConfigMapValue(client, types.NamespacedName{Name: resource.ValueFrom.ConfigMapKeyRef.Name, Namespace: namespace}, resource.ValueFrom.ConfigMapKeyRef.Key)
 	}
 
@@ -34,8 +35,11 @@ func SecretValue(client client.Client, namespacedName types.NamespacedName, key 
 	if err != nil {
 		return "", fmt.Errorf("get secret %s/%s: %w", namespacedName.Namespace, namespacedName.Name, err)
 	}
-	//TODO: Add guard against non-existing keys
-	password, err := base64.StdEncoding.DecodeString(string(secret.Data[key]))
+	secretData, ok := secret.Data[key]
+	if !ok {
+		return "", errors.New("unknown secret key")
+	}
+	password, err := base64.StdEncoding.DecodeString(string(secretData))
 	if err != nil {
 		return "", fmt.Errorf("base64 decode secret %s/%s key '%s': %w", namespacedName.Namespace, namespacedName.Name, key, err)
 	}
@@ -48,6 +52,9 @@ func ConfigMapValue(client client.Client, namespacedName types.NamespacedName, k
 	if err != nil {
 		return "", fmt.Errorf("get config map %s/%s: %w", namespacedName.Namespace, namespacedName.Name, err)
 	}
-	//TODO: Add guard against non-existing keys
-	return string(configMap.Data[key]), nil
+	data, ok := configMap.Data[key]
+	if !ok {
+		return "", errors.New("unknown config map key")
+	}
+	return string(data), nil
 }
