@@ -177,7 +177,7 @@ func TestSecretValue(t *testing.T) {
 	}
 }
 
-func TestReconcilePostgreSQLDatabase_getConfigMapValue(t *testing.T) {
+func TestConfigMapValue(t *testing.T) {
 	tt := []struct {
 		name          string
 		configMapName string
