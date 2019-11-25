@@ -118,7 +118,7 @@ func TestSecretValue(t *testing.T) {
 		secretName string
 		namespace  string
 		key        string
-		value      string
+		data       map[string][]byte
 		output     string
 		err        error
 	}{
@@ -127,18 +127,33 @@ func TestSecretValue(t *testing.T) {
 			secretName: "test",
 			namespace:  "test",
 			key:        "test",
-			value:      "dGVzdA==",
-			output:     "test",
-			err:        nil,
+			data: map[string][]byte{
+				"test": []byte("dGVzdA=="),
+			},
+			output: "test",
+			err:    nil,
 		},
 		{
 			name:       "illegal base64",
 			secretName: "test",
 			namespace:  "test",
 			key:        "test",
-			value:      "dGVzdA",
-			output:     "",
-			err:        errors.New("base64 decode secret test/test key 'test': illegal base64 data at input byte 4"),
+			data: map[string][]byte{
+				"test": []byte("dGVZdA"),
+			},
+			output: "",
+			err:    errors.New("base64 decode secret test/test key 'test': illegal base64 data at input byte 4"),
+		},
+		{
+			name:       "unknown key",
+			secretName: "test",
+			namespace:  "test",
+			key:        "anotherkey",
+			data: map[string][]byte{
+				"test": []byte("dGVZdA"),
+			},
+			output: "",
+			err:    errors.New("unknown secret key"),
 		},
 	}
 	for _, tc := range tt {
@@ -149,9 +164,7 @@ func TestSecretValue(t *testing.T) {
 					Name:      tc.secretName,
 					Namespace: tc.namespace,
 				},
-				Data: map[string][]byte{
-					tc.key: []byte(tc.value),
-				},
+				Data: tc.data,
 			}
 			// Objects to track in the fake client.
 			objs := []runtime.Object{
@@ -168,7 +181,7 @@ func TestSecretValue(t *testing.T) {
 
 			password, err := kube.SecretValue(cl, namespacedName, tc.key)
 			if tc.err != nil {
-				assert.EqualErrorf(t, err, tc.err.Error(), "wrong output error: %v", err.Error())
+				assert.EqualErrorf(t, err, tc.err.Error(), "wrong output error")
 			} else {
 				assert.NoError(t, err, "unexpected output error")
 			}
@@ -183,7 +196,7 @@ func TestConfigMapValue(t *testing.T) {
 		configMapName string
 		namespace     string
 		key           string
-		value         string
+		data          map[string]string
 		output        string
 		err           error
 	}{
@@ -192,9 +205,22 @@ func TestConfigMapValue(t *testing.T) {
 			configMapName: "test",
 			namespace:     "test",
 			key:           "test",
-			value:         "test",
-			output:        "test",
-			err:           nil,
+			data: map[string]string{
+				"test": "test",
+			},
+			output: "test",
+			err:    nil,
+		},
+		{
+			name:          "unknown key",
+			configMapName: "test",
+			namespace:     "test",
+			key:           "anotherkey",
+			data: map[string]string{
+				"test": "test",
+			},
+			output: "",
+			err:    errors.New("unknown config map key"),
 		},
 	}
 	for _, tc := range tt {
@@ -205,9 +231,7 @@ func TestConfigMapValue(t *testing.T) {
 					Name:      tc.configMapName,
 					Namespace: tc.namespace,
 				},
-				Data: map[string]string{
-					tc.key: tc.value,
-				},
+				Data: tc.data,
 			}
 			// Objects to track in the fake client.
 			objs := []runtime.Object{
@@ -223,7 +247,7 @@ func TestConfigMapValue(t *testing.T) {
 			}
 			password, err := kube.ConfigMapValue(cl, namespacedName, tc.key)
 			if tc.err != nil {
-				assert.EqualErrorf(t, err, tc.err.Error(), "wrong output error: %v", err.Error())
+				assert.EqualErrorf(t, err, tc.err.Error(), "wrong output error")
 			} else {
 				assert.NoError(t, err, "unexpected output error")
 			}
