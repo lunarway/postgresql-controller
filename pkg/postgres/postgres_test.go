@@ -72,7 +72,7 @@ func TestConnectionString_String(t *testing.T) {
 		Password: "1234",
 	}
 	expected := "postgresql://user:********@host:5432/database?sslmode=disable"
-	assert.Equal(t, fmt.Sprintf("%s", connectionString), expected, "connection string not as expected")
+	assert.Equal(t, fmt.Sprintf("%s", connectionString), expected, "connection string not as expected") //nolint:gosimple
 	assert.Equal(t, fmt.Sprintf("%v", connectionString), expected, "connection string not as expected")
 	assert.Equal(t, expected, connectionString.String(), "connection string not as expected")
 }
@@ -89,7 +89,7 @@ func TestConnectionString_logger(t *testing.T) {
 	var b bytes.Buffer
 	log.SetLogger(zap.LoggerTo(&b, true))
 	log.Log.Info("Connection string", "conn", connectionString)
-	assert.NotContains(t, string(b.Bytes()), "1234", "password logged")
+	assert.NotContains(t, b.String(), "1234", "password logged")
 }
 
 func TestRole_staticRoles(t *testing.T) {
