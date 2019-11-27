@@ -16,6 +16,7 @@ import (
 	"go.lunarway.com/postgresql-controller/pkg/controller"
 	"go.lunarway.com/postgresql-controller/pkg/controller/postgresqldatabase"
 	"go.lunarway.com/postgresql-controller/pkg/controller/postgresqluser"
+	"go.lunarway.com/postgresql-controller/pkg/daemon"
 
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	kubemetrics "github.com/operator-framework/operator-sdk/pkg/kube-metrics"
@@ -151,9 +152,7 @@ func main() {
 
 	// used to signal Go routines to stop execution
 	shutdown := make(chan struct{})
-	// used to know when any of the started Go routines are stopped
 	componentErr := make(chan error)
-	// used to wait for all Go routines to stop
 	var shutdownWg sync.WaitGroup
 
 	// listen for shutdown signals and signal termination to components
@@ -163,12 +162,15 @@ func main() {
 		// blocks until a signal is triggered or shutdown is closed
 		select {
 		case <-signals.SetupSignalHandler():
-			// signal that the controller should stop but without an error as this is
-			// expected behavour on signals
 			componentErr <- nil
 		case <-shutdown:
 		}
 	}()
+
+	log.Info("Starting grant expiration daemon")
+	daemon := daemon.Daemon{}
+	shutdownWg.Add(1)
+	go daemon.Loop(shutdown, &shutdownWg, log)
 
 	log.Info("Starting the Cmd.")
 
@@ -182,15 +184,10 @@ func main() {
 			os.Exit(1)
 		}
 	}()
-	// wait for any component to stop, ie. signals or the manager
 	err = <-componentErr
-	if err != nil {
-		log.Error(err, "Controller exiting unexpectedly")
-	} else {
-		log.Info("Controller exiting")
-	}
+	log.Info("Controller exiting", "err", err)
 	close(shutdown)
-	log.Info("Waiting for all components to shutdown")
+	log.Info("Waiting for components to shutdown")
 	shutdownWg.Wait()
 }
 
