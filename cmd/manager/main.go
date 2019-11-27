@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"sync"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -15,6 +16,7 @@ import (
 	"go.lunarway.com/postgresql-controller/pkg/controller"
 	"go.lunarway.com/postgresql-controller/pkg/controller/postgresqldatabase"
 	"go.lunarway.com/postgresql-controller/pkg/controller/postgresqluser"
+	"go.lunarway.com/postgresql-controller/pkg/daemon"
 
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	kubemetrics "github.com/operator-framework/operator-sdk/pkg/kube-metrics"
@@ -146,13 +148,45 @@ func main() {
 		}
 	}
 
+	// used to signal Go routines to stop execution
+	shutdown := make(chan struct{})
+	componentErr := make(chan error)
+	var shutdownWg sync.WaitGroup
+
+	// listen for shutdown signals and signal termination to components
+	shutdownWg.Add(1)
+	go func() {
+		defer shutdownWg.Done()
+		// blocks until a signal is triggered or shutdown is closed
+		select {
+		case <-signals.SetupSignalHandler():
+			componentErr <- nil
+		case <-shutdown:
+		}
+	}()
+
+	log.Info("Starting grant expiration daemon")
+	daemon := daemon.Daemon{}
+	shutdownWg.Add(1)
+	go daemon.Loop(shutdown, &shutdownWg, log)
+
 	log.Info("Starting the Cmd.")
 
 	// Start the Cmd
-	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
-		log.Error(err, "Manager exited non-zero")
-		os.Exit(1)
-	}
+	shutdownWg.Add(1)
+	go func() {
+		defer shutdownWg.Done()
+		err := mgr.Start(shutdown)
+		if err != nil {
+			log.Error(err, "Manager exited non-zero")
+			os.Exit(1)
+		}
+	}()
+	err = <-componentErr
+	log.Info("Controller exiting", "err", err)
+	close(shutdown)
+	log.Info("Waiting for components to shutdown")
+	shutdownWg.Wait()
 }
 
 // serveCRMetrics gets the Operator/CustomResource GVKs and generates metrics based on those types.
