@@ -274,15 +274,17 @@ func (r *ReconcilePostgreSQLUser) connectToHosts(accesses HostAccess) (map[strin
 		// hostDatabase contains the host name and the database but we expect host
 		// credentials to be without the database part
 		// This will not work for hosts with multiple / characters
-		host := strings.Split(hostDatabase, "/")[0]
+		hostDatabaseParts := strings.Split(hostDatabase, "/")
+		host := hostDatabaseParts[0]
+		database := hostDatabaseParts[1]
 		credentials, ok := r.hostCredentials[host]
 		if !ok {
 			errs = multierr.Append(errs, fmt.Errorf("no credentials for host '%s'", host))
 			continue
 		}
 		connectionString := postgres.ConnectionString{
-			Host:     hostDatabase,
-			Database: "postgres", // default database
+			Host:     host,
+			Database: database,
 			User:     credentials.Name,
 			Password: credentials.Password,
 		}
