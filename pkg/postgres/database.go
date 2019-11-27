@@ -89,14 +89,5 @@ func Database(log logr.Logger, db *sql.DB, host string, credentials Credentials)
 	} else {
 		log.Info(fmt.Sprintf("Schema; %s created in database; %s", credentials.Name, credentials.Name))
 	}
-	// This revokation ensures that the user cannot create any objects in the
-	// PUBLIC role that is assigned to all roles by default.
-	log.Info(fmt.Sprintf("Revoke ALL on role PUBLIC for database '%s'", credentials.Name))
-	_, err = serviceConnection.Exec(fmt.Sprintf(`REVOKE ALL ON DATABASE %s from PUBLIC;
-	REVOKE ALL ON SCHEMA public from PUBLIC;
-	REVOKE ALL ON ALL TABLES IN SCHEMA public from PUBLIC;`, credentials.Name))
-	if err != nil {
-		return fmt.Errorf("revoke all for role PUBLIC on database '%s': %w", credentials.Name, err)
-	}
 	return nil
 }
