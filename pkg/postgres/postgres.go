@@ -9,9 +9,41 @@ import (
 	"github.com/lib/pq"
 )
 
-func Connect(log logr.Logger, connectionString string) (*sql.DB, error) {
+// ConnectionString represents a PostgreSQL connection string.
+//
+// Use method Raw to get the raw connection string for sql.Open.
+//
+// The type masks the password when used with fmt.Stringer e.g. fmt.Sprintf.
+type ConnectionString struct {
+	Host     string
+	Database string
+	User     string
+	Password string
+}
+
+// Raw returns a PostgreSQL connection string.
+func (c ConnectionString) Raw() string {
+	raw := fmt.Sprintf("postgresql://%s:%s@%s", c.User, c.Password, c.Host)
+	if c.Database != "" {
+		raw += fmt.Sprintf("/%s", c.Database)
+	}
+	raw += "?sslmode=disable"
+	return raw
+}
+
+var _ fmt.Stringer = ConnectionString{}
+
+func (c ConnectionString) String() string {
+	raw := c.Raw()
+	if c.Password == "" {
+		return raw
+	}
+	return strings.ReplaceAll(raw, c.Password, "********")
+}
+
+func Connect(log logr.Logger, connectionString ConnectionString) (*sql.DB, error) {
 	log.Info("Connecting to database", "url", connectionString)
-	db, err := sql.Open("postgres", connectionString)
+	db, err := sql.Open("postgres", connectionString.Raw())
 	if err != nil {
 		return nil, err
 	}

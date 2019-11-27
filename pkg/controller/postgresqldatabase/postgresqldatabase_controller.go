@@ -159,7 +159,12 @@ func (r *ReconcilePostgreSQLDatabase) EnsurePostgreSQLDatabase(log logr.Logger, 
 	if !ok {
 		return fmt.Errorf("unknown credentials for host %s", host)
 	}
-	db, err := postgres.Connect(log, fmt.Sprintf("postgresql://%s:%s@%s?sslmode=disable", credentials.Name, credentials.Password, host))
+	db, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     host,
+		Database: "",
+		User:     credentials.Name,
+		Password: credentials.Password,
+	})
 	if err != nil {
 		return fmt.Errorf("connect to host: %w", err)
 	}
