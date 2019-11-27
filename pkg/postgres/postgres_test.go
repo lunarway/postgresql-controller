@@ -1,6 +1,7 @@
 package postgres_test
 
 import (
+	"bytes"
 	"database/sql"
 	"fmt"
 	"sort"
@@ -12,13 +13,94 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.lunarway.com/postgresql-controller/pkg/postgres"
 	"go.lunarway.com/postgresql-controller/test"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
+
+func TestConnectionString_Raw(t *testing.T) {
+	tt := []struct {
+		name             string
+		connectionString postgres.ConnectionString
+		raw              string
+	}{
+		{
+			name: "no password or database",
+			connectionString: postgres.ConnectionString{
+				Host:     "host:5432",
+				Database: "",
+				User:     "user",
+				Password: "",
+			},
+			raw: "postgresql://user:@host:5432?sslmode=disable",
+		},
+		{
+			name: "no password",
+			connectionString: postgres.ConnectionString{
+				Host:     "host:5432",
+				Database: "database",
+				User:     "user",
+				Password: "",
+			},
+			raw: "postgresql://user:@host:5432/database?sslmode=disable",
+		},
+		{
+			name: "complete",
+			connectionString: postgres.ConnectionString{
+				Host:     "host:5432",
+				Database: "database",
+				User:     "user",
+				Password: "1234",
+			},
+			raw: "postgresql://user:1234@host:5432/database?sslmode=disable",
+		},
+	}
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := tc.connectionString.Raw()
+			assert.Equal(t, tc.raw, raw, "raw connection string not as expected")
+		})
+	}
+}
+
+// TestConnectionString_String tests that ConnectionString does not expose
+// password for fmt.Stringer and fmt.Formatter
+func TestConnectionString_String(t *testing.T) {
+	connectionString := postgres.ConnectionString{
+		Host:     "host:5432",
+		Database: "database",
+		User:     "user",
+		Password: "1234",
+	}
+	expected := "postgresql://user:********@host:5432/database?sslmode=disable"
+	assert.Equal(t, fmt.Sprintf("%s", connectionString), expected, "connection string not as expected") //nolint:gosimple
+	assert.Equal(t, fmt.Sprintf("%v", connectionString), expected, "connection string not as expected")
+	assert.Equal(t, expected, connectionString.String(), "connection string not as expected")
+}
+
+// TestConnectionString_logger tests that ConnectionString does not expose
+// password for the logging implementation.
+func TestConnectionString_logger(t *testing.T) {
+	connectionString := postgres.ConnectionString{
+		Host:     "host:5432",
+		Database: "database",
+		User:     "user",
+		Password: "1234",
+	}
+	var b bytes.Buffer
+	log.SetLogger(zap.LoggerTo(&b, true))
+	log.Log.Info("Connection string", "conn", connectionString)
+	assert.NotContains(t, b.String(), "1234", "password logged")
+}
 
 func TestRole_staticRoles(t *testing.T) {
 	postgresqlHost := test.Integration(t)
 	log := test.SetLogger(t)
-	connectionString := fmt.Sprintf("postgresql://iam_creator:@%s?sslmode=disable", postgresqlHost)
-	db, err := postgres.Connect(log, connectionString)
+	db, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		User:     "iam_creator",
+		Database: "",
+		Password: "",
+	})
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
 	}
@@ -116,8 +198,12 @@ func TestRole_priviliges_databaseNameAndSchemaDiffers(t *testing.T) {
 	postgresqlHost := test.Integration(t)
 	log := test.SetLogger(t)
 
-	iamCreatorRootDatabase := fmt.Sprintf("postgresql://iam_creator:@%s?sslmode=disable", postgresqlHost)
-	iamCreatorRootDB, err := postgres.Connect(log, iamCreatorRootDatabase)
+	iamCreatorRootDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		User:     "iam_creator",
+		Database: "",
+		Password: "",
+	})
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
 	}
@@ -137,7 +223,12 @@ func TestRole_priviliges_databaseNameAndSchemaDiffers(t *testing.T) {
 	dbExec(t, iamCreatorRootDB, "GRANT CONNECT ON DATABASE %s TO %s", serviceUser1, roleRDSIAM)
 
 	// reconnect to start a new session with grants from above database creation
-	iamCreatorUserDB, err := postgres.Connect(log, fmt.Sprintf("postgresql://iam_creator:@%s/%s?sslmode=disable", postgresqlHost, serviceUser1))
+	iamCreatorUserDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		User:     "iam_creator",
+		Database: serviceUser1,
+		Password: "",
+	})
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
 	}
@@ -155,7 +246,12 @@ func TestRole_priviliges_databaseNameAndSchemaDiffers(t *testing.T) {
 		return
 	}
 
-	userDB, err := postgres.Connect(log, fmt.Sprintf("postgresql://%s:@%s/%s?sslmode=disable", developerUser, postgresqlHost, serviceUser1))
+	userDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		User:     developerUser,
+		Database: serviceUser1,
+		Password: "",
+	})
 	if err != nil {
 		t.Fatalf("could not connect with new user: %v", err)
 	}
@@ -170,8 +266,12 @@ func TestRole_priviliges(t *testing.T) {
 	postgresqlHost := test.Integration(t)
 	log := test.SetLogger(t)
 
-	iamCreatorRootDatabase := fmt.Sprintf("postgresql://iam_creator:@%s?sslmode=disable", postgresqlHost)
-	iamCreatorRootDB, err := postgres.Connect(log, iamCreatorRootDatabase)
+	iamCreatorRootDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		User:     "iam_creator",
+		Database: "",
+		Password: "",
+	})
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
 	}
@@ -198,7 +298,12 @@ func TestRole_priviliges(t *testing.T) {
 	//
 
 	// reconnect to start a new session with grants from above database creation
-	iamCreatorUserDB, err := postgres.Connect(log, fmt.Sprintf("postgresql://iam_creator:@%s/%s?sslmode=disable", postgresqlHost, serviceUser1))
+	iamCreatorUserDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		User:     "iam_creator",
+		Database: serviceUser1,
+		Password: "",
+	})
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
 	}
@@ -214,7 +319,12 @@ func TestRole_priviliges(t *testing.T) {
 		return
 	}
 
-	userDB, err := postgres.Connect(log, fmt.Sprintf("postgresql://%s:@%s/%s?sslmode=disable", developerUser, postgresqlHost, serviceUser1))
+	userDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		User:     developerUser,
+		Database: serviceUser1,
+		Password: "",
+	})
 	if err != nil {
 		t.Fatalf("could not connect with new user: %v", err)
 	}
@@ -234,7 +344,12 @@ func TestRole_priviliges(t *testing.T) {
 	//
 
 	// reconnect to start a new session with grants from above database creation
-	iamCreatorUserDB, err = postgres.Connect(log, fmt.Sprintf("postgresql://iam_creator:@%s/%s?sslmode=disable", postgresqlHost, serviceUser2))
+	iamCreatorUserDB, err = postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		User:     "iam_creator",
+		Database: serviceUser2,
+		Password: "",
+	})
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
 	}
@@ -255,7 +370,12 @@ func TestRole_priviliges(t *testing.T) {
 		return
 	}
 
-	userDB, err = postgres.Connect(log, fmt.Sprintf("postgresql://%s:@%s/%s?sslmode=disable", developerUser, postgresqlHost, serviceUser2))
+	userDB, err = postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		User:     developerUser,
+		Database: serviceUser2,
+		Password: "",
+	})
 	if err != nil {
 		t.Fatalf("could not connect with new user: %v", err)
 	}
@@ -279,8 +399,12 @@ func createServiceDatabase(t *testing.T, log logr.Logger, database *sql.DB, host
 		t.Fatalf("Failed to create database: %v", err)
 	}
 
-	serviceUserDatabase := fmt.Sprintf("postgresql://%s:@%s/%s?sslmode=disable", service, host, service)
-	serviceUserDB, err := postgres.Connect(log, serviceUserDatabase)
+	serviceUserDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     host,
+		User:     service,
+		Database: service,
+		Password: "",
+	})
 	if err != nil {
 		t.Fatalf("connect to service user failed: %v", err)
 	}

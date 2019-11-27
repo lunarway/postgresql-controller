@@ -77,8 +77,12 @@ func TestParseHostCredentials(t *testing.T) {
 func TestDatabase_sunshine(t *testing.T) {
 	postgresqlHost := test.Integration(t)
 	log := test.SetLogger(t)
-	connectionString := fmt.Sprintf("postgresql://iam_creator:@%s?sslmode=disable", postgresqlHost)
-	db, err := postgres.Connect(log, connectionString)
+	db, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		Database: "",
+		User:     "iam_creator",
+		Password: "",
+	})
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
 	}
@@ -94,8 +98,12 @@ func TestDatabase_sunshine(t *testing.T) {
 		t.Fatalf("EnsurePostgreSQLDatabase failed: %v", err)
 	}
 
-	serviceConnectionString := fmt.Sprintf("postgresql://%s:%s@%s/%s?sslmode=disable", name, password, postgresqlHost, name)
-	newDB, err := postgres.Connect(log, serviceConnectionString)
+	newDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		Database: name,
+		User:     name,
+		Password: password,
+	})
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
 	}
@@ -117,8 +125,12 @@ func TestDatabase_sunshine(t *testing.T) {
 func TestDatabase_idempotency(t *testing.T) {
 	postgresqlHost := test.Integration(t)
 	log := test.SetLogger(t)
-	connectionString := fmt.Sprintf("postgresql://iam_creator:@%s?sslmode=disable", postgresqlHost)
-	db, err := postgres.Connect(log, connectionString)
+	db, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		Database: "",
+		User:     "iam_creator",
+		Password: "",
+	})
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
 	}

@@ -52,7 +52,7 @@ func TestReconcile_connectToHosts(t *testing.T) {
 				"unknown/postgres":        []ReadWriteAccess{},
 			},
 			connectionCount: 1,
-			err:             fmt.Errorf("connect to postgresql://iam_creator:***@unknown/postgres?sslmode=disable: dial tcp: lookup unknown: no such host"),
+			err:             fmt.Errorf("connect to postgresql://iam_creator:********@unknown/postgres?sslmode=disable: dial tcp: lookup unknown: no such host"),
 		},
 		{
 			name:        "missing credentials",
