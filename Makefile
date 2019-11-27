@@ -73,4 +73,5 @@ release:
 	git add deploy/operator.yaml
 	git commit -m"Release ${TAG}"
 	git tag ${TAG}
+	git push
 	git push --tags
