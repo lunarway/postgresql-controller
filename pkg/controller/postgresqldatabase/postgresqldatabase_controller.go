@@ -159,21 +159,22 @@ func (r *ReconcilePostgreSQLDatabase) EnsurePostgreSQLDatabase(log logr.Logger, 
 	if !ok {
 		return fmt.Errorf("unknown credentials for host %s", host)
 	}
-	db, err := postgres.Connect(log, postgres.ConnectionString{
+	connectionString := postgres.ConnectionString{
 		Host:     host,
-		Database: "",
+		Database: "postgres", // default database
 		User:     credentials.Name,
 		Password: credentials.Password,
-	})
+	}
+	db, err := postgres.Connect(log, connectionString)
 	if err != nil {
-		return fmt.Errorf("connect to host: %w", err)
+		return fmt.Errorf("connect to host %s: %w", connectionString, err)
 	}
 	err = postgres.Database(log, db, host, postgres.Credentials{
 		Name:     name,
 		Password: password,
 	})
 	if err != nil {
-		return fmt.Errorf("create database %s on host %s: %w", name, host, err)
+		return fmt.Errorf("create database %s on host %s: %w", name, connectionString, err)
 	}
 	return nil
 }
