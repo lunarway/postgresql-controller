@@ -282,7 +282,7 @@ func (r *ReconcilePostgreSQLUser) connectToHosts(accesses HostAccess) (map[strin
 		}
 		connectionString := postgres.ConnectionString{
 			Host:     hostDatabase,
-			Database: "",
+			Database: "postgres", // default database
 			User:     credentials.Name,
 			Password: credentials.Password,
 		}
