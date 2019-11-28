@@ -104,10 +104,10 @@ func Database(log logr.Logger, db *sql.DB, host string, credentials Credentials)
 	if err != nil {
 		return fmt.Errorf("grant connect to database '%s' to PUBLIC: %w", credentials.Name, err)
 	}
-	log.Info("Grant usage of service schema to iam_creator")
-	_, err = serviceConnection.Exec(fmt.Sprintf("GRANT USAGE ON SCHEMA %s TO %s", credentials.Name, "iam_creator"))
+	log.Info("Grant usage on schema to PUBLIC")
+	_, err = serviceConnection.Exec(fmt.Sprintf("GRANT USAGE ON SCHEMA %s TO PUBLIC", credentials.Name))
 	if err != nil {
-		return fmt.Errorf("grant usage on schema '%s': %w", credentials.Name, err)
+		return fmt.Errorf("grant connect to database '%s' to PUBLIC: %w", credentials.Name, err)
 	}
 	return nil
 }
