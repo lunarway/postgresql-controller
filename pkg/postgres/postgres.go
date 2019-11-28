@@ -84,6 +84,7 @@ func Role(log logr.Logger, db *sql.DB, name string, roles []string, databases []
 		log.Info(fmt.Sprintf("Role %s created", name))
 	}
 	if len(roles) != 0 {
+		log.Info(fmt.Sprintf("Grant static roles %v", roles))
 		_, err = db.Exec(fmt.Sprintf("GRANT %s TO %s", strings.Join(roles, ", "), name))
 		if err != nil {
 			return fmt.Errorf("grant static roles '%v': %w", roles, err)

@@ -89,5 +89,25 @@ func Database(log logr.Logger, db *sql.DB, host string, credentials Credentials)
 	} else {
 		log.Info(fmt.Sprintf("Schema; %s created in database; %s", credentials.Name, credentials.Name))
 	}
+	// This revokation ensures that the user cannot create any objects in the
+	// PUBLIC role that is assigned to all roles by default.
+	log.Info(fmt.Sprintf("Revoke ALL on role PUBLIC for database '%s'", credentials.Name))
+	_, err = serviceConnection.Exec(fmt.Sprintf(`REVOKE ALL ON DATABASE %s from PUBLIC;
+	REVOKE ALL ON SCHEMA public from PUBLIC;
+	REVOKE ALL ON ALL TABLES IN SCHEMA public from PUBLIC;`, credentials.Name))
+	if err != nil {
+		return fmt.Errorf("revoke all for role PUBLIC on database '%s': %w", credentials.Name, err)
+	}
+	// Grant CONNECT privileges to PUBLIC again to ensure new roles are allowed to connect.
+	log.Info("Grant CONNECT to PUBLIC")
+	_, err = serviceConnection.Exec(fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO PUBLIC", credentials.Name))
+	if err != nil {
+		return fmt.Errorf("grant connect to database '%s' to PUBLIC: %w", credentials.Name, err)
+	}
+	log.Info("Grant usage of service schema to iam_creator")
+	_, err = serviceConnection.Exec(fmt.Sprintf("GRANT USAGE ON SCHEMA %s TO %s", credentials.Name, "iam_creator"))
+	if err != nil {
+		return fmt.Errorf("grant usage on schema '%s': %w", credentials.Name, err)
+	}
 	return nil
 }
