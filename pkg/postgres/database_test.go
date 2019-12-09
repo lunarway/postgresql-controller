@@ -79,7 +79,7 @@ func TestDatabase_sunshine(t *testing.T) {
 	log := test.SetLogger(t)
 	db, err := postgres.Connect(log, postgres.ConnectionString{
 		Host:     postgresqlHost,
-		Database: "",
+		Database: "postgres",
 		User:     "iam_creator",
 		Password: "",
 	})
@@ -127,7 +127,7 @@ func TestDatabase_idempotency(t *testing.T) {
 	log := test.SetLogger(t)
 	db, err := postgres.Connect(log, postgres.ConnectionString{
 		Host:     postgresqlHost,
-		Database: "",
+		Database: "postgres",
 		User:     "iam_creator",
 		Password: "",
 	})
