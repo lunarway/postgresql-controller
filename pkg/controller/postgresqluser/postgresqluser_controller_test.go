@@ -52,7 +52,7 @@ func TestReconcile_connectToHosts(t *testing.T) {
 				"unknown/postgres":        []ReadWriteAccess{},
 			},
 			connectionCount: 1,
-			err:             fmt.Errorf("connect to postgresql://iam_creator:********@unknown/postgres?sslmode=disable: dial tcp: lookup unknown: no such host"),
+			err:             fmt.Errorf("connect to postgresql://iam_creator:********@unknown/postgres?sslmode=disable: dial tcp:"),
 		},
 		{
 			name:        "missing credentials",
@@ -84,7 +84,10 @@ func TestReconcile_connectToHosts(t *testing.T) {
 			// assert
 			t.Logf("Connections: %v", connections)
 			if tc.err != nil {
-				assert.EqualError(t, err, tc.err.Error(), "error not as expected")
+				if !assert.Error(t, err, "an output error was expected") {
+					return
+				}
+				assert.Contains(t, err.Error(), tc.err.Error(), "error not as expected")
 			} else {
 				assert.NoError(t, err, "unexpected output error")
 			}
