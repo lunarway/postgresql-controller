@@ -46,8 +46,25 @@ test/unit:
 	@echo Running tests:
 	go test -v -race -cover ./pkg/...
 
+POSTGRESQL_CONTROLLER_INTEGRATION_HOST_CONTAINER=postgresql-controler-int-test
+
+.PHONY: test/integration/postgresql/run
+test/integration/postgresql/run:
+	@echo Running integration test PostgreSQL instance on localhost:5432:
+	-docker run --rm -p 5432:5432 -e POSTGRES_USER=iam_creator --name ${POSTGRESQL_CONTROLLER_INTEGRATION_HOST_CONTAINER} -d timms/postgres-logging:11.5 && sleep 5
+	@echo Database running and iam_creator role created.
+	@echo Attach to instance with 'make test/integration/postgresql/attach'
+
+.PHONY: test/integration/postgresql/attach
+test/integration/postgresql/attach:
+	docker attach ${POSTGRESQL_CONTROLLER_INTEGRATION_HOST_CONTAINER}
+
+.PHONY: test/integration/postgresql/stop
+test/integration/postgresql/stop:
+	-docker kill ${POSTGRESQL_CONTROLLER_INTEGRATION_HOST_CONTAINER}
+
 .PHONY: test/integration
-test/integration:
+test/integration: test/integration/postgresql/run
 	@echo Running integration tests against PostgreSQL instance on ${POSTGRESQL_CONTROLLER_INTEGRATION_HOST}:
 	POSTGRESQL_CONTROLLER_INTEGRATION_HOST=${POSTGRESQL_CONTROLLER_INTEGRATION_HOST} go test -v -race -cover -count=1 ./pkg/...
 
