@@ -98,16 +98,16 @@ func Role(log logr.Logger, db *sql.DB, name string, roles []string, databases []
 		}
 		var schemaPrivileges string
 		if database.Privileges == PrivilegeRead {
-			schemaPrivileges = "SELECT"
+			schemaPrivileges = "read"
 		}
 		if database.Privileges == PrivilegeWrite {
-			schemaPrivileges = "SELECT, INSERT, UPDATE, DELETE"
+			schemaPrivileges = "readwrite"
 		}
 		if len(schemaPrivileges) == 0 {
 			continue
 		}
-		log.Info(fmt.Sprintf("Granting %s to tables in schema '%s'", schemaPrivileges, database.Schema))
-		_, err = db.Exec(fmt.Sprintf("GRANT %s ON ALL TABLES IN SCHEMA %s TO %s", schemaPrivileges, database.Schema, name))
+		log.Info(fmt.Sprintf("Granting %s to %s", schemaPrivileges, name))
+		_, err = db.Exec(fmt.Sprintf("GRANT %s_%s TO %s", database.Name, schemaPrivileges, name))
 		if err != nil {
 			return fmt.Errorf("grant access privileges '%s' on schema '%s': %w", schemaPrivileges, database.Schema, err)
 		}

@@ -51,7 +51,10 @@ POSTGRESQL_CONTROLLER_INTEGRATION_HOST_CONTAINER=postgresql-controler-int-test
 .PHONY: test/integration/postgresql/run
 test/integration/postgresql/run:
 	@echo Running integration test PostgreSQL instance on localhost:5432:
-	-docker run --rm -p 5432:5432 -e POSTGRES_USER=iam_creator --name ${POSTGRESQL_CONTROLLER_INTEGRATION_HOST_CONTAINER} -d timms/postgres-logging:11.5 && sleep 5
+	-docker run --rm -p 5432:5432 -e POSTGRES_USER=admin --name ${POSTGRESQL_CONTROLLER_INTEGRATION_HOST_CONTAINER} -d timms/postgres-logging:11.5 && \
+		sleep 5 && \
+		docker exec ${POSTGRESQL_CONTROLLER_INTEGRATION_HOST_CONTAINER} \
+		  psql -Uadmin -c "CREATE USER iam_creator WITH CREATEDB CREATEROLE VALID UNTIL 'infinity';"
 	@echo Database running and iam_creator role created.
 	@echo Attach to instance with 'make test/integration/postgresql/attach'
 
