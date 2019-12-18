@@ -204,7 +204,7 @@ func TestDatabase_existingResourcePrivilegesForReadWriteRoles(t *testing.T) {
 		t.Fatalf("Connect as developer user failed: %v", err)
 	}
 	// This should not result in an error as the controller should have made sure
-	// that the product schema and table have been made available to the read and
+	// that the schema and table have been made available to the read and
 	// readwrite roles
 	log.Info("TC: Select from table")
 	dbExec(t, developerDB, fmt.Sprintf(`SELECT * FROM %[1]s.%[1]s`, name))
