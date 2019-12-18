@@ -437,7 +437,7 @@ func (err *AccessError) Error() string {
 	if host == "" && err.Access.Host.ValueFrom.ConfigMapKeyRef != nil {
 		host = fmt.Sprintf("from config map '%s' key '%s'", err.Access.Host.ValueFrom.ConfigMapKeyRef.Name, err.Access.Host.ValueFrom.ConfigMapKeyRef.Key)
 	}
-	return fmt.Sprintf("access to host %s: %v: access data: %+v", host, err.Err, err.Access)
+	return fmt.Sprintf("access to host %s: %v", host, err.Err)
 }
 
 func (err *AccessError) Unwrap() error {

@@ -629,7 +629,7 @@ func TestReconcilePostgreSQLUser_groupAccesses_errors(t *testing.T) {
 			Reason: "I'm not a developer",
 		},
 	}
-	expectedError := "access to host host1:5432: no value; access to host from secret 'secret' key 'key': no value; access to host from config map 'configmap' key 'key': no value"
+	expectedError := "resolve host: access to host host1:5432: no value; resolve host: access to host from secret 'secret' key 'key': no value; resolve host: access to host from config map 'configmap' key 'key': no value"
 
 	logger := test.NewLogger(t)
 	r := ReconcilePostgreSQLUser{
