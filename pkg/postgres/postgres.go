@@ -67,6 +67,17 @@ type DatabaseSchema struct {
 	Privileges Privilege
 }
 
+func (p Privilege) String() string {
+	switch p {
+	case PrivilegeRead:
+		return "read"
+	case PrivilegeWrite:
+		return "write"
+	default:
+		return "unknown"
+	}
+}
+
 func Role(log logr.Logger, db *sql.DB, name string, roles []string, databases []DatabaseSchema) error {
 	log.Info(fmt.Sprintf("Creating role %s", name))
 	query := fmt.Sprintf("CREATE ROLE %s WITH LOGIN", name)
