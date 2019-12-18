@@ -137,6 +137,8 @@ spec:
         status:
           description: PostgreSQLDatabaseStatus defines the observed state of PostgreSQLDatabase
           properties:
+            error:
+              type: string
             phase:
               description: PostgreSQLDatabasePhase represents the current phase of
                 a PostgreSQL database.

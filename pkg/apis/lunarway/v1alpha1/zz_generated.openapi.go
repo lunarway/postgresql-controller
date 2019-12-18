@@ -117,6 +117,12 @@ func schema_pkg_apis_lunarway_v1alpha1_PostgreSQLDatabaseStatus(ref common.Refer
 							Format: "",
 						},
 					},
+					"error": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
 				},
 				Required: []string{"phaseUpdated", "phase"},
 			},

@@ -140,35 +140,50 @@ func (r *ReconcilePostgreSQLDatabase) Reconcile(request reconcile.Request) (reco
 
 	host, err := kube.ResourceValue(r.client, database.Spec.Host, request.Namespace)
 	if err != nil {
-		r.setStatus(reqLogger, *database, lunarwayv1alpha1.PostgreSQLDatabasePhaseInvalid)
+		r.setStatus(reqLogger, database, lunarwayv1alpha1.PostgreSQLDatabasePhaseInvalid, err)
 		return reconcile.Result{}, fmt.Errorf("resolve host reference: %w", err)
 	}
 	password, err := kube.ResourceValue(r.client, database.Spec.Password, request.Namespace)
 	if err != nil {
-		r.setStatus(reqLogger, *database, lunarwayv1alpha1.PostgreSQLDatabasePhaseInvalid)
+		r.setStatus(reqLogger, database, lunarwayv1alpha1.PostgreSQLDatabasePhaseInvalid, err)
 		return reconcile.Result{}, fmt.Errorf("resolve password reference: %w", err)
 	}
 
 	// Ensure the database is in sync with the object
 	err = r.EnsurePostgreSQLDatabase(reqLogger, host, database.Spec.Name, password)
 	if err != nil {
-		r.setStatus(reqLogger, *database, lunarwayv1alpha1.PostgreSQLDatabasePhaseFailed)
+		r.setStatus(reqLogger, database, lunarwayv1alpha1.PostgreSQLDatabasePhaseFailed, err)
 		return reconcile.Result{}, err
 	}
-	r.setStatus(reqLogger, *database, lunarwayv1alpha1.PostgreSQLDatabasePhaseRunning)
+	r.setStatus(reqLogger, database, lunarwayv1alpha1.PostgreSQLDatabasePhaseRunning, nil)
 	return reconcile.Result{}, nil
 }
 
-func (r *ReconcilePostgreSQLDatabase) setStatus(log logr.Logger, database lunarwayv1alpha1.PostgreSQLDatabase, status lunarwayv1alpha1.PostgreSQLDatabasePhase) {
-	if database.Status.Phase == status {
+func (r *ReconcilePostgreSQLDatabase) setStatus(log logr.Logger, database *lunarwayv1alpha1.PostgreSQLDatabase, status lunarwayv1alpha1.PostgreSQLDatabasePhase, err error) {
+	changes := updateStatus(metav1.Now, database, status, err)
+	if !changes {
 		return
 	}
-	database.Status.PhaseUpdated = metav1.Now()
-	database.Status.Phase = status
-	err := r.client.Status().Update(context.TODO(), &database)
+	err = r.client.Status().Update(context.TODO(), database)
 	if err != nil {
 		log.Error(err, fmt.Sprintf("failed to set status of database to '%s'", status))
 	}
+}
+
+// updateStatus updates the database status struct if it has changed and returns
+// true. Otherwise nothing is changed and false is returned.
+func updateStatus(now func() metav1.Time, database *lunarwayv1alpha1.PostgreSQLDatabase, status lunarwayv1alpha1.PostgreSQLDatabasePhase, err error) bool {
+	if database.Status.Phase == status && ((err != nil && err.Error() == database.Status.Error) || err == nil && database.Status.Error == "") {
+		return false
+	}
+	if err != nil {
+		database.Status.Error = err.Error()
+	} else {
+		database.Status.Error = ""
+	}
+	database.Status.PhaseUpdated = now()
+	database.Status.Phase = status
+	return true
 }
 
 func (r *ReconcilePostgreSQLDatabase) EnsurePostgreSQLDatabase(log logr.Logger, host, name, password string) error {
