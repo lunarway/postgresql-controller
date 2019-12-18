@@ -112,6 +112,7 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	c := &ReconcilePostgreSQLUser{
 		client:           mgr.GetClient(),
 		resourceResolver: kube.ResourceValue,
+		allDatabases:     kube.PostgreSQLDatabases,
 		setAWSPolicy:     iam.SetAWSPolicy,
 	}
 	parseFlags(c)
@@ -144,6 +145,7 @@ type ReconcilePostgreSQLUser struct {
 	// that reads objects from the cache and writes to the apiserver
 	client           client.Client
 	resourceResolver func(client client.Client, resource lunarwayv1alpha1.ResourceVar, namespace string) (string, error)
+	allDatabases     func(client client.Client, namespace string) ([]lunarwayv1alpha1.PostgreSQLDatabase, error)
 	setAWSPolicy     func(log logr.Logger, credentials *credentials.Credentials, policy iam.AWSPolicy, userID string) error
 
 	grantRoles         []string
@@ -331,6 +333,16 @@ func (r *ReconcilePostgreSQLUser) groupByHosts(hosts HostAccess, namespace strin
 			})
 			continue
 		}
+		if access.AllDatabases {
+			err := r.groupAllDatabasesByHost(hosts, host, namespace, access, privilege)
+			if err != nil {
+				errs = multierr.Append(errs, &AccessError{
+					Access: accesses[i],
+					Err:    err,
+				})
+			}
+			continue
+		}
 		database, err := r.resourceResolver(r.client, access.Database, namespace)
 		if err != nil {
 			errs = multierr.Append(errs, &AccessError{
@@ -359,6 +371,41 @@ func (r *ReconcilePostgreSQLUser) groupByHosts(hosts HostAccess, namespace strin
 		})
 	}
 	return errs
+}
+
+// groupAllDatabasesByHost groups read write accesses for all known databases in the hosts access map.
+func (r *ReconcilePostgreSQLUser) groupAllDatabasesByHost(hosts HostAccess, host string, namespace string, access lunarwayv1alpha1.AccessSpec, privilege postgres.Privilege) error {
+	databases, err := r.allDatabases(r.client, namespace)
+	if err != nil {
+		return fmt.Errorf("get all databases: %w", err)
+	}
+	var errs error
+	for _, databaseResource := range databases {
+		database := databaseResource.Spec.Name
+		schema := databaseResource.Spec.Name // FIXME: This will not work when schemas differ from database names
+		databaseHost, err := r.resourceResolver(r.client, databaseResource.Spec.Host, namespace)
+		if err != nil {
+			errs = multierr.Append(errs, fmt.Errorf("resolve database '%s' host name: %w", databaseResource.Spec.Name, err))
+			continue
+		}
+		if host != databaseHost {
+			continue
+		}
+		hostKey := fmt.Sprintf("%s/%s", host, database)
+		hosts[hostKey] = append(hosts[hostKey], ReadWriteAccess{
+			Host: host,
+			Database: postgres.DatabaseSchema{
+				Name:       database,
+				Schema:     schema,
+				Privileges: privilege,
+			},
+			Access: access,
+		})
+	}
+	if errs != nil {
+		return errs
+	}
+	return nil
 }
 
 type AccessError struct {

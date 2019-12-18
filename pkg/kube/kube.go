@@ -58,3 +58,7 @@ func ConfigMapValue(client client.Client, namespacedName types.NamespacedName, k
 	}
 	return string(data), nil
 }
+
+func PostgreSQLDatabases(client client.Client, namespace string) ([]lunarwayv1alpha1.PostgreSQLDatabase, error) {
+	return nil, nil
+}

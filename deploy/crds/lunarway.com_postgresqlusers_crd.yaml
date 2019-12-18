@@ -39,6 +39,8 @@ spec:
             read:
               items:
                 properties:
+                  allDatabases:
+                    type: boolean
                   database:
                     description: PasswordVar represents an
                     properties:
@@ -171,6 +173,7 @@ spec:
                     format: date-time
                     type: string
                 required:
+                - allDatabases
                 - database
                 - host
                 - reason
@@ -180,6 +183,8 @@ spec:
             write:
               items:
                 properties:
+                  allDatabases:
+                    type: boolean
                   database:
                     description: PasswordVar represents an
                     properties:
@@ -312,6 +317,7 @@ spec:
                     format: date-time
                     type: string
                 required:
+                - allDatabases
                 - database
                 - host
                 - reason
