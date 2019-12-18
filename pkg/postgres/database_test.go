@@ -183,18 +183,6 @@ func TestDatabase_existingResourcePrivilegesForReadWriteRoles(t *testing.T) {
 		t.Fatalf("Create service database failed: %v", err)
 	}
 
-	// reconnect to get newly granted rights
-	log.Info("TC: Reconnect as iam_creator")
-	db, err = postgres.Connect(log, postgres.ConnectionString{
-		Host:     postgresqlHost,
-		Database: "postgres",
-		User:     "iam_creator",
-		Password: "",
-	})
-	if err != nil {
-		t.Fatalf("connect to database failed: %v", err)
-	}
-
 	log.Info("TC: Run controller user creation")
 	err = postgres.Role(log, db, developerName, nil, []postgres.DatabaseSchema{{
 		Name:       name,
