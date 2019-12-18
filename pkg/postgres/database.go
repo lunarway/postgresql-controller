@@ -96,11 +96,11 @@ func Database(log logr.Logger, db *sql.DB, host string, credentials Credentials)
 
 	// set default read and write priviledges on the read and readwrite roles as
 	// to ensure the roles' priviledges apply to all objects created later on.
-	err = setDefaultReadPriviledges(serviceConnection, credentials.Name, readRole)
+	err = setReadPriviledges(serviceConnection, credentials.Name, readRole)
 	if err != nil {
 		return fmt.Errorf("set default read priviledges for role %s: %w", readRole, err)
 	}
-	err = setDefaultReadWritePriviledges(serviceConnection, credentials.Name, readWriteRole)
+	err = setReadWritePriviledges(serviceConnection, credentials.Name, readWriteRole)
 	if err != nil {
 		return fmt.Errorf("set default readwrite priviledges for role %s: %w", readWriteRole, err)
 	}
@@ -195,15 +195,16 @@ func idempotentExec(log logr.Logger, db *sql.DB, args idempotentExecReq) error {
 	return nil
 }
 
-func setDefaultReadPriviledges(db *sql.DB, schema string, role string) error {
+func setReadPriviledges(db *sql.DB, schema string, role string) error {
 	return setDefaultPriviledges(db, schema, role, "SELECT")
 }
 
-func setDefaultReadWritePriviledges(db *sql.DB, schema string, role string) error {
+func setReadWritePriviledges(db *sql.DB, schema string, role string) error {
 	return setDefaultPriviledges(db, schema, role, "SELECT, INSERT, UPDATE, DELETE")
 }
 
 func setDefaultPriviledges(db *sql.DB, schema, role, priviledges string) error {
+	// ensures access to future schemas and tables
 	err := execf(db, "ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT %s ON TABLES TO %s;", schema, priviledges, role)
 	if err != nil {
 		return fmt.Errorf("alter default privileges of schema: %w", err)
@@ -211,6 +212,15 @@ func setDefaultPriviledges(db *sql.DB, schema, role, priviledges string) error {
 	err = execf(db, "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT %s ON TABLES TO %s;", priviledges, role)
 	if err != nil {
 		return fmt.Errorf("alter default privileges of public schema: %w", err)
+	}
+	// ensures access to existing schemas and tables
+	err = execf(db, fmt.Sprintf("GRANT USAGE ON SCHEMA %s TO %s", schema, role))
+	if err != nil {
+		return fmt.Errorf("grant %s privileges on existing schema: %w", priviledges, err)
+	}
+	err = execf(db, fmt.Sprintf("GRANT %s ON ALL TABLES IN SCHEMA %s TO %s", priviledges, schema, role))
+	if err != nil {
+		return fmt.Errorf("grant %s privileges on existing tables: %w", priviledges, err)
 	}
 	return nil
 }

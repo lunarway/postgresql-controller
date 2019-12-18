@@ -102,11 +102,6 @@ func Role(log logr.Logger, db *sql.DB, name string, roles []string, databases []
 	}
 
 	for _, database := range databases {
-		log.Info(fmt.Sprintf("Granting USAGE of schema '%s'", database.Schema))
-		_, err = db.Exec(fmt.Sprintf("GRANT USAGE ON SCHEMA %s TO %s", database.Schema, name))
-		if err != nil {
-			return fmt.Errorf("grant usage on schema '%s': %w", database.Schema, err)
-		}
 		var schemaPrivileges string
 		if database.Privileges == PrivilegeRead {
 			schemaPrivileges = "read"
