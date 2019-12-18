@@ -175,7 +175,6 @@ spec:
                 required:
                 - host
                 - reason
-                - schema
                 type: object
               type: array
             write:
@@ -317,7 +316,6 @@ spec:
                 required:
                 - host
                 - reason
-                - schema
                 type: object
               type: array
           required:
