@@ -58,3 +58,12 @@ func ConfigMapValue(client client.Client, namespacedName types.NamespacedName, k
 	}
 	return string(data), nil
 }
+
+func PostgreSQLDatabases(c client.Client, namespace string) ([]lunarwayv1alpha1.PostgreSQLDatabase, error) {
+	var databases lunarwayv1alpha1.PostgreSQLDatabaseList
+	err := c.List(context.TODO(), &databases, client.InNamespace(namespace))
+	if err != nil {
+		return nil, fmt.Errorf("get databases in namespace: %w", err)
+	}
+	return databases.Items, nil
+}
