@@ -173,8 +173,6 @@ spec:
                     format: date-time
                     type: string
                 required:
-                - allDatabases
-                - database
                 - host
                 - reason
                 - schema
@@ -317,8 +315,6 @@ spec:
                     format: date-time
                     type: string
                 required:
-                - allDatabases
-                - database
                 - host
                 - reason
                 - schema
