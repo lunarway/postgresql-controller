@@ -200,6 +200,7 @@ func TestReconcilePostgreSQLUser_groupAccesses(t *testing.T) {
 	}
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
+			logger := test.NewLogger(t)
 			r := ReconcilePostgreSQLUser{
 				resourceResolver: func(client client.Client, r lunarwayv1alpha1.ResourceVar, ns string) (string, error) {
 					return r.Value, nil
@@ -210,7 +211,7 @@ func TestReconcilePostgreSQLUser_groupAccesses(t *testing.T) {
 				},
 			}
 
-			output, err := r.groupAccesses("namespace", tc.reads, tc.writes)
+			output, err := r.groupAccesses(logger, "namespace", tc.reads, tc.writes)
 
 			assert.NoError(t, err, "unexpected output error")
 			assert.Equal(t, tc.output, output, "output map not as expected")
@@ -218,7 +219,7 @@ func TestReconcilePostgreSQLUser_groupAccesses(t *testing.T) {
 	}
 }
 
-func TestReconcilePostgreSQLUser_groupAccesses_WithAllDatabases(t *testing.T) {
+func TestReconcilePostgreSQLUser_groupAccesses_withAllDatabases(t *testing.T) {
 	database := func(host, name string) lunarwayv1alpha1.PostgreSQLDatabase {
 		return lunarwayv1alpha1.PostgreSQLDatabase{
 			Spec: lunarwayv1alpha1.PostgreSQLDatabaseSpec{
@@ -363,16 +364,125 @@ func TestReconcilePostgreSQLUser_groupAccesses_WithAllDatabases(t *testing.T) {
 	}
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
+			logger := test.NewLogger(t)
 			r := ReconcilePostgreSQLUser{
 				resourceResolver: func(client client.Client, r lunarwayv1alpha1.ResourceVar, ns string) (string, error) {
 					return r.Value, nil
 				},
+				allDatabasesReadEnabled:  true,
+				allDatabasesWriteEnabled: true,
 				allDatabases: func(client client.Client, namespace string) ([]lunarwayv1alpha1.PostgreSQLDatabase, error) {
 					return tc.databases, nil
 				},
 			}
 
-			output, err := r.groupAccesses("namespace", tc.reads, tc.writes)
+			output, err := r.groupAccesses(logger, "namespace", tc.reads, tc.writes)
+
+			assert.NoError(t, err, "unexpected output error")
+			assert.Equal(t, tc.output, output, "output map not as expected")
+		})
+	}
+}
+
+func TestReconcilePostgreSQLUser_groupAccesses_allDatabasesFeatureFlags(t *testing.T) {
+	database := func(host, name string) lunarwayv1alpha1.PostgreSQLDatabase {
+		return lunarwayv1alpha1.PostgreSQLDatabase{
+			Spec: lunarwayv1alpha1.PostgreSQLDatabaseSpec{
+				Name: name,
+				Host: lunarwayv1alpha1.ResourceVar{
+					Value: host,
+				},
+			},
+		}
+	}
+	spec := func(host, reason string) lunarwayv1alpha1.AccessSpec {
+		return lunarwayv1alpha1.AccessSpec{
+			Host: lunarwayv1alpha1.ResourceVar{
+				Value: host,
+			},
+			AllDatabases: true,
+			Reason:       reason,
+		}
+	}
+	access := func(host, database string, privilige postgres.Privilege, reason string) ReadWriteAccess {
+		return ReadWriteAccess{
+			Host: host,
+			Database: postgres.DatabaseSchema{
+				Name:       database,
+				Schema:     database,
+				Privileges: privilige,
+			},
+			Access: spec(host, reason),
+		}
+	}
+	tt := []struct {
+		name                string
+		databases           []lunarwayv1alpha1.PostgreSQLDatabase
+		readFeatureEnabled  bool
+		writeFeatureEnabled bool
+		reads               []lunarwayv1alpha1.AccessSpec
+		writes              []lunarwayv1alpha1.AccessSpec
+		output              HostAccess
+	}{
+		{
+			name: "read allDatabases disabled",
+			databases: []lunarwayv1alpha1.PostgreSQLDatabase{
+				database("host1:5432", "database"),
+			},
+			readFeatureEnabled:  false,
+			writeFeatureEnabled: true,
+			reads: []lunarwayv1alpha1.AccessSpec{
+				spec("host1:5432", "I am a developer"),
+			},
+			writes: nil,
+			output: nil,
+		},
+		{
+			name: "write allDatabases disabled",
+			databases: []lunarwayv1alpha1.PostgreSQLDatabase{
+				database("host1:5432", "database"),
+			},
+			readFeatureEnabled:  true,
+			writeFeatureEnabled: false,
+			reads:               nil,
+			writes: []lunarwayv1alpha1.AccessSpec{
+				spec("host1:5432", "I am a developer"),
+			},
+			output: nil,
+		},
+		{
+			name: "write allDatabases disabled with read request",
+			databases: []lunarwayv1alpha1.PostgreSQLDatabase{
+				database("host1:5432", "database"),
+			},
+			readFeatureEnabled:  true,
+			writeFeatureEnabled: false,
+			reads: []lunarwayv1alpha1.AccessSpec{
+				spec("host1:5432", "I am a developer"),
+			},
+			writes: nil,
+			output: HostAccess{
+				"host1:5432/database": []ReadWriteAccess{
+					access("host1:5432", "database", postgres.PrivilegeRead, "I am a developer"),
+				},
+			},
+		},
+	}
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			logger := test.NewLogger(t)
+			r := ReconcilePostgreSQLUser{
+				resourceResolver: func(client client.Client, r lunarwayv1alpha1.ResourceVar, ns string) (string, error) {
+					return r.Value, nil
+				},
+				allDatabasesReadEnabled:  tc.readFeatureEnabled,
+				allDatabasesWriteEnabled: tc.writeFeatureEnabled,
+				allDatabases: func(client client.Client, namespace string) ([]lunarwayv1alpha1.PostgreSQLDatabase, error) {
+					return tc.databases, nil
+				},
+			}
+
+			output, err := r.groupAccesses(logger, "namespace", tc.reads, tc.writes)
 
 			assert.NoError(t, err, "unexpected output error")
 			assert.Equal(t, tc.output, output, "output map not as expected")
@@ -468,16 +578,19 @@ func TestReconcilePostgreSQLUser_groupAccesses_mixedSpecs(t *testing.T) {
 	}
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
+			logger := test.NewLogger(t)
 			r := ReconcilePostgreSQLUser{
 				resourceResolver: func(client client.Client, r lunarwayv1alpha1.ResourceVar, ns string) (string, error) {
 					return r.Value, nil
 				},
+				allDatabasesReadEnabled:  true,
+				allDatabasesWriteEnabled: true,
 				allDatabases: func(client client.Client, namespace string) ([]lunarwayv1alpha1.PostgreSQLDatabase, error) {
 					return tc.databases, nil
 				},
 			}
 
-			output, err := r.groupAccesses("namespace", tc.reads, tc.writes)
+			output, err := r.groupAccesses(logger, "namespace", tc.reads, tc.writes)
 
 			assert.NoError(t, err, "unexpected output error")
 			assert.Equal(t, tc.output, output, "output map not as expected")
@@ -518,12 +631,13 @@ func TestReconcilePostgreSQLUser_groupAccesses_errors(t *testing.T) {
 	}
 	expectedError := "access to host host1:5432: no value; access to host from secret 'secret' key 'key': no value; access to host from config map 'configmap' key 'key': no value"
 
+	logger := test.NewLogger(t)
 	r := ReconcilePostgreSQLUser{
 		resourceResolver: func(client client.Client, r lunarwayv1alpha1.ResourceVar, ns string) (string, error) {
 			return r.Value, fmt.Errorf("no value")
 		},
 	}
-	output, err := r.groupAccesses("namespace", reads, nil)
+	output, err := r.groupAccesses(logger, "namespace", reads, nil)
 
 	assert.EqualError(t, err, expectedError, "output error not as exepcted")
 	assert.Equal(t, HostAccess(nil), output, "output map not as expected")
