@@ -396,7 +396,9 @@ func (r *ReconcilePostgreSQLUser) groupAllDatabasesByHost(hosts HostAccess, host
 	var errs error
 	for _, databaseResource := range databases {
 		database := databaseResource.Spec.Name
-		schema := databaseResource.Spec.Name // FIXME: This will not work when schemas differ from database names
+		// this limits the `allDatabases` field to only work grant access in a
+		// schema named after the database
+		schema := databaseResource.Spec.Name
 		databaseHost, err := r.resourceResolver(r.client, databaseResource.Spec.Host, namespace)
 		if err != nil {
 			errs = multierr.Append(errs, fmt.Errorf("resolve database '%s' host name: %w", databaseResource.Spec.Name, err))
