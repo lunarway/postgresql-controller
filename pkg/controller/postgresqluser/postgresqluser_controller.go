@@ -337,40 +337,40 @@ func (r *ReconcilePostgreSQLUser) groupByHosts(reqLogger logr.Logger, hosts Host
 	for i, access := range accesses {
 		host, err := r.resourceResolver(r.client, access.Host, namespace)
 		if err != nil {
-			errs = multierr.Append(errs, &AccessError{
+			errs = multierr.Append(errs, fmt.Errorf("resolve host: %w", &AccessError{
 				Access: accesses[i],
 				Err:    err,
-			})
+			}))
 			continue
 		}
 		if access.AllDatabases {
 			if !allDatabasesEnabled {
-				reqLogger.WithValues("spec", access).Info("Skipping access spec: allDatabases feature not enabled")
+				reqLogger.WithValues("spec", access, "privilege", privilege).Info("Skipping access spec: allDatabases feature not enabled")
 				continue
 			}
 			err := r.groupAllDatabasesByHost(hosts, host, namespace, access, privilege)
 			if err != nil {
-				errs = multierr.Append(errs, &AccessError{
+				errs = multierr.Append(errs, fmt.Errorf("all databases: %w", &AccessError{
 					Access: accesses[i],
 					Err:    err,
-				})
+				}))
 			}
 			continue
 		}
 		database, err := r.resourceResolver(r.client, access.Database, namespace)
 		if err != nil {
-			errs = multierr.Append(errs, &AccessError{
+			errs = multierr.Append(errs, fmt.Errorf("resolve database: %w", &AccessError{
 				Access: accesses[i],
 				Err:    err,
-			})
+			}))
 			continue
 		}
 		schema, err := r.resourceResolver(r.client, access.Schema, namespace)
 		if err != nil {
-			errs = multierr.Append(errs, &AccessError{
+			errs = multierr.Append(errs, fmt.Errorf("resolve schema: %w", &AccessError{
 				Access: accesses[i],
 				Err:    err,
-			})
+			}))
 			continue
 		}
 		hostDatabase := fmt.Sprintf("%s/%s", host, database)
@@ -437,7 +437,7 @@ func (err *AccessError) Error() string {
 	if host == "" && err.Access.Host.ValueFrom.ConfigMapKeyRef != nil {
 		host = fmt.Sprintf("from config map '%s' key '%s'", err.Access.Host.ValueFrom.ConfigMapKeyRef.Name, err.Access.Host.ValueFrom.ConfigMapKeyRef.Key)
 	}
-	return fmt.Sprintf("access to host %s: %v", host, err.Err)
+	return fmt.Sprintf("access to host %s: %v: access data: %+v", host, err.Err, err.Access)
 }
 
 func (err *AccessError) Unwrap() error {
