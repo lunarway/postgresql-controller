@@ -1,5 +1,8 @@
 # PostgreSQL controller
 
+**BE AWARE** This is under active development and not ready for production in any way.
+More features described in this readme are goals more than implemented functionality of the controller at the moment.
+
 This is a Kubernetes controller for managing users and their access rights to a PostgreSQL database instance.
 Its purpose is to make a codified description of what users have access to what databases and for what reason along with providing an auditable log of changes.
 
