@@ -2,7 +2,6 @@ package kube
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 
@@ -39,11 +38,7 @@ func SecretValue(client client.Client, namespacedName types.NamespacedName, key 
 	if !ok {
 		return "", errors.New("unknown secret key")
 	}
-	password, err := base64.StdEncoding.DecodeString(string(secretData))
-	if err != nil {
-		return "", fmt.Errorf("base64 decode secret %s/%s key '%s': %w", namespacedName.Namespace, namespacedName.Name, key, err)
-	}
-	return string(password), nil
+	return string(secretData), nil
 }
 
 func ConfigMapValue(client client.Client, namespacedName types.NamespacedName, key string) (string, error) {
