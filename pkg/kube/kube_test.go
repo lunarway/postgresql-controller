@@ -52,11 +52,11 @@ func TestResourceValue(t *testing.T) {
 						Namespace: "default",
 					},
 					Data: map[string][]byte{
-						"key": []byte("dGVzdA=="),
+						"key": []byte("password"),
 					},
 				},
 			},
-			output: "test",
+			output: "password",
 			err:    nil,
 		},
 		{
@@ -128,21 +128,10 @@ func TestSecretValue(t *testing.T) {
 			namespace:  "test",
 			key:        "test",
 			data: map[string][]byte{
-				"test": []byte("dGVzdA=="),
+				"test": []byte("password"),
 			},
-			output: "test",
+			output: "password",
 			err:    nil,
-		},
-		{
-			name:       "illegal base64",
-			secretName: "test",
-			namespace:  "test",
-			key:        "test",
-			data: map[string][]byte{
-				"test": []byte("dGVZdA"),
-			},
-			output: "",
-			err:    errors.New("base64 decode secret test/test key 'test': illegal base64 data at input byte 4"),
 		},
 		{
 			name:       "unknown key",
@@ -150,7 +139,7 @@ func TestSecretValue(t *testing.T) {
 			namespace:  "test",
 			key:        "anotherkey",
 			data: map[string][]byte{
-				"test": []byte("dGVZdA"),
+				"test": []byte("password"),
 			},
 			output: "",
 			err:    errors.New("unknown secret key"),
