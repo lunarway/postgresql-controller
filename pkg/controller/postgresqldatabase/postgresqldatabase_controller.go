@@ -187,7 +187,6 @@ func (s *status) Persist(err error) {
 	if err != nil {
 		log.Error(err, "failed to set status of database", "status", s)
 	}
-	return
 }
 
 // update updates database reference based on its values and returns whether any
