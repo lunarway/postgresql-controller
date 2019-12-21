@@ -9,7 +9,7 @@ import (
 // configuration. Use this to indicate to users that they need to change some
 // configuration in order to proceed.
 //
-// Examples of such errors are unknown config map keys and wrong host names.
+// Examples of such errors are unknown config map names or empty keys.
 type Invalid struct {
 	Err error
 }

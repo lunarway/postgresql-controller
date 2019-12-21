@@ -190,20 +190,21 @@ func (s *status) Persist(err error) {
 	return
 }
 
+// update updates database reference based on its values and returns whether any
+// changes were written.
 func (s *status) update(err error) bool {
 	var errorMessage string
 	var phase lunarwayv1alpha1.PostgreSQLDatabasePhase
 	switch {
 	case err == nil:
 		phase = lunarwayv1alpha1.PostgreSQLDatabasePhaseRunning
-		errorMessage = ""
 	case err != nil:
+		errorMessage = err.Error()
 		if ctlerrors.IsInvalid(err) {
 			phase = lunarwayv1alpha1.PostgreSQLDatabasePhaseInvalid
 		} else {
 			phase = lunarwayv1alpha1.PostgreSQLDatabasePhaseFailed
 		}
-		errorMessage = err.Error()
 	}
 	phaseEqual := s.database.Status.Phase == phase
 	errorEqual := s.database.Status.Error == errorMessage
@@ -211,19 +212,20 @@ func (s *status) update(err error) bool {
 	if phaseEqual && errorEqual && hostEqual {
 		return false
 	}
-	s.database.Status.Error = errorMessage
 	s.database.Status.PhaseUpdated = s.now()
 	s.database.Status.Phase = phase
 	s.database.Status.Host = s.host
+	s.database.Status.Error = errorMessage
 	return true
 }
 
+// stopRequeueOnInvalid detects if err should stop requeing of a request.
 func stopRequeueOnInvalid(log logr.Logger, err error) error {
-	if ctlerrors.IsInvalid(err) {
-		log.Error(err, "Dropping resources from queue as it is invalid")
-		return nil
+	if !ctlerrors.IsInvalid(err) {
+		return err
 	}
-	return err
+	log.Error(err, "Dropping resources from queue as it is invalid")
+	return nil
 }
 
 func (r *ReconcilePostgreSQLDatabase) EnsurePostgreSQLDatabase(log logr.Logger, host, name, password string) error {
