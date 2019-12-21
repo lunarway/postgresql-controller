@@ -224,6 +224,9 @@ func stopRequeueOnInvalid(log logr.Logger, err error) error {
 	if !ctlerrors.IsInvalid(err) {
 		return err
 	}
+	if ctlerrors.IsTemporary(err) {
+		return err
+	}
 	log.Error(err, "Dropping resources from queue as it is invalid")
 	return nil
 }

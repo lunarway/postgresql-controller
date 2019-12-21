@@ -15,8 +15,8 @@ import (
 
 var (
 	errNoValue    = ctrerrors.NewInvalid(errors.New("no value"))
-	errNotFound   = ctrerrors.NewInvalid(errors.New("not found"))
-	errUnknownKey = ctrerrors.NewInvalid(errors.New("unknown key"))
+	errNotFound   = ctrerrors.NewTemporary(ctrerrors.NewInvalid(errors.New("not found")))
+	errUnknownKey = ctrerrors.NewTemporary(ctrerrors.NewInvalid(errors.New("unknown key")))
 )
 
 // ResourceValue returns the value of a ResourceVar in a specific namespace.
