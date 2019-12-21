@@ -8,9 +8,10 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/spf13/pflag"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/pkg/apis/lunarway/v1alpha1"
+	ctlerrors "go.lunarway.com/postgresql-controller/pkg/errors"
 	"go.lunarway.com/postgresql-controller/pkg/kube"
 	"go.lunarway.com/postgresql-controller/pkg/postgres"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -120,76 +121,117 @@ type ReconcilePostgreSQLDatabase struct {
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcilePostgreSQLDatabase) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling PostgreSQLDatabase")
+	status, err := r.reconcile(reqLogger, request)
+	status.Persist(err)
+	return reconcile.Result{}, stopRequeueOnInvalid(reqLogger, err)
+}
 
+func (r *ReconcilePostgreSQLDatabase) reconcile(reqLogger logr.Logger, request reconcile.Request) (status, error) {
 	// Fetch the PostgreSQLDatabase instance
 	database := &lunarwayv1alpha1.PostgreSQLDatabase{}
 	err := r.client.Get(context.TODO(), request.NamespacedName, database)
 	if err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
-			return reconcile.Result{}, nil
+			return status{}, nil
 		}
 		// Error reading the object - requeue the request.
-		return reconcile.Result{}, err
+		return status{}, err
 	}
 	reqLogger = reqLogger.WithValues("database", database.Spec.Name)
 	reqLogger.Info("Reconciling PostgreSQLDatabase")
 
+	status := status{
+		log:      reqLogger,
+		client:   r.client,
+		now:      metav1.Now,
+		database: database,
+	}
 	host, err := kube.ResourceValue(r.client, database.Spec.Host, request.Namespace)
 	if err != nil {
-		r.setStatus(reqLogger, database, lunarwayv1alpha1.PostgreSQLDatabasePhaseInvalid, err)
-		return reconcile.Result{}, fmt.Errorf("resolve host reference: %w", err)
+		return status, fmt.Errorf("resolve host reference: %w", err)
 	}
+	status.host = host
 	password, err := kube.ResourceValue(r.client, database.Spec.Password, request.Namespace)
 	if err != nil {
-		r.setStatus(reqLogger, database, lunarwayv1alpha1.PostgreSQLDatabasePhaseInvalid, err)
-		return reconcile.Result{}, fmt.Errorf("resolve password reference: %w", err)
+		return status, fmt.Errorf("resolve password reference: %w", err)
 	}
 
 	// Ensure the database is in sync with the object
 	err = r.EnsurePostgreSQLDatabase(reqLogger, host, database.Spec.Name, password)
 	if err != nil {
-		r.setStatus(reqLogger, database, lunarwayv1alpha1.PostgreSQLDatabasePhaseFailed, err)
-		return reconcile.Result{}, err
+		return status, fmt.Errorf("ensure database: %w", err)
 	}
-	r.setStatus(reqLogger, database, lunarwayv1alpha1.PostgreSQLDatabasePhaseRunning, nil)
-	return reconcile.Result{}, nil
+	return status, nil
 }
 
-func (r *ReconcilePostgreSQLDatabase) setStatus(log logr.Logger, database *lunarwayv1alpha1.PostgreSQLDatabase, status lunarwayv1alpha1.PostgreSQLDatabasePhase, err error) {
-	changes := updateStatus(metav1.Now, database, status, err)
-	if !changes {
+type status struct {
+	log    logr.Logger
+	client client.Client
+	now    func() metav1.Time
+
+	database *lunarwayv1alpha1.PostgreSQLDatabase
+	host     string
+}
+
+// Persist writes the status to a PostgreSQLDatabase instance and persists it on
+// client. Any errors are logged.
+func (s *status) Persist(err error) {
+	ok := s.update(err)
+	if !ok {
 		return
 	}
-	err = r.client.Status().Update(context.TODO(), database)
+	err = s.client.Status().Update(context.TODO(), s.database)
 	if err != nil {
-		log.Error(err, fmt.Sprintf("failed to set status of database to '%s'", status))
+		log.Error(err, "failed to set status of database", "status", s)
 	}
+	return
 }
 
-// updateStatus updates the database status struct if it has changed and returns
-// true. Otherwise nothing is changed and false is returned.
-func updateStatus(now func() metav1.Time, database *lunarwayv1alpha1.PostgreSQLDatabase, status lunarwayv1alpha1.PostgreSQLDatabasePhase, err error) bool {
-	if database.Status.Phase == status && ((err != nil && err.Error() == database.Status.Error) || err == nil && database.Status.Error == "") {
+func (s *status) update(err error) bool {
+	var errorMessage string
+	var phase lunarwayv1alpha1.PostgreSQLDatabasePhase
+	switch {
+	case err == nil:
+		phase = lunarwayv1alpha1.PostgreSQLDatabasePhaseRunning
+		errorMessage = ""
+	case err != nil:
+		if ctlerrors.IsInvalid(err) {
+			phase = lunarwayv1alpha1.PostgreSQLDatabasePhaseInvalid
+		} else {
+			phase = lunarwayv1alpha1.PostgreSQLDatabasePhaseFailed
+		}
+		errorMessage = err.Error()
+	}
+	phaseEqual := s.database.Status.Phase == phase
+	errorEqual := s.database.Status.Error == errorMessage
+	hostEqual := s.database.Status.Host == s.host
+	if phaseEqual && errorEqual && hostEqual {
 		return false
 	}
-	if err != nil {
-		database.Status.Error = err.Error()
-	} else {
-		database.Status.Error = ""
-	}
-	database.Status.PhaseUpdated = now()
-	database.Status.Phase = status
+	s.database.Status.Error = errorMessage
+	s.database.Status.PhaseUpdated = s.now()
+	s.database.Status.Phase = phase
+	s.database.Status.Host = s.host
 	return true
+}
+
+func stopRequeueOnInvalid(log logr.Logger, err error) error {
+	if ctlerrors.IsInvalid(err) {
+		log.Error(err, "Dropping resources from queue as it is invalid")
+		return nil
+	}
+	return err
 }
 
 func (r *ReconcilePostgreSQLDatabase) EnsurePostgreSQLDatabase(log logr.Logger, host, name, password string) error {
 	credentials, ok := r.hostCredentials[host]
 	if !ok {
-		return fmt.Errorf("unknown credentials for host %s", host)
+		return &ctlerrors.Invalid{
+			Err: fmt.Errorf("unknown credentials for host"),
+		}
 	}
 	connectionString := postgres.ConnectionString{
 		Host:     host,
