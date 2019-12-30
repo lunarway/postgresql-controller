@@ -35,6 +35,16 @@ func TestResourceValue(t *testing.T) {
 			err:       nil,
 		},
 		{
+			name: "empty raw value resource",
+			resource: lunarwayv1alpha1.ResourceVar{
+				Value: "",
+			},
+			namespace: "default",
+			objs:      nil,
+			output:    "",
+			err:       errors.New("no value"),
+		},
+		{
 			name: "secret value resource",
 			resource: lunarwayv1alpha1.ResourceVar{
 				ValueFrom: &lunarwayv1alpha1.ResourceVarSource{
@@ -142,7 +152,7 @@ func TestSecretValue(t *testing.T) {
 				"test": []byte("password"),
 			},
 			output: "",
-			err:    errors.New("unknown secret key"),
+			err:    errors.New("unknown key"),
 		},
 	}
 	for _, tc := range tt {
@@ -209,7 +219,7 @@ func TestConfigMapValue(t *testing.T) {
 				"test": "test",
 			},
 			output: "",
-			err:    errors.New("unknown config map key"),
+			err:    errors.New("unknown key"),
 		},
 	}
 	for _, tc := range tt {

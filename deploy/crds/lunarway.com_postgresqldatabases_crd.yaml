@@ -16,6 +16,10 @@ spec:
     description: Timestamp of last status update
     name: Updated
     type: date
+  - JSONPath: .status.host
+    description: Database host
+    name: Host
+    type: string
   group: lunarway.com
   names:
     kind: PostgreSQLDatabase
@@ -138,6 +142,8 @@ spec:
           description: PostgreSQLDatabaseStatus defines the observed state of PostgreSQLDatabase
           properties:
             error:
+              type: string
+            host:
               type: string
             phase:
               description: PostgreSQLDatabasePhase represents the current phase of

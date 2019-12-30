@@ -33,6 +33,7 @@ const (
 type PostgreSQLDatabaseStatus struct {
 	PhaseUpdated metav1.Time             `json:"phaseUpdated"`
 	Phase        PostgreSQLDatabasePhase `json:"phase"`
+	Host         string                  `json:"host,omitempty"`
 	Error        string                  `json:"error,omitempty"`
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
@@ -47,6 +48,7 @@ type PostgreSQLDatabaseStatus struct {
 // +kubebuilder:printcolumn:name="Database",type="string",JSONPath=".spec.name",description="Database name"
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.phase",description="Database status"
 // +kubebuilder:printcolumn:name="Updated",type="date",JSONPath=".status.phaseUpdated",description="Timestamp of last status update"
+// +kubebuilder:printcolumn:name="Host",type="string",JSONPath=".status.host",description="Database host"
 type PostgreSQLDatabase struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
