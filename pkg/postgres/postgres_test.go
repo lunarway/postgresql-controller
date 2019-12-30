@@ -104,6 +104,7 @@ func TestRole_staticRoles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
 	}
+	defer db.Close()
 	var (
 		epoch            = time.Now().UnixNano()
 		RoleRDSIAM       = fmt.Sprintf("rds_iam_%d", epoch)

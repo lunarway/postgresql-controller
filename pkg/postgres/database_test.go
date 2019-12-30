@@ -86,6 +86,7 @@ func TestDatabase_sunshine(t *testing.T) {
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
 	}
+	defer db.Close()
 
 	name := fmt.Sprintf("test_%d", time.Now().UnixNano())
 	password := "test"
@@ -141,6 +142,7 @@ func TestDatabase_existingResourcePrivilegesForReadWriteRoles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
 	}
+	defer db.Close()
 
 	name := fmt.Sprintf("test_%d", time.Now().UnixNano())
 	developerName := fmt.Sprintf("%s_developer", name)
@@ -167,6 +169,7 @@ func TestDatabase_existingResourcePrivilegesForReadWriteRoles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Connect as existing service user failed: %v", err)
 	}
+	defer serviceDB.Close()
 	log.Info("TC: Create schema, table and insert a row")
 	dbExec(t, serviceDB, fmt.Sprintf(`
 	CREATE SCHEMA %[1]s;
@@ -203,6 +206,7 @@ func TestDatabase_existingResourcePrivilegesForReadWriteRoles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Connect as developer user failed: %v", err)
 	}
+	defer developerDB.Close()
 	// This should not result in an error as the controller should have made sure
 	// that the schema and table have been made available to the read and
 	// readwrite roles
@@ -222,6 +226,7 @@ func TestDatabase_idempotency(t *testing.T) {
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
 	}
+	defer db.Close()
 
 	name := fmt.Sprintf("test_%d", time.Now().UnixNano())
 	password := "test"
