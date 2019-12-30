@@ -44,7 +44,7 @@ type PostgreSQLDatabaseStatus struct {
 // PostgreSQLDatabase is the Schema for the postgresqldatabases API
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:path=postgresqldatabases,scope=Namespaced
+// +kubebuilder:resource:path=postgresqldatabases,scope=Namespaced,shortName=pgdb
 // +kubebuilder:printcolumn:name="Database",type="string",JSONPath=".spec.name",description="Database name"
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.phase",description="Database status"
 // +kubebuilder:printcolumn:name="Updated",type="date",JSONPath=".status.phaseUpdated",description="Timestamp of last status update"
