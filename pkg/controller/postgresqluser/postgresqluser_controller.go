@@ -318,10 +318,10 @@ func (r *ReconcilePostgreSQLUser) connectToHosts(accesses HostAccess) (map[strin
 
 func closeConnectionToHosts(hosts map[string]*sql.DB) error {
 	var errs error
-	for _, conn := range hosts {
+	for name, conn := range hosts {
 		err := conn.Close()
 		if err != nil {
-			errs = multierr.Append(errs, err)
+			errs = multierr.Append(errs, fmt.Errorf("host %s: %w", name, err))
 		}
 	}
 	return errs
