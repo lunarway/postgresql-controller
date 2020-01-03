@@ -154,8 +154,9 @@ func main() {
 
 	// used to signal Go routines to stop execution
 	shutdown := make(chan struct{})
-	// used to know when all started Go routines are stopped
+	// used to know when any of the started Go routines are stopped
 	componentErr := make(chan error)
+	// used to wait for all Go routines to stop
 	var shutdownWg sync.WaitGroup
 
 	// listen for shutdown signals and signal termination to components
