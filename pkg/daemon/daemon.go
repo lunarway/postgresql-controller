@@ -1,3 +1,8 @@
+// Package daemon provides a Daemon struct that runs a controller loop at a
+// specified interval.
+//
+// It handles loop life cycle events and only requires an interval duration and
+// a function that will be called within each interval.
 package daemon
 
 import (
@@ -7,6 +12,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+// Configuration is a configuration struct specifying what and how a Daemon
+// instance must run.
+//
+// Default values are set for all fields so they can be omitted. Be sure to set
+// the Sync function though as without it nothing will every be triggered by the
+// daemon.
 type Configuration struct {
 	Logger       logr.Logger
 	SyncInterval time.Duration
@@ -27,6 +38,9 @@ func (c *Configuration) setDefaults() {
 	}
 }
 
+// Daemon provides a scheduled invokation of the configured Sync function. Start
+// the daemon by call the blocking method Loop and stop it again by closing the
+// provided stop channel.
 type Daemon struct {
 	config Configuration
 	// syncSoon is a limited buffer of sync requests. Use method askForSync to
@@ -34,6 +48,7 @@ type Daemon struct {
 	syncSoon chan struct{}
 }
 
+// New allocates and returns an unstarted Daemon struct.
 func New(c Configuration) *Daemon {
 	c.setDefaults()
 	d := Daemon{
