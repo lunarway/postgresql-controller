@@ -1,11 +1,20 @@
 # PostgreSQL controller
 
+**BE AWARE** This is under active development and not ready for production in any way.
+More features described in this readme are goals more than implemented functionality of the controller at the moment.
+
 This is a Kubernetes controller for managing users and their access rights to a PostgreSQL database instance.
 Its purpose is to make a codified description of what users have access to what databases and for what reason along with providing an auditable log of changes.
 
 # Design
 
 The controller will handle user and database management on PostgreSQL instances with two Kubernetes [Custom Resource Definitions](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/).
+
+The controller needs access to a role in PostreSQL privileged to create databases and roles.
+
+```sql
+CREATE USER iam_creator CREATEDB CREATEROLE PASSWORD 'strongpassword';
+```
 
 ## Databases
 
@@ -56,6 +65,12 @@ spec:
 
 The controller will ensure that a database exists on the host based on its configuration.  
 If a resources is deleted we _might_ delete the database in the future, preferrable behind a flag to avoid loosing data.
+
+There are created three roles for all databases.
+One with login priviledges according to the custom resource name and password.
+The other two are `read` and `readwrite` roles used when granting users access to the database.
+They are named as the database with a `_read` and `_readwrite` suffix and have the priviledge to `SELECT` and `SELECT, INSERT, UPDATE, DELETE` respectively.
+Default priviledges no the database ensures that each role have access to objects created by the service role.
 
 ## Users
 

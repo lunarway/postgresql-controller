@@ -79,7 +79,7 @@ func TestDatabase_sunshine(t *testing.T) {
 	log := test.SetLogger(t)
 	db, err := postgres.Connect(log, postgres.ConnectionString{
 		Host:     postgresqlHost,
-		Database: "",
+		Database: "postgres",
 		User:     "iam_creator",
 		Password: "",
 	})
@@ -122,12 +122,100 @@ func TestDatabase_sunshine(t *testing.T) {
 	assert.Equal(t, []string{name}, owners, "owner not as expected")
 }
 
+// TestDatabase_existingResourcePrivilegesForReadWriteRoles tests that we can
+// gain access to resources created prior to the read and readwrite roles by a
+// service role.
+//
+// This validates that users can adopt use of this controller with existing
+// databases and resources without any manual intervention.
+func TestDatabase_existingResourcePrivilegesForReadWriteRoles(t *testing.T) {
+	postgresqlHost := test.Integration(t)
+	log := test.SetLogger(t)
+	log.Info("TC: Connection as iam_creator")
+	db, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		Database: "postgres",
+		User:     "iam_creator",
+		Password: "",
+	})
+	if err != nil {
+		t.Fatalf("connect to database failed: %v", err)
+	}
+
+	name := fmt.Sprintf("test_%d", time.Now().UnixNano())
+	developerName := fmt.Sprintf("%s_developer", name)
+	password := "test"
+
+	// create a database and resources with plain SQL is if it already exists when
+	// the controller tries to reconcile.
+	log.Info("TC: Creating user and database and changes owner")
+	dbExec(t, db, fmt.Sprintf(`CREATE USER %s WITH PASSWORD '%s' NOCREATEROLE VALID UNTIL 'infinity'`, name, password))
+	dbExec(t, db, fmt.Sprintf(`CREATE DATABASE %s`, name))
+	dbExec(t, db, fmt.Sprintf(`
+	GRANT %[1]s TO CURRENT_USER;
+	ALTER DATABASE %[1]s OWNER TO %[1]s;
+	REVOKE %[1]s FROM CURRENT_USER;
+	`, name))
+
+	log.Info("TC: Connect as service user")
+	serviceDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		Database: name,
+		User:     name,
+		Password: password,
+	})
+	if err != nil {
+		t.Fatalf("Connect as existing service user failed: %v", err)
+	}
+	log.Info("TC: Create schema, table and insert a row")
+	dbExec(t, serviceDB, fmt.Sprintf(`
+	CREATE SCHEMA %[1]s;
+	CREATE TABLE %[1]s.%[1]s (title varchar(40));
+	INSERT INTO %[1]s.%[1]s VALUES('a product');
+	`, name))
+
+	log.Info("TC: Run controller database creation")
+	err = postgres.Database(log, db, postgresqlHost, postgres.Credentials{
+		Name:     name,
+		Password: password,
+	})
+	if err != nil {
+		t.Fatalf("Create service database failed: %v", err)
+	}
+
+	log.Info("TC: Run controller user creation")
+	err = postgres.Role(log, db, developerName, nil, []postgres.DatabaseSchema{{
+		Name:       name,
+		Schema:     name,
+		Privileges: postgres.PrivilegeRead,
+	}})
+	if err != nil {
+		t.Fatalf("Create new developer role failed: %v", err)
+	}
+
+	log.Info("TC: Connect as developer")
+	developerDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		Database: name,
+		User:     developerName,
+		Password: "",
+	})
+	if err != nil {
+		t.Fatalf("Connect as developer user failed: %v", err)
+	}
+	// This should not result in an error as the controller should have made sure
+	// that the schema and table have been made available to the read and
+	// readwrite roles
+	log.Info("TC: Select from table")
+	dbExec(t, developerDB, fmt.Sprintf(`SELECT * FROM %[1]s.%[1]s`, name))
+}
+
 func TestDatabase_idempotency(t *testing.T) {
 	postgresqlHost := test.Integration(t)
 	log := test.SetLogger(t)
 	db, err := postgres.Connect(log, postgres.ConnectionString{
 		Host:     postgresqlHost,
-		Database: "",
+		Database: "postgres",
 		User:     "iam_creator",
 		Password: "",
 	})

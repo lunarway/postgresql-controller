@@ -3,11 +3,30 @@ kind: CustomResourceDefinition
 metadata:
   name: postgresqldatabases.lunarway.com
 spec:
+  additionalPrinterColumns:
+  - JSONPath: .spec.name
+    description: Database name
+    name: Database
+    type: string
+  - JSONPath: .status.phase
+    description: Database status
+    name: Status
+    type: string
+  - JSONPath: .status.phaseUpdated
+    description: Timestamp of last status update
+    name: Updated
+    type: date
+  - JSONPath: .status.host
+    description: Database host
+    name: Host
+    type: string
   group: lunarway.com
   names:
     kind: PostgreSQLDatabase
     listKind: PostgreSQLDatabaseList
     plural: postgresqldatabases
+    shortNames:
+    - pgdb
     singular: postgresqldatabase
   scope: Namespaced
   subresources:
@@ -124,11 +143,20 @@ spec:
         status:
           description: PostgreSQLDatabaseStatus defines the observed state of PostgreSQLDatabase
           properties:
-            created:
+            error:
+              type: string
+            host:
+              type: string
+            phase:
+              description: PostgreSQLDatabasePhase represents the current phase of
+                a PostgreSQL database.
+              type: string
+            phaseUpdated:
               format: date-time
               type: string
           required:
-          - created
+          - phase
+          - phaseUpdated
           type: object
       type: object
   version: v1alpha1

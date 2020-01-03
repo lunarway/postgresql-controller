@@ -21,10 +21,14 @@ type PostgreSQLUserSpec struct {
 }
 
 type AccessSpec struct {
-	Host     ResourceVar `json:"host"`
+	Host ResourceVar `json:"host"`
+	// +optional
+	AllDatabases bool `json:"allDatabases"`
+	// +optional
 	Database ResourceVar `json:"database"`
-	Schema   ResourceVar `json:"schema"`
-	Reason   string      `json:"reason"`
+	// +optional
+	Schema ResourceVar `json:"schema"`
+	Reason string      `json:"reason"`
 	// +optional
 	Start metav1.Time `json:"start"`
 	// +optional
@@ -44,7 +48,7 @@ type PostgreSQLUserStatus struct {
 // PostgreSQLUser is the Schema for the postgresqlusers API
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:path=postgresqlusers,scope=Namespaced
+// +kubebuilder:resource:path=postgresqlusers,scope=Namespaced,shortName=pguser
 type PostgreSQLUser struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

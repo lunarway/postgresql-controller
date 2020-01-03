@@ -67,6 +67,17 @@ type DatabaseSchema struct {
 	Privileges Privilege
 }
 
+func (p Privilege) String() string {
+	switch p {
+	case PrivilegeRead:
+		return "read"
+	case PrivilegeWrite:
+		return "write"
+	default:
+		return "unknown"
+	}
+}
+
 func Role(log logr.Logger, db *sql.DB, name string, roles []string, databases []DatabaseSchema) error {
 	log.Info(fmt.Sprintf("Creating role %s", name))
 	query := fmt.Sprintf("CREATE ROLE %s WITH LOGIN", name)
@@ -91,23 +102,18 @@ func Role(log logr.Logger, db *sql.DB, name string, roles []string, databases []
 	}
 
 	for _, database := range databases {
-		log.Info(fmt.Sprintf("Granting USAGE of schema '%s'", database.Schema))
-		_, err = db.Exec(fmt.Sprintf("GRANT USAGE ON SCHEMA %s TO %s", database.Schema, name))
-		if err != nil {
-			return fmt.Errorf("grant usage on schema '%s': %w", database.Schema, err)
-		}
 		var schemaPrivileges string
 		if database.Privileges == PrivilegeRead {
-			schemaPrivileges = "SELECT"
+			schemaPrivileges = "read"
 		}
 		if database.Privileges == PrivilegeWrite {
-			schemaPrivileges = "SELECT, INSERT, UPDATE, DELETE"
+			schemaPrivileges = "readwrite"
 		}
 		if len(schemaPrivileges) == 0 {
 			continue
 		}
-		log.Info(fmt.Sprintf("Granting %s to tables in schema '%s'", schemaPrivileges, database.Schema))
-		_, err = db.Exec(fmt.Sprintf("GRANT %s ON ALL TABLES IN SCHEMA %s TO %s", schemaPrivileges, database.Schema, name))
+		log.Info(fmt.Sprintf("Granting %s to %s", schemaPrivileges, name))
+		_, err = db.Exec(fmt.Sprintf("GRANT %s_%s TO %s", database.Name, schemaPrivileges, name))
 		if err != nil {
 			return fmt.Errorf("grant access privileges '%s' on schema '%s': %w", schemaPrivileges, database.Schema, err)
 		}

@@ -17,10 +17,24 @@ type PostgreSQLDatabaseSpec struct {
 	Host ResourceVar `json:"host"`
 }
 
+// PostgreSQLDatabasePhase represents the current phase of a PostgreSQL
+// database.
+// +k8s:openapi-gen=true
+type PostgreSQLDatabasePhase string
+
+const (
+	PostgreSQLDatabasePhaseFailed  PostgreSQLDatabasePhase = "Failed"
+	PostgreSQLDatabasePhaseInvalid PostgreSQLDatabasePhase = "Invalid"
+	PostgreSQLDatabasePhaseRunning PostgreSQLDatabasePhase = "Running"
+)
+
 // PostgreSQLDatabaseStatus defines the observed state of PostgreSQLDatabase
 // +k8s:openapi-gen=true
 type PostgreSQLDatabaseStatus struct {
-	Created metav1.Time `json:"created"`
+	PhaseUpdated metav1.Time             `json:"phaseUpdated"`
+	Phase        PostgreSQLDatabasePhase `json:"phase"`
+	Host         string                  `json:"host,omitempty"`
+	Error        string                  `json:"error,omitempty"`
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
 }
@@ -30,7 +44,11 @@ type PostgreSQLDatabaseStatus struct {
 // PostgreSQLDatabase is the Schema for the postgresqldatabases API
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:path=postgresqldatabases,scope=Namespaced
+// +kubebuilder:resource:path=postgresqldatabases,scope=Namespaced,shortName=pgdb
+// +kubebuilder:printcolumn:name="Database",type="string",JSONPath=".spec.name",description="Database name"
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.phase",description="Database status"
+// +kubebuilder:printcolumn:name="Updated",type="date",JSONPath=".status.phaseUpdated",description="Timestamp of last status update"
+// +kubebuilder:printcolumn:name="Host",type="string",JSONPath=".status.host",description="Database host"
 type PostgreSQLDatabase struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

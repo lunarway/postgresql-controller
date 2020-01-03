@@ -40,6 +40,8 @@ func init() {
 	FlagSet.String("aws-access-key-id", "", "AWS access key id to use for credentials")
 	FlagSet.String("aws-secret-access-key", "", "AWS secret access key to use for credentials")
 	FlagSet.StringToString("host-credentials-user", nil, "Host and credential pairs in the form hostname=user:password. Use comma separated pairs for multiple hosts")
+	FlagSet.Bool("all-databases-enabled-read", false, "Enable usage of allDatabases field in read access requests")
+	FlagSet.Bool("all-databases-enabled-write", false, "Enable usage of allDatabases field in write access requests")
 }
 
 func parseFlags(c *ReconcilePostgreSQLUser) {
@@ -68,6 +70,10 @@ func parseFlags(c *ReconcilePostgreSQLUser) {
 	for host := range c.hostCredentials {
 		hostNames = append(hostNames, host)
 	}
+	c.allDatabasesReadEnabled, err = FlagSet.GetBool("all-databases-enabled-read")
+	parseError(err, "all-databases-enabled-read")
+	c.allDatabasesWriteEnabled, err = FlagSet.GetBool("all-databases-enabled-write")
+	parseError(err, "all-databases-enabled-write")
 
 	log.Info("Controller configured",
 		"hosts", hostNames,
@@ -76,6 +82,8 @@ func parseFlags(c *ReconcilePostgreSQLUser) {
 		"awsPolicyName", c.awsPolicyName,
 		"awsRegion", c.awsRegion,
 		"awsAccountID", c.awsAccountID,
+		"allDatabasesReadEnabled", c.allDatabasesReadEnabled,
+		"allDatabasesWriteEnabled", c.allDatabasesWriteEnabled,
 	)
 }
 
@@ -112,6 +120,7 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	c := &ReconcilePostgreSQLUser{
 		client:           mgr.GetClient(),
 		resourceResolver: kube.ResourceValue,
+		allDatabases:     kube.PostgreSQLDatabases,
 		setAWSPolicy:     iam.SetAWSPolicy,
 	}
 	parseFlags(c)
@@ -144,16 +153,19 @@ type ReconcilePostgreSQLUser struct {
 	// that reads objects from the cache and writes to the apiserver
 	client           client.Client
 	resourceResolver func(client client.Client, resource lunarwayv1alpha1.ResourceVar, namespace string) (string, error)
+	allDatabases     func(client client.Client, namespace string) ([]lunarwayv1alpha1.PostgreSQLDatabase, error)
 	setAWSPolicy     func(log logr.Logger, credentials *credentials.Credentials, policy iam.AWSPolicy, userID string) error
 
-	grantRoles         []string
-	rolePrefix         string
-	awsPolicyName      string
-	awsRegion          string
-	awsAccountID       string
-	awsProfile         string
-	awsAccessKeyID     string
-	awsSecretAccessKey string
+	grantRoles               []string
+	rolePrefix               string
+	awsPolicyName            string
+	awsRegion                string
+	awsAccountID             string
+	awsProfile               string
+	awsAccessKeyID           string
+	awsSecretAccessKey       string
+	allDatabasesReadEnabled  bool
+	allDatabasesWriteEnabled bool
 
 	// contains a map of credentials for hosts
 	hostCredentials map[string]postgres.Credentials
@@ -188,7 +200,7 @@ func (r *ReconcilePostgreSQLUser) Reconcile(request reconcile.Request) (reconcil
 	reqLogger = reqLogger.WithValues("user", user.Spec.Name)
 
 	reqLogger.Info("Reconciling PostgreSQLUser", "user", user.Spec.Name)
-	accesses, err := r.groupAccesses(request.Namespace, user.Spec.Read, user.Spec.Write)
+	accesses, err := r.groupAccesses(reqLogger, request.Namespace, user.Spec.Read, user.Spec.Write)
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("group accesses: %w", err)
 	}
@@ -298,18 +310,18 @@ func (r *ReconcilePostgreSQLUser) connectToHosts(accesses HostAccess) (map[strin
 	return hosts, errs
 }
 
-func (r *ReconcilePostgreSQLUser) groupAccesses(namespace string, reads []lunarwayv1alpha1.AccessSpec, writes []lunarwayv1alpha1.AccessSpec) (HostAccess, error) {
+func (r *ReconcilePostgreSQLUser) groupAccesses(reqLogger logr.Logger, namespace string, reads []lunarwayv1alpha1.AccessSpec, writes []lunarwayv1alpha1.AccessSpec) (HostAccess, error) {
 	if len(reads) == 0 {
 		return nil, nil
 	}
 	hosts := make(HostAccess)
 	var errs error
 
-	err := r.groupByHosts(hosts, namespace, reads, postgres.PrivilegeRead)
+	err := r.groupByHosts(reqLogger, hosts, namespace, reads, postgres.PrivilegeRead, r.allDatabasesReadEnabled)
 	if err != nil {
 		errs = multierr.Append(errs, err)
 	}
-	err = r.groupByHosts(hosts, namespace, writes, postgres.PrivilegeWrite)
+	err = r.groupByHosts(reqLogger, hosts, namespace, writes, postgres.PrivilegeWrite, r.allDatabasesWriteEnabled)
 	if err != nil {
 		errs = multierr.Append(errs, err)
 	}
@@ -320,31 +332,45 @@ func (r *ReconcilePostgreSQLUser) groupAccesses(namespace string, reads []lunarw
 	return hosts, errs
 }
 
-func (r *ReconcilePostgreSQLUser) groupByHosts(hosts HostAccess, namespace string, accesses []lunarwayv1alpha1.AccessSpec, privilege postgres.Privilege) error {
+func (r *ReconcilePostgreSQLUser) groupByHosts(reqLogger logr.Logger, hosts HostAccess, namespace string, accesses []lunarwayv1alpha1.AccessSpec, privilege postgres.Privilege, allDatabasesEnabled bool) error {
 	var errs error
 	for i, access := range accesses {
 		host, err := r.resourceResolver(r.client, access.Host, namespace)
 		if err != nil {
-			errs = multierr.Append(errs, &AccessError{
+			errs = multierr.Append(errs, fmt.Errorf("resolve host: %w", &AccessError{
 				Access: accesses[i],
 				Err:    err,
-			})
+			}))
+			continue
+		}
+		if access.AllDatabases {
+			if !allDatabasesEnabled {
+				reqLogger.WithValues("spec", access, "privilege", privilege).Info("Skipping access spec: allDatabases feature not enabled")
+				continue
+			}
+			err := r.groupAllDatabasesByHost(hosts, host, namespace, access, privilege)
+			if err != nil {
+				errs = multierr.Append(errs, fmt.Errorf("all databases: %w", &AccessError{
+					Access: accesses[i],
+					Err:    err,
+				}))
+			}
 			continue
 		}
 		database, err := r.resourceResolver(r.client, access.Database, namespace)
 		if err != nil {
-			errs = multierr.Append(errs, &AccessError{
+			errs = multierr.Append(errs, fmt.Errorf("resolve database: %w", &AccessError{
 				Access: accesses[i],
 				Err:    err,
-			})
+			}))
 			continue
 		}
 		schema, err := r.resourceResolver(r.client, access.Schema, namespace)
 		if err != nil {
-			errs = multierr.Append(errs, &AccessError{
+			errs = multierr.Append(errs, fmt.Errorf("resolve schema: %w", &AccessError{
 				Access: accesses[i],
 				Err:    err,
-			})
+			}))
 			continue
 		}
 		hostDatabase := fmt.Sprintf("%s/%s", host, database)
@@ -359,6 +385,43 @@ func (r *ReconcilePostgreSQLUser) groupByHosts(hosts HostAccess, namespace strin
 		})
 	}
 	return errs
+}
+
+// groupAllDatabasesByHost groups read write accesses for all known databases in the hosts access map.
+func (r *ReconcilePostgreSQLUser) groupAllDatabasesByHost(hosts HostAccess, host string, namespace string, access lunarwayv1alpha1.AccessSpec, privilege postgres.Privilege) error {
+	databases, err := r.allDatabases(r.client, namespace)
+	if err != nil {
+		return fmt.Errorf("get all databases: %w", err)
+	}
+	var errs error
+	for _, databaseResource := range databases {
+		database := databaseResource.Spec.Name
+		// this limits the `allDatabases` field to only work grant access in a
+		// schema named after the database
+		schema := databaseResource.Spec.Name
+		databaseHost, err := r.resourceResolver(r.client, databaseResource.Spec.Host, namespace)
+		if err != nil {
+			errs = multierr.Append(errs, fmt.Errorf("resolve database '%s' host name: %w", databaseResource.Spec.Name, err))
+			continue
+		}
+		if host != databaseHost {
+			continue
+		}
+		hostKey := fmt.Sprintf("%s/%s", host, database)
+		hosts[hostKey] = append(hosts[hostKey], ReadWriteAccess{
+			Host: host,
+			Database: postgres.DatabaseSchema{
+				Name:       database,
+				Schema:     schema,
+				Privileges: privilege,
+			},
+			Access: access,
+		})
+	}
+	if errs != nil {
+		return errs
+	}
+	return nil
 }
 
 type AccessError struct {

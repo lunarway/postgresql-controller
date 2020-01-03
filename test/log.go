@@ -4,6 +4,7 @@ import (
 	"io"
 	"testing"
 
+	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
@@ -11,6 +12,10 @@ import (
 func SetLogger(t *testing.T) *log.DelegatingLogger {
 	log.SetLogger(zap.LoggerTo(&logger{t: t}, true))
 	return log.Log
+}
+
+func NewLogger(t *testing.T) logr.Logger {
+	return zap.LoggerTo(&logger{t: t}, true)
 }
 
 var _ io.Writer = &logger{}

@@ -106,13 +106,31 @@ func schema_pkg_apis_lunarway_v1alpha1_PostgreSQLDatabaseStatus(ref common.Refer
 				Description: "PostgreSQLDatabaseStatus defines the observed state of PostgreSQLDatabase",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
-					"created": {
+					"phaseUpdated": {
 						SchemaProps: spec.SchemaProps{
 							Ref: ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
 						},
 					},
+					"phase": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"host": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"error": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
 				},
-				Required: []string{"created"},
+				Required: []string{"phaseUpdated", "phase"},
 			},
 		},
 		Dependencies: []string{

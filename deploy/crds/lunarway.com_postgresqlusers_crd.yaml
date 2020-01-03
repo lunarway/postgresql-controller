@@ -8,6 +8,8 @@ spec:
     kind: PostgreSQLUser
     listKind: PostgreSQLUserList
     plural: postgresqlusers
+    shortNames:
+    - pguser
     singular: postgresqluser
   scope: Namespaced
   subresources:
@@ -39,6 +41,8 @@ spec:
             read:
               items:
                 properties:
+                  allDatabases:
+                    type: boolean
                   database:
                     description: PasswordVar represents an
                     properties:
@@ -171,15 +175,15 @@ spec:
                     format: date-time
                     type: string
                 required:
-                - database
                 - host
                 - reason
-                - schema
                 type: object
               type: array
             write:
               items:
                 properties:
+                  allDatabases:
+                    type: boolean
                   database:
                     description: PasswordVar represents an
                     properties:
@@ -312,10 +316,8 @@ spec:
                     format: date-time
                     type: string
                 required:
-                - database
                 - host
                 - reason
-                - schema
                 type: object
               type: array
           required:

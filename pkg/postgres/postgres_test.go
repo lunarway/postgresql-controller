@@ -98,7 +98,7 @@ func TestRole_staticRoles(t *testing.T) {
 	db, err := postgres.Connect(log, postgres.ConnectionString{
 		Host:     postgresqlHost,
 		User:     "iam_creator",
-		Database: "",
+		Database: "postgres",
 		Password: "",
 	})
 	if err != nil {
@@ -201,7 +201,7 @@ func TestRole_priviliges_databaseNameAndSchemaDiffers(t *testing.T) {
 	iamCreatorRootDB, err := postgres.Connect(log, postgres.ConnectionString{
 		Host:     postgresqlHost,
 		User:     "iam_creator",
-		Database: "",
+		Database: "postgres",
 		Password: "",
 	})
 	if err != nil {
@@ -269,7 +269,7 @@ func TestRole_priviliges(t *testing.T) {
 	iamCreatorRootDB, err := postgres.Connect(log, postgres.ConnectionString{
 		Host:     postgresqlHost,
 		User:     "iam_creator",
-		Database: "",
+		Database: "postgres",
 		Password: "",
 	})
 	if err != nil {
@@ -386,11 +386,12 @@ func TestRole_priviliges(t *testing.T) {
 	}
 	_, err = userDB.Query(fmt.Sprintf("INSERT INTO %s.films VALUES('new title')", serviceUser2))
 	if err != nil {
-		t.Fatalf("could not insert into %s.films table when it should not", serviceUser2)
+		t.Fatalf("could not insert into %s.films table: %v", serviceUser2, err)
 	}
 }
 
 func createServiceDatabase(t *testing.T, log logr.Logger, database *sql.DB, host, service string) {
+	t.Helper()
 	err := postgres.Database(log, database, host, postgres.Credentials{
 		Name:     service,
 		Password: "",
