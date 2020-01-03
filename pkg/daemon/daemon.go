@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -55,10 +54,9 @@ func (d *Daemon) askForSync() {
 }
 
 // Loop starts the daemon syncronization loop. It will run until provided stop
-// channel is closed and on exit it decreases the provided wait group.
-func (d *Daemon) Loop(stop chan struct{}, wg *sync.WaitGroup) {
+// channel is closed.
+func (d *Daemon) Loop(stop chan struct{}) {
 	d.config.Logger.Info("Starting loop")
-	defer wg.Done()
 	syncTimer := time.NewTimer(d.config.SyncInterval)
 	d.askForSync()
 
