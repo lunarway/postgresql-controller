@@ -247,6 +247,12 @@ func (r *ReconcilePostgreSQLDatabase) EnsurePostgreSQLDatabase(log logr.Logger, 
 	if err != nil {
 		return fmt.Errorf("connect to host %s: %w", connectionString, err)
 	}
+	defer func() {
+		err := db.Close()
+		if err != nil {
+			log.Error(err, "failed to close database connection", "host", host, "database", "postgres", "user", name)
+		}
+	}()
 	err = postgres.Database(log, db, host, postgres.Credentials{
 		Name:     name,
 		Password: password,

@@ -213,6 +213,12 @@ func (r *ReconcilePostgreSQLUser) Reconcile(request reconcile.Request) (reconcil
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("connect to hosts: %w", err)
 	}
+	defer func() {
+		err := closeConnectionToHosts(hosts)
+		if err != nil {
+			reqLogger.Error(err, "failed to close connection to hosts")
+		}
+	}()
 
 	err = r.ensurePostgreSQLRoles(reqLogger, user.Spec.Name, accesses, hosts)
 	if err != nil {
@@ -302,4 +308,15 @@ func (r *ReconcilePostgreSQLUser) connectToHosts(accesses grants.HostAccess) (ma
 		hosts[hostDatabase] = db
 	}
 	return hosts, errs
+}
+
+func closeConnectionToHosts(hosts map[string]*sql.DB) error {
+	var errs error
+	for name, conn := range hosts {
+		err := conn.Close()
+		if err != nil {
+			errs = multierr.Append(errs, fmt.Errorf("host %s: %w", name, err))
+		}
+	}
+	return errs
 }
