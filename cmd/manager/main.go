@@ -179,9 +179,18 @@ func main() {
 
 	log.Info("Starting grant expiration daemon")
 	daemon := daemon.New(daemon.Configuration{
-		SyncInterval: 5 * time.Minute,
 		Logger:       log.WithName("daemon"),
-		SyncedHook:   instrumentation.ObserveSyncDuration,
+		SyncInterval: 5 * time.Second,
+		Sync: func() {
+			s := time.Now()
+			log.Info("Syncing resources...")
+			var err error
+			// TODO: do actual syncing
+			if err != nil {
+				log.Error(err, "Syncronization of resources failed")
+			}
+			instrumentation.ObserveSyncDuration(time.Since(s), err == nil)
+		},
 	})
 	shutdownWg.Add(1)
 	// no link to componentErr as the daemon loop should only ever exit on the

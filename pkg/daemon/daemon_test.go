@@ -21,7 +21,7 @@ func TestLoop(t *testing.T) {
 	d := daemon.New(daemon.Configuration{
 		SyncInterval: syncInterval,
 		Logger:       logger,
-		SyncedHook: func(time.Duration, bool) {
+		Sync: func() {
 			atomic.AddInt32(&actualSyncCount, 1)
 		},
 	})
