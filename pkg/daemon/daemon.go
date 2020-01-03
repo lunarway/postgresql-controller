@@ -12,9 +12,8 @@ type Configuration struct {
 	Logger       logr.Logger
 	SyncInterval time.Duration
 
-	// SyncedHook is an hook that is triggered after each sync completions with
-	// the duration and success indication. Useful for instrumentation probes.
-	SyncedHook func(duration time.Duration, success bool)
+	// Sync is the function called in every sync interval by the daemon.
+	Sync func()
 }
 
 func (c *Configuration) setDefaults() {
@@ -24,8 +23,8 @@ func (c *Configuration) setDefaults() {
 	if c.SyncInterval == 0 {
 		c.SyncInterval = 5 * time.Minute
 	}
-	if c.SyncedHook == nil {
-		c.SyncedHook = func(d time.Duration, s bool) {}
+	if c.Sync == nil {
+		c.Sync = func() {}
 	}
 }
 
@@ -85,21 +84,11 @@ func (d *Daemon) Loop(stop chan struct{}, wg *sync.WaitGroup) {
 				default:
 				}
 			}
-			now := time.Now()
-			err := d.sync()
-			if err != nil {
-				d.config.Logger.Error(err, "Sync failed")
-			}
-			d.config.SyncedHook(time.Since(now), err == nil)
+			d.config.Sync()
 			syncTimer.Reset(d.config.SyncInterval)
 		case <-syncTimer.C:
 			d.config.Logger.Info("Sync timer asking for sync")
 			d.askForSync()
 		}
 	}
-}
-
-func (d *Daemon) sync() error {
-	d.config.Logger.Info("Syncing...")
-	return nil
 }
