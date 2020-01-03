@@ -196,7 +196,10 @@ func main() {
 	shutdownWg.Add(1)
 	// no link to componentErr as the daemon loop should only ever exit on the
 	// shutdown signal.
-	go daemon.Loop(shutdown, &shutdownWg)
+	go func() {
+		defer shutdownWg.Done()
+		daemon.Loop(shutdown)
+	}()
 
 	log.Info("Starting the Cmd.")
 

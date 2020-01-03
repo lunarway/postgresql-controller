@@ -30,7 +30,10 @@ func TestLoop(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	go d.Loop(shutdown, &wg)
+	go func() {
+		defer wg.Done()
+		d.Loop(shutdown)
+	}()
 
 	// let the loop run a couple of cycles
 	time.Sleep(testDuration)
