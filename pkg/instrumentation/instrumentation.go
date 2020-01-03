@@ -24,7 +24,7 @@ func New(registry prometheus.Registerer) (*Instrumentation, error) {
 			Subsystem: "daemon",
 			Name:      "sync_duration_seconds",
 			Help:      "Duration of resource-to-database synchronisation, in seconds.",
-			Buckets:   []float64{0.1, 0.2, 0.3, 0.4, 0.5, 1, 2, 4, 6, 8, 10, 15},
+			Buckets:   []float64{0.5, 5, 10, 20, 30, 40, 50, 60, 75, 90, 120, 240},
 		}, []string{labelSuccess}),
 	}
 	err := registry.Register(i.syncDuration)

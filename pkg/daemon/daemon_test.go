@@ -21,7 +21,7 @@ func TestLoop(t *testing.T) {
 	d := daemon.New(daemon.Configuration{
 		SyncInterval: syncInterval,
 		Logger:       logger,
-		Sync: func() {
+		SyncedHook: func(time.Duration, bool) {
 			atomic.AddInt32(&actualSyncCount, 1)
 		},
 	})
@@ -30,12 +30,7 @@ func TestLoop(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	go func() {
-		defer wg.Done()
-		d.Loop(shutdown)
-	}()
-
-	// let the loop run a couple of cycles
+	go d.Loop(shutdown, &wg)
 	time.Sleep(testDuration)
 
 	close(shutdown)

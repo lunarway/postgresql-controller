@@ -8,6 +8,7 @@ require (
 	github.com/lib/pq v1.1.1
 	github.com/operator-framework/operator-sdk v0.12.1-0.20191030232758-662d20b8a76e
 	github.com/prometheus/client_golang v1.0.0
+	github.com/shiena/ansicolor v0.0.0-20151119151921-a422bbe96644 // indirect
 	github.com/spf13/pflag v1.0.3
 	github.com/stretchr/testify v1.3.0
 	go.uber.org/multierr v1.1.0

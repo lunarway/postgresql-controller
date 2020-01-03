@@ -17,6 +17,7 @@ import (
 	"go.lunarway.com/postgresql-controller/pkg/controller/postgresqldatabase"
 	"go.lunarway.com/postgresql-controller/pkg/controller/postgresqluser"
 	"go.lunarway.com/postgresql-controller/pkg/daemon"
+	"go.lunarway.com/postgresql-controller/pkg/instrumentation"
 
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	kubemetrics "github.com/operator-framework/operator-sdk/pkg/kube-metrics"
@@ -33,6 +34,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
+	runtimemetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
 // Change below variables to serve metrics on different host or port.
@@ -170,12 +172,22 @@ func main() {
 		}
 	}()
 
+	instrumentation, err := instrumentation.New(runtimemetrics.Registry)
+	if err != nil {
+		log.Error(err, "Instantiate instrumentation probes failed")
+		os.Exit(1)
+	}
+
 	log.Info("Starting grant expiration daemon")
-	daemon := daemon.Daemon{}
+	daemon := daemon.New(daemon.Configuration{
+		SyncInterval: 5 * time.Minute,
+		Logger:       log.WithName("daemon"),
+		SyncedHook:   instrumentation.ObserveSyncDuration,
+	})
 	shutdownWg.Add(1)
 	// no link to componentErr as the daemon loop should only ever exit on the
 	// shutdown signal.
-	go daemon.Loop(shutdown, &shutdownWg, log)
+	go daemon.Loop(shutdown, &shutdownWg)
 
 	log.Info("Starting the Cmd.")
 
