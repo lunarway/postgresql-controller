@@ -31,6 +31,8 @@ func TestLoop(t *testing.T) {
 	wg.Add(1)
 
 	go d.Loop(shutdown, &wg)
+
+	// let the loop run a couple of cycles
 	time.Sleep(testDuration)
 
 	close(shutdown)
