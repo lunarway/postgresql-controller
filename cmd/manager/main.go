@@ -150,6 +150,7 @@ func main() {
 
 	// used to signal Go routines to stop execution
 	shutdown := make(chan struct{})
+	// used to know when all started Go routines are stopped
 	componentErr := make(chan error)
 	var shutdownWg sync.WaitGroup
 
@@ -160,6 +161,8 @@ func main() {
 		// blocks until a signal is triggered or shutdown is closed
 		select {
 		case <-signals.SetupSignalHandler():
+			// signal that the controller should stop but without an error as this is
+			// expected behavour on signals
 			componentErr <- nil
 		case <-shutdown:
 		}
@@ -168,6 +171,8 @@ func main() {
 	log.Info("Starting grant expiration daemon")
 	daemon := daemon.Daemon{}
 	shutdownWg.Add(1)
+	// no link to componentErr as the daemon loop should only ever exit on the
+	// shutdown signal.
 	go daemon.Loop(shutdown, &shutdownWg, log)
 
 	log.Info("Starting the Cmd.")
@@ -182,10 +187,15 @@ func main() {
 			os.Exit(1)
 		}
 	}()
+	// wait for any component to stop, ie. signals or the manager
 	err = <-componentErr
-	log.Info("Controller exiting", "err", err)
+	if err != nil {
+		log.Error(err, "Controller exiting unexpectedly")
+	} else {
+		log.Info("Controller exiting")
+	}
 	close(shutdown)
-	log.Info("Waiting for components to shutdown")
+	log.Info("Waiting for all components to shutdown")
 	shutdownWg.Wait()
 }
 
