@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"sync"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -15,6 +17,8 @@ import (
 	"go.lunarway.com/postgresql-controller/pkg/controller"
 	"go.lunarway.com/postgresql-controller/pkg/controller/postgresqldatabase"
 	"go.lunarway.com/postgresql-controller/pkg/controller/postgresqluser"
+	"go.lunarway.com/postgresql-controller/pkg/daemon"
+	"go.lunarway.com/postgresql-controller/pkg/instrumentation"
 
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	kubemetrics "github.com/operator-framework/operator-sdk/pkg/kube-metrics"
@@ -30,6 +34,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
+	runtimemetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
 // Change below variables to serve metrics on different host or port.
@@ -146,13 +151,78 @@ func main() {
 		}
 	}
 
+	// used to signal Go routines to stop execution
+	shutdown := make(chan struct{})
+	// used to know when any of the started Go routines are stopped
+	componentErr := make(chan error)
+	// used to wait for all Go routines to stop
+	var shutdownWg sync.WaitGroup
+
+	// listen for shutdown signals and signal termination to components
+	shutdownWg.Add(1)
+	go func() {
+		defer shutdownWg.Done()
+		// blocks until a signal is triggered or shutdown is closed
+		select {
+		case <-signals.SetupSignalHandler():
+			// signal that the controller should stop but without an error as this is
+			// expected behavour on signals
+			componentErr <- nil
+		case <-shutdown:
+		}
+	}()
+
+	instrumentation, err := instrumentation.New(runtimemetrics.Registry)
+	if err != nil {
+		log.Error(err, "Instantiate instrumentation probes failed")
+		os.Exit(1)
+	}
+
+	log.Info("Starting grant expiration daemon")
+	daemon := daemon.New(daemon.Configuration{
+		Logger:       log.WithName("daemon"),
+		SyncInterval: 5 * time.Second,
+		Sync: func() {
+			s := time.Now()
+			log.Info("Syncing resources...")
+			var err error
+			// TODO: do actual syncing
+			if err != nil {
+				log.Error(err, "Syncronization of resources failed")
+			}
+			instrumentation.ObserveSyncDuration(time.Since(s), err == nil)
+		},
+	})
+	shutdownWg.Add(1)
+	// no link to componentErr as the daemon loop should only ever exit on the
+	// shutdown signal.
+	go func() {
+		defer shutdownWg.Done()
+		daemon.Loop(shutdown)
+	}()
+
 	log.Info("Starting the Cmd.")
 
 	// Start the Cmd
-	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
-		log.Error(err, "Manager exited non-zero")
-		os.Exit(1)
+	shutdownWg.Add(1)
+	go func() {
+		defer shutdownWg.Done()
+		err := mgr.Start(shutdown)
+		if err != nil {
+			log.Error(err, "Manager exited non-zero")
+			os.Exit(1)
+		}
+	}()
+	// wait for any component to stop, ie. signals or the manager
+	err = <-componentErr
+	if err != nil {
+		log.Error(err, "Controller exiting unexpectedly")
+	} else {
+		log.Info("Controller exiting")
 	}
+	close(shutdown)
+	log.Info("Waiting for all components to shutdown")
+	shutdownWg.Wait()
 }
 
 // serveCRMetrics gets the Operator/CustomResource GVKs and generates metrics based on those types.
