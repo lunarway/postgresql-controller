@@ -74,6 +74,7 @@ test/integration: test/integration/postgresql/run
 .PHONY: test/cluster
 test/cluster:
 	@echo Create test cluster
+	export KUBECONFIG=~/.kube/config
 	kind create cluster --name postgresql-controller-test
 
 .PHONY: test/cluster/resources
