@@ -180,17 +180,11 @@ Below example will create a test cluster, apply CRD resources, start a PostgreSQ
 Make sure to forward the postgresql pod for the
 
 ```
-// Setup kind cluster
+// Setup kind cluster (this will use KUBECONFIG=~/.kube/config to store the kubeconfig)
 $ make test/cluster
-
-// Point kubectl to the cluster (this command is also written to stdout by kind)
-$ export KUBECONFIG="$(kind get kubeconfig-path --name="postgresql-controller-test")"
 
 // Apply kubernetes resources for the controller
 $ make test/cluster/resources
-
-// Start a PostreSQL instance
-$ make test/cluster/postgresql
 
 // Forward PostgreSQL pod before starting the operator
 $ kubectl port-forward deploy/postgresql 5432
