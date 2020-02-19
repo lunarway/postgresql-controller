@@ -77,10 +77,9 @@ Default priviledges no the database ensures that each role have access to object
 The CRD `PostgreSQLUser` contains metadata about the user along with its access rights to databases.
 
 The access rights are devided into read and write and specifies a `host` and `reason` as a minimum.
-This `database` field is required for writes along with `start` and `end`.
-This ensures no unnecessary capabilities are left on a user ie. after completing a support ticket.
+Either the `database` field or `allDatabases` must be set as well.
+It is possible to set `start` and `stop` timestamps to limit the lifetime of capabilities e.g. automatic revocation after completing a support ticket.
 
-For reads, it will default to all databases on the instance and requires no time limit.
 We generally do not limit access to data but instead rely on strong audits.
 
 This is an example of a user `bso` that has read access to all databases and write access to the `user` database in schema `user` between 10 AM to 2 PM on september 9th.
@@ -109,7 +108,7 @@ spec:
         value: user
       reason: "Related to support ticket LW-1234"
       start: 2019-09-16T10:00:00Z
-      end: 2019-09-16T14:00:00Z
+      stop: 2019-09-16T14:00:00Z
 ```
 
 From the configuration the user will be created with a `<name>` user on the host and granted rights to access the required databases.
