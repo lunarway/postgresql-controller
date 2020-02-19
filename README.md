@@ -112,8 +112,24 @@ spec:
       end: 2019-09-16T14:00:00Z
 ```
 
-From the configuration the user will be created with an `iam_developer_<name>` user on the host and granted rights to access the required databases.
-Further the role `rds_iam` will be granted allowing the user to sign in with IAM credentials.
+From the configuration the user will be created with a `<name>` user on the host and granted rights to access the required databases.
+The flag `--user-role-prefix` can be used to prefix all created roles.
+This can make it easier to see what roles are for human users and what are for services.
+
+```
+--user-role-prefix=iam_developer_
+```
+
+It is also possible to add custom roles to all created users. This is useful for IAM authentication as roles with the `rds_iam` role can connect to the database using AWS IAM.
+Further these roles can be used to group users created by specific controllers.
+Be aware that the controller will not create these roles.
+They need to be available by other means.
+
+```
+--user-roles=rds_iam,iam_developer
+```
+
+The `rds_iam` is the default value of the flag.
 
 A policy will also be added to AWS IAM for the specific user allowing it to connect to the host.
 
