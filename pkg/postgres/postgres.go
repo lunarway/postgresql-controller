@@ -82,9 +82,6 @@ func (p Privilege) String() string {
 func Role(log logr.Logger, db *sql.DB, name string, roles []string, databases []DatabaseSchema) error {
 	log.Info(fmt.Sprintf("Creating role %s", name))
 	query := fmt.Sprintf("CREATE ROLE %s WITH LOGIN", name)
-	if len(roles) != 0 {
-		query += fmt.Sprintf(" IN ROLE %s", strings.Join(roles, ", "))
-	}
 	_, err := db.Exec(query)
 	if err != nil {
 		pqError, ok := err.(*pq.Error)
@@ -95,11 +92,38 @@ func Role(log logr.Logger, db *sql.DB, name string, roles []string, databases []
 	} else {
 		log.Info(fmt.Sprintf("Role %s created", name))
 	}
-	if len(roles) != 0 {
-		_, err = db.Exec(fmt.Sprintf("GRANT %s TO %s", strings.Join(roles, ", "), name))
+	return GrantRoles(log, db, name, roles, databases)
+}
+
+// GrantRoles grants role name with all roles from the roles slice along with
+// extrated roles from databases slice.
+func GrantRoles(log logr.Logger, db *sql.DB, name string, roles []string, databases []DatabaseSchema) error {
+	grantableRoles, revokeableRoles, err := rolesDiff(db, name, roles, databases)
+	if err != nil {
+		return fmt.Errorf("resolve roles diff: %w", err)
+	}
+	log.Info(fmt.Sprintf("Found %d grantable and %d revokable roles for %s", len(grantableRoles), len(revokeableRoles), name), "grantable", grantableRoles, "revokeable", revokeableRoles)
+	if len(grantableRoles) != 0 {
+		joinedRoles := strings.Join(grantableRoles, ",")
+		_, err = db.Exec(fmt.Sprintf("GRANT %s TO %s", joinedRoles, name))
 		if err != nil {
-			return fmt.Errorf("grant static roles '%v': %w", roles, err)
+			return fmt.Errorf("grant access privileges '%s' to '%s': %w", joinedRoles, name, err)
 		}
+	}
+	if len(revokeableRoles) != 0 {
+		joinedRoles := strings.Join(revokeableRoles, ",")
+		_, err = db.Exec(fmt.Sprintf("REVOKE %s FROM %s", joinedRoles, name))
+		if err != nil {
+			return fmt.Errorf("revoke access privileges '%s' to '%s': %w", joinedRoles, name, err)
+		}
+	}
+	return nil
+}
+
+func rolesDiff(db *sql.DB, name string, staticRoles []string, databases []DatabaseSchema) ([]string, []string, error) {
+	var grantableRoles []string
+	if len(staticRoles) != 0 {
+		grantableRoles = append(grantableRoles, staticRoles...)
 	}
 
 	for _, database := range databases {
@@ -113,16 +137,41 @@ func Role(log logr.Logger, db *sql.DB, name string, roles []string, databases []
 		if len(schemaPrivileges) == 0 {
 			continue
 		}
-		schema := database.Schema
-		if strings.EqualFold(schema, "public") {
-			schema = database.Name
-		}
-		schemaPrivileges = fmt.Sprintf("%s_%s", schema, schemaPrivileges)
-		log.Info(fmt.Sprintf("Granting %s to %s", schemaPrivileges, name))
-		_, err = db.Exec(fmt.Sprintf("GRANT %s TO %s", schemaPrivileges, name))
-		if err != nil {
-			return fmt.Errorf("grant access privileges '%s' on schema '%s': %w", schemaPrivileges, schema, err)
+		grantableRoles = append(grantableRoles, fmt.Sprintf("%s_%s", database.Name, schemaPrivileges))
+	}
+	existingRoles, err := persistedRoles(db, name)
+	if err != nil {
+		return nil, nil, fmt.Errorf("get existing roles: %w", err)
+	}
+	var addableRoles, removeableRoles []string
+	for _, grantableRole := range grantableRoles {
+		for _, existingRole := range existingRoles {
+			if existingRole == grantableRole {
+				// FIXME: implement this filtering
+			}
 		}
 	}
-	return nil
+	return addableRoles, removeableRoles, nil
+}
+
+func persistedRoles(db *sql.DB, name string) ([]string, error) {
+	rows, err := db.Query("SELECT rolname FROM pg_user JOIN pg_auth_members ON (pg_user.usesysid=pg_auth_members.member) JOIN pg_roles ON (pg_roles.oid=pg_auth_members.roleid) WHERE pg_user.usename=$1", name)
+	if err != nil {
+		return nil, fmt.Errorf("select roles: %w", err)
+	}
+	defer rows.Close()
+	var roles []string
+	for rows.Next() {
+		var rolName string
+		err = rows.Scan(&rolName)
+		if err != nil {
+			return nil, fmt.Errorf("scan row: %w", err)
+		}
+		roles = append(roles, rolName)
+	}
+	err = rows.Err()
+	if err != nil {
+		return nil, fmt.Errorf("scanning rows: %w", err)
+	}
+	return roles, nil
 }

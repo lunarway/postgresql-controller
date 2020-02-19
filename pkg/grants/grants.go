@@ -15,7 +15,12 @@ type Granter struct {
 	AllDatabasesReadEnabled  bool
 	AllDatabasesWriteEnabled bool
 	AllDatabases             func(namespace string) ([]lunarwayv1alpha1.PostgreSQLDatabase, error)
+	AllUsers                 func(namespace string) ([]lunarwayv1alpha1.PostgreSQLUser, error)
 	ResourceResolver         func(resource lunarwayv1alpha1.ResourceVar, namespace string) (string, error)
+
+	Log             logr.Logger
+	StaticRoles     []string
+	HostCredentials map[string]postgres.Credentials
 }
 
 // HostAccess represents a map of read and write access requests on host names
@@ -28,18 +33,18 @@ type ReadWriteAccess struct {
 	Access   lunarwayv1alpha1.AccessSpec
 }
 
-func (g *Granter) GroupAccesses(reqLogger logr.Logger, namespace string, reads []lunarwayv1alpha1.AccessSpec, writes []lunarwayv1alpha1.AccessSpec) (HostAccess, error) {
+func (g *Granter) groupAccesses(namespace string, reads []lunarwayv1alpha1.AccessSpec, writes []lunarwayv1alpha1.AccessSpec) (HostAccess, error) {
 	if len(reads) == 0 {
 		return nil, nil
 	}
 	hosts := make(HostAccess)
 	var errs error
 
-	err := g.groupByHosts(reqLogger, hosts, namespace, reads, postgres.PrivilegeRead, g.AllDatabasesReadEnabled)
+	err := g.groupByHosts(hosts, namespace, reads, postgres.PrivilegeRead, g.AllDatabasesReadEnabled)
 	if err != nil {
 		errs = multierr.Append(errs, err)
 	}
-	err = g.groupByHosts(reqLogger, hosts, namespace, writes, postgres.PrivilegeWrite, g.AllDatabasesWriteEnabled)
+	err = g.groupByHosts(hosts, namespace, writes, postgres.PrivilegeWrite, g.AllDatabasesWriteEnabled)
 	if err != nil {
 		errs = multierr.Append(errs, err)
 	}
@@ -50,8 +55,7 @@ func (g *Granter) GroupAccesses(reqLogger logr.Logger, namespace string, reads [
 	return hosts, errs
 }
 
-func (g *Granter) groupByHosts(reqLogger logr.Logger, hosts HostAccess, namespace string, accesses []lunarwayv1alpha1.AccessSpec, privilege postgres.Privilege, allDatabasesEnabled bool) error {
-	reqLogger = reqLogger.WithValues("privilege", privilege)
+func (g *Granter) groupByHosts(hosts HostAccess, namespace string, accesses []lunarwayv1alpha1.AccessSpec, privilege postgres.Privilege, allDatabasesEnabled bool) error {
 	var errs error
 	for i, access := range accesses {
 		reqLogger = reqLogger.WithValues("spec", access)
@@ -66,7 +70,7 @@ func (g *Granter) groupByHosts(reqLogger logr.Logger, hosts HostAccess, namespac
 		reqLogger = reqLogger.WithValues("host", host)
 		if access.AllDatabases {
 			if !allDatabasesEnabled {
-				reqLogger.Info("Skipping access spec: allDatabases feature not enabled")
+				g.Log.WithValues("spec", access, "privilege", privilege).Info("Skipping access spec: allDatabases feature not enabled")
 				continue
 			}
 			reqLogger.Info("Grouping access for all databases on host")

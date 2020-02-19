@@ -2,110 +2,21 @@ package postgresqluser
 
 import (
 	"errors"
-	"fmt"
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
-	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/pkg/apis/lunarway/v1alpha1"
-	"go.lunarway.com/postgresql-controller/pkg/grants"
 	"go.lunarway.com/postgresql-controller/pkg/iam"
 	"go.lunarway.com/postgresql-controller/pkg/kube"
 	"go.lunarway.com/postgresql-controller/pkg/postgres"
 	"go.lunarway.com/postgresql-controller/test"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/deprecated/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
-
-func TestReconcile_connectToHosts(t *testing.T) {
-	test.Integration(t)
-	tt := []struct {
-		name            string
-		credentials     map[string]postgres.Credentials
-		hostAccess      grants.HostAccess
-		connectionCount int
-		err             error
-	}{
-		{
-			name: "single host with credentials",
-			credentials: map[string]postgres.Credentials{
-				"localhost:5432": {
-					Name:     "iam_creator",
-					Password: "",
-				},
-			},
-			hostAccess: grants.HostAccess{
-				"localhost:5432/postgres": []grants.ReadWriteAccess{},
-			},
-			connectionCount: 1,
-			err:             nil,
-		},
-		{
-			name: "multiple hosts without upstream",
-			credentials: map[string]postgres.Credentials{
-				"localhost:5432": {
-					Name:     "iam_creator",
-					Password: "",
-				},
-				"unknown": {
-					Name:     "iam_creator",
-					Password: "12345678",
-				},
-			},
-			hostAccess: grants.HostAccess{
-				"localhost:5432/postgres": []grants.ReadWriteAccess{},
-				"unknown/postgres":        []grants.ReadWriteAccess{},
-			},
-			connectionCount: 1,
-			err:             fmt.Errorf("connect to postgresql://iam_creator:********@unknown/postgres?sslmode=disable: dial tcp:"),
-		},
-		{
-			name:        "missing credentials",
-			credentials: map[string]postgres.Credentials{},
-			hostAccess: grants.HostAccess{
-				"localhost:5432/postgres": []grants.ReadWriteAccess{},
-			},
-			connectionCount: 0,
-			err:             fmt.Errorf("no credentials for host 'localhost:5432'"),
-		},
-	}
-	for _, tc := range tt {
-		t.Run(tc.name, func(t *testing.T) {
-			_ = test.SetLogger(t)
-
-			r := ReconcilePostgreSQLUser{
-				hostCredentials: tc.credentials,
-			}
-
-			// act
-			connections, err := r.connectToHosts(tc.hostAccess)
-
-			defer func() {
-				for _, db := range connections {
-					db.Close()
-				}
-			}()
-
-			// assert
-			t.Logf("Connections: %v", connections)
-			if tc.err != nil {
-				if !assert.Error(t, err, "an output error was expected") {
-					return
-				}
-				assert.Contains(t, err.Error(), tc.err.Error(), "error not as expected")
-			} else {
-				assert.NoError(t, err, "unexpected output error")
-			}
-			assert.Len(t, connections, tc.connectionCount, "connection count not as expected")
-		})
-	}
-}
 
 func TestParseHostCredentials(t *testing.T) {
 	tt := []struct {

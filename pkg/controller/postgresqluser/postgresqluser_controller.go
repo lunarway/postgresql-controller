@@ -2,10 +2,8 @@ package postgresqluser
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/go-logr/logr"
@@ -16,7 +14,6 @@ import (
 	"go.lunarway.com/postgresql-controller/pkg/iam"
 	"go.lunarway.com/postgresql-controller/pkg/kube"
 	"go.lunarway.com/postgresql-controller/pkg/postgres"
-	"go.uber.org/multierr"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -219,29 +216,10 @@ func (r *ReconcilePostgreSQLUser) reconcile(reqLogger logr.Logger, request recon
 	reqLogger = reqLogger.WithValues("user", user.Spec.Name)
 	reqLogger.Info("Updating PostgreSQLUser resource")
 
-	accesses, err := r.granter.GroupAccesses(reqLogger, request.Namespace, user.Spec.Read, user.Spec.Write)
+	reqLogger.Info("Reconciling PostgreSQLUser", "user", user.Spec.Name)
+	err = r.granter.SyncUser(request.Namespace, *user)
 	if err != nil {
-		if len(accesses) == 0 {
-			return reconcile.Result{}, fmt.Errorf("group accesses: %w", err)
-		}
-		reqLogger.Error(err, fmt.Sprintf("Some access requests could not be resolved. Continuating with the resolved ones"))
-	}
-	reqLogger.Info(fmt.Sprintf("Found access requests for %d hosts", len(accesses)))
-
-	hosts, err := r.connectToHosts(accesses)
-	if err != nil {
-		return reconcile.Result{}, fmt.Errorf("connect to hosts: %w", err)
-	}
-	defer func() {
-		err := closeConnectionToHosts(hosts)
-		if err != nil {
-			reqLogger.Error(err, "failed to close connection to hosts")
-		}
-	}()
-
-	err = r.ensurePostgreSQLRoles(reqLogger, user.Spec.Name, accesses, hosts)
-	if err != nil {
-		return reconcile.Result{}, fmt.Errorf("ensure postgresql roles: %w", err)
+		return reconcile.Result{}, fmt.Errorf("sync user grants: %w", err)
 	}
 
 	var awsCredentials *credentials.Credentials
@@ -260,82 +238,4 @@ func (r *ReconcilePostgreSQLUser) reconcile(reqLogger logr.Logger, request recon
 	}
 
 	return reconcile.Result{}, nil
-}
-
-func (r *ReconcilePostgreSQLUser) ensurePostgreSQLRoles(log logr.Logger, name string, accesses grants.HostAccess, hosts map[string]*sql.DB) error {
-	for host, access := range accesses {
-		connection, ok := hosts[host]
-		if !ok {
-			return fmt.Errorf("connection for host %s not found", host)
-		}
-		err := r.ensurePostgreSQLRole(log, connection, name, access)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func databaseSchemas(accesses []grants.ReadWriteAccess) []postgres.DatabaseSchema {
-	var ds []postgres.DatabaseSchema
-	for _, access := range accesses {
-		ds = append(ds, postgres.DatabaseSchema{
-			Name:       access.Database.Name,
-			Schema:     access.Database.Schema,
-			Privileges: access.Database.Privileges,
-		})
-	}
-	return ds
-}
-
-func (r *ReconcilePostgreSQLUser) ensurePostgreSQLRole(log logr.Logger, db *sql.DB, name string, accesses []grants.ReadWriteAccess) error {
-	name = fmt.Sprintf("%s%s", r.rolePrefix, name)
-	log = log.WithValues("operation", "ensurePostgreSQLRole", "name", name)
-	err := postgres.Role(log, db, name, r.grantRoles, databaseSchemas(accesses))
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r *ReconcilePostgreSQLUser) connectToHosts(accesses grants.HostAccess) (map[string]*sql.DB, error) {
-	hosts := make(map[string]*sql.DB)
-	var errs error
-	for hostDatabase := range accesses {
-		// hostDatabase contains the host name and the database but we expect host
-		// credentials to be without the database part
-		// This will not work for hosts with multiple / characters
-		hostDatabaseParts := strings.Split(hostDatabase, "/")
-		host := hostDatabaseParts[0]
-		database := hostDatabaseParts[1]
-		credentials, ok := r.hostCredentials[host]
-		if !ok {
-			errs = multierr.Append(errs, fmt.Errorf("no credentials for host '%s'", host))
-			continue
-		}
-		connectionString := postgres.ConnectionString{
-			Host:     host,
-			Database: database,
-			User:     credentials.Name,
-			Password: credentials.Password,
-		}
-		db, err := postgres.Connect(log, connectionString)
-		if err != nil {
-			errs = multierr.Append(errs, fmt.Errorf("connect to %s: %w", connectionString, err))
-			continue
-		}
-		hosts[hostDatabase] = db
-	}
-	return hosts, errs
-}
-
-func closeConnectionToHosts(hosts map[string]*sql.DB) error {
-	var errs error
-	for name, conn := range hosts {
-		err := conn.Close()
-		if err != nil {
-			errs = multierr.Append(errs, fmt.Errorf("host %s: %w", name, err))
-		}
-	}
-	return errs
 }
