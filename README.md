@@ -16,6 +16,11 @@ The controller needs access to a role in PostreSQL privileged to create database
 CREATE USER iam_creator CREATEDB CREATEROLE PASSWORD 'strongpassword';
 ```
 
+The controller also needs the role `iam_developer`:
+```sql
+CREATE ROLE iam_developer WITH NOLOGIN;
+```
+
 ## Databases
 
 The CRD `PostgreSQLDatabase` specified details about a database on a specific instance.
