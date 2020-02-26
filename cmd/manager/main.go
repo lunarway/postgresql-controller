@@ -103,6 +103,7 @@ func main() {
 		Namespace:          namespace,
 		MapperProvider:     restmapper.NewDynamicRESTMapper,
 		MetricsBindAddress: fmt.Sprintf("%s:%d", metricsHost, metricsPort),
+		SyncPeriod:         nil,
 	})
 	if err != nil {
 		log.Error(err, "")
