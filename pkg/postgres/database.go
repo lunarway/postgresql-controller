@@ -87,6 +87,12 @@ func Database(log logr.Logger, db *sql.DB, host string, credentials Credentials)
 	if err != nil {
 		return fmt.Errorf("connect with new user %s: %w", credentials.Name, err)
 	}
+	defer func() {
+		err := serviceConnection.Close()
+		if err != nil {
+			log.Error(err, "failed to close service database connection", "host", host, "database", credentials.Name, "user", credentials.Name)
+		}
+	}()
 
 	// Create schema in the database
 	err = createSchema(log, serviceConnection, credentials.Name)
