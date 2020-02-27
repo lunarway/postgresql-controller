@@ -62,7 +62,7 @@ func main() {
 
 	pflag.CommandLine.AddFlagSet(postgresqldatabase.FlagSet)
 	pflag.CommandLine.AddFlagSet(postgresqluser.FlagSet)
-
+	resyncDuration := pflag.CommandLine.Duration("resync-period", 10*time.Hour, "determines the minimum frequency at which watched resources are reconciled")
 	pflag.Parse()
 
 	// Use a zap logr.Logger implementation. If none of the zap
@@ -103,7 +103,7 @@ func main() {
 		Namespace:          namespace,
 		MapperProvider:     restmapper.NewDynamicRESTMapper,
 		MetricsBindAddress: fmt.Sprintf("%s:%d", metricsHost, metricsPort),
-		SyncPeriod:         nil,
+		SyncPeriod:         resyncDuration,
 	})
 	if err != nil {
 		log.Error(err, "")
