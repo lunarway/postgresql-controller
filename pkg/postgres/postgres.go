@@ -48,7 +48,6 @@ func Connect(log logr.Logger, connectionString ConnectionString) (*sql.DB, error
 		return nil, err
 	}
 	db.SetMaxIdleConns(0)
-	db.SetMaxOpenConns(1)
 	err = db.Ping()
 	if err != nil {
 		return nil, err
