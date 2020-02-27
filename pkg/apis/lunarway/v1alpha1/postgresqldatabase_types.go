@@ -10,6 +10,8 @@ type PostgreSQLDatabaseSpec struct {
 	// Name of the database
 	Name string `json:"name"`
 
+	User ResourceVar `json:"user"`
+
 	// Password
 	Password ResourceVar `json:"password"`
 

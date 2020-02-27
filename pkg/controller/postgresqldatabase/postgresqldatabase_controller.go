@@ -148,6 +148,7 @@ func (r *ReconcilePostgreSQLDatabase) reconcile(reqLogger logr.Logger, request r
 		return status{}, err
 	}
 	reqLogger = reqLogger.WithValues("database", database.Spec.Name)
+	reqLogger = reqLogger.WithValues("database", database.Spec.Name, "user", database.Spec.User)
 	reqLogger.Info("Updating PostgreSQLDatabase resource")
 
 	status := status{
@@ -161,13 +162,18 @@ func (r *ReconcilePostgreSQLDatabase) reconcile(reqLogger logr.Logger, request r
 		return status, fmt.Errorf("resolve host reference: %w", err)
 	}
 	status.host = host
+	user, err := kube.ResourceValue(r.client, database.Spec.User, request.Namespace)
+	if err != nil {
+		return status, fmt.Errorf("resolve user reference: %w", err)
+	}
+	status.user = user
 	password, err := kube.ResourceValue(r.client, database.Spec.Password, request.Namespace)
 	if err != nil {
 		return status, fmt.Errorf("resolve password reference: %w", err)
 	}
 
 	// Ensure the database is in sync with the object
-	err = r.EnsurePostgreSQLDatabase(reqLogger, host, database.Spec.Name, password)
+	err = r.EnsurePostgreSQLDatabase(reqLogger, host, database.Spec.Name, user, password)
 	if err != nil {
 		return status, fmt.Errorf("ensure database: %w", err)
 	}
@@ -181,6 +187,7 @@ type status struct {
 
 	database *lunarwayv1alpha1.PostgreSQLDatabase
 	host     string
+	user     string
 }
 
 // Persist writes the status to a PostgreSQLDatabase instance and persists it on
@@ -237,7 +244,7 @@ func stopRequeueOnInvalid(log logr.Logger, err error) error {
 	return nil
 }
 
-func (r *ReconcilePostgreSQLDatabase) EnsurePostgreSQLDatabase(log logr.Logger, host, name, password string) error {
+func (r *ReconcilePostgreSQLDatabase) EnsurePostgreSQLDatabase(log logr.Logger, host, name, user, password string) error {
 	credentials, ok := r.hostCredentials[host]
 	if !ok {
 		return &ctlerrors.Invalid{

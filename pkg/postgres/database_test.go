@@ -214,6 +214,37 @@ func TestDatabase_existingResourcePrivilegesForReadWriteRoles(t *testing.T) {
 	dbExec(t, developerDB, fmt.Sprintf(`SELECT * FROM %[1]s.%[1]s`, name))
 }
 
+// TestDatabase_defaultDatabaseName tests that we can handle database resources
+// referencing the default name of the database instance.
+func TestDatabase_defaultDatabaseName(t *testing.T) {
+	postgresqlHost := test.Integration(t)
+	log := test.SetLogger(t)
+	log.Info("TC: Connection as iam_creator")
+	db, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		Database: "postgres",
+		User:     "iam_creator",
+		Password: "",
+	})
+	if err != nil {
+		t.Fatalf("connect to database failed: %v", err)
+	}
+	defer db.Close()
+
+	// default database on the postgres instance
+	name := "postgres"
+	password := "test"
+
+	log.Info("TC: Run controller database creation")
+	err = postgres.Database(log, db, postgresqlHost, postgres.Credentials{
+		Name:     name,
+		Password: password,
+	})
+	if err != nil {
+		t.Fatalf("Create service database failed: %v", err)
+	}
+}
+
 func TestDatabase_idempotency(t *testing.T) {
 	postgresqlHost := test.Integration(t)
 	log := test.SetLogger(t)

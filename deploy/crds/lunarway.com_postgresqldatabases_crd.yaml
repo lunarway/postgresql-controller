@@ -135,10 +135,52 @@ spec:
                       type: object
                   type: object
               type: object
+            user:
+              description: PasswordVar represents an
+              properties:
+                value:
+                  description: Defaults to "".
+                  type: string
+                valueFrom:
+                  description: Source to read the value from.
+                  properties:
+                    configMapKeyRef:
+                      description: Selects a key of a config map in the custom resource's
+                        namespace
+                      properties:
+                        key:
+                          description: The key of the secret or config map to select
+                            from.  Must be a valid key.
+                          type: string
+                        name:
+                          description: The name of the secret or config map in the
+                            namespace to select from.
+                          type: string
+                      required:
+                      - key
+                      type: object
+                    secretKeyRef:
+                      description: Selects a key of a secret in the custom resource's
+                        namespace
+                      properties:
+                        key:
+                          description: The key of the secret or config map to select
+                            from.  Must be a valid key.
+                          type: string
+                        name:
+                          description: The name of the secret or config map in the
+                            namespace to select from.
+                          type: string
+                      required:
+                      - key
+                      type: object
+                  type: object
+              type: object
           required:
           - host
           - name
           - password
+          - user
           type: object
         status:
           description: PostgreSQLDatabaseStatus defines the observed state of PostgreSQLDatabase

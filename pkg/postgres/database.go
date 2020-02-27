@@ -14,6 +14,7 @@ import (
 // PostgreSQL instance.
 type Credentials struct {
 	Name     string
+	User     string
 	Password string
 }
 
@@ -38,7 +39,7 @@ func ParseUsernamePassword(s string) (Credentials, error) {
 
 func Database(log logr.Logger, db *sql.DB, host string, credentials Credentials) error {
 	// Create the service user
-	err := createUser(log, db, credentials.Name, credentials.Password)
+	err := createUser(log, db, credentials.User, credentials.Password)
 	if err != nil {
 		return fmt.Errorf("create service user: %w", err)
 	}
@@ -81,7 +82,7 @@ func Database(log logr.Logger, db *sql.DB, host string, credentials Credentials)
 	serviceConnection, err := Connect(log, ConnectionString{
 		Host:     host,
 		Database: credentials.Name,
-		User:     credentials.Name,
+		User:     credentials.User,
 		Password: credentials.Password,
 	})
 	if err != nil {
@@ -95,9 +96,9 @@ func Database(log logr.Logger, db *sql.DB, host string, credentials Credentials)
 	}()
 
 	// Create schema in the database
-	err = createSchema(log, serviceConnection, credentials.Name)
+	err = createSchema(log, serviceConnection, credentials.User)
 	if err != nil {
-		return fmt.Errorf("create schema '%s' as service user '%[1]s': %w", credentials.Name, err)
+		return fmt.Errorf("create schema '%s' as service user '%[1]s': %w", credentials.User, err)
 	}
 
 	// set default read and write priviledges on the read and readwrite roles as
