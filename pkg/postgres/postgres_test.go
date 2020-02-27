@@ -92,6 +92,33 @@ func TestConnectionString_logger(t *testing.T) {
 	assert.NotContains(t, b.String(), "1234", "password logged")
 }
 
+// TestConnect_idleConnections tests that we release connections properly for
+// each connection and don't let the sql.DB connection pool keep them open.
+func TestConnect_idleConnections(t *testing.T) {
+	postgresqlHost := test.Integration(t)
+	logger := &test.RawLogger{
+		T: t,
+	}
+	connectionString := postgres.ConnectionString{
+		Host:     postgresqlHost,
+		User:     "iam_creator",
+		Database: "postgres",
+		Password: "",
+	}
+
+	// connect 100 times without closing the connections before completing the
+	// test. This will result in 100 idle connections short after creation and if
+	// the connection pool is properly configured the idle connections will be
+	// dropped before we call Close.
+	for i := 0; i < 100; i++ {
+		conn, err := postgres.Connect(logger, connectionString)
+		if err != nil {
+			t.Fatalf("connect to database failed: %v", err)
+		}
+		defer conn.Close()
+	}
+}
+
 func TestRole_staticRoles(t *testing.T) {
 	postgresqlHost := test.Integration(t)
 	log := test.SetLogger(t)
