@@ -173,6 +173,15 @@ func TestReconcilePostgreSQLUser_groupAccesses_withAllDatabases(t *testing.T) {
 		output    grants.HostAccess
 	}{
 		{
+			name:      "no databases on host",
+			databases: []lunarwayv1alpha1.PostgreSQLDatabase{},
+			reads: []lunarwayv1alpha1.AccessSpec{
+				spec("host1:5432", "I am a developer"),
+			},
+			writes: nil,
+			output: nil,
+		},
+		{
 			name: "single allDatabases read",
 			databases: []lunarwayv1alpha1.PostgreSQLDatabase{
 				database("host1:5432", "database"),

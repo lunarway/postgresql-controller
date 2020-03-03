@@ -64,7 +64,7 @@ func (g *Granter) groupByHosts(reqLogger logr.Logger, hosts HostAccess, namespac
 				reqLogger.WithValues("spec", access, "privilege", privilege).Info("Skipping access spec: allDatabases feature not enabled")
 				continue
 			}
-			err := g.groupAllDatabasesByHost(hosts, host, namespace, access, privilege)
+			err := g.groupAllDatabasesByHost(reqLogger, hosts, host, namespace, access, privilege)
 			if err != nil {
 				errs = multierr.Append(errs, fmt.Errorf("all databases: %w", &AccessError{
 					Access: accesses[i],
@@ -104,10 +104,14 @@ func (g *Granter) groupByHosts(reqLogger logr.Logger, hosts HostAccess, namespac
 }
 
 // groupAllDatabasesByHost groups read write accesses for all known databases in the hosts access map.
-func (g *Granter) groupAllDatabasesByHost(hosts HostAccess, host string, namespace string, access lunarwayv1alpha1.AccessSpec, privilege postgres.Privilege) error {
+func (g *Granter) groupAllDatabasesByHost(reqLogger logr.Logger, hosts HostAccess, host string, namespace string, access lunarwayv1alpha1.AccessSpec, privilege postgres.Privilege) error {
 	databases, err := g.AllDatabases(namespace)
 	if err != nil {
 		return fmt.Errorf("get all databases: %w", err)
+	}
+	if len(databases) == 0 {
+		reqLogger.WithValues("spec", access, "privilege", privilege, "host", host).Info(fmt.Sprintf("Flag allDatabases results in no privileges granted: no PostgreSQLDatabase resources found on host '%s'", host))
+		return nil
 	}
 	var errs error
 	for _, databaseResource := range databases {
