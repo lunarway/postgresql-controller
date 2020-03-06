@@ -49,8 +49,10 @@ func (g *Granter) GroupAccesses(reqLogger logr.Logger, namespace string, reads [
 }
 
 func (g *Granter) groupByHosts(reqLogger logr.Logger, hosts HostAccess, namespace string, accesses []lunarwayv1alpha1.AccessSpec, privilege postgres.Privilege, allDatabasesEnabled bool) error {
+	reqLogger = reqLogger.WithValues("privilege", privilege)
 	var errs error
 	for i, access := range accesses {
+		reqLogger = reqLogger.WithValues("spec", access)
 		host, err := g.ResourceResolver(access.Host, namespace)
 		if err != nil {
 			errs = multierr.Append(errs, fmt.Errorf("resolve host: %w", &AccessError{
@@ -59,11 +61,13 @@ func (g *Granter) groupByHosts(reqLogger logr.Logger, hosts HostAccess, namespac
 			}))
 			continue
 		}
+		reqLogger = reqLogger.WithValues("host", host)
 		if access.AllDatabases {
 			if !allDatabasesEnabled {
-				reqLogger.WithValues("spec", access, "privilege", privilege).Info("Skipping access spec: allDatabases feature not enabled")
+				reqLogger.Info("Skipping access spec: allDatabases feature not enabled")
 				continue
 			}
+			reqLogger.Info("Grouping access for all databases on host")
 			err := g.groupAllDatabasesByHost(reqLogger, hosts, host, namespace, access, privilege)
 			if err != nil {
 				errs = multierr.Append(errs, fmt.Errorf("all databases: %w", &AccessError{
@@ -110,9 +114,10 @@ func (g *Granter) groupAllDatabasesByHost(reqLogger logr.Logger, hosts HostAcces
 		return fmt.Errorf("get all databases: %w", err)
 	}
 	if len(databases) == 0 {
-		reqLogger.WithValues("spec", access, "privilege", privilege, "host", host).Info(fmt.Sprintf("Flag allDatabases results in no privileges granted: no PostgreSQLDatabase resources found on host '%s'", host))
+		reqLogger.WithValues("spec", access, "privilege", privilege, "host", host, "namespace", namespace).Info(fmt.Sprintf("Flag allDatabases results in no privileges granted: no PostgreSQLDatabase resources found on host '%s'", host))
 		return nil
 	}
+	reqLogger.Info(fmt.Sprintf("Found %d databases on host", len(databases)))
 	var errs error
 	for _, databaseResource := range databases {
 		database := databaseResource.Spec.Name

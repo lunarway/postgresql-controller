@@ -9,6 +9,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/go-logr/logr"
+	"github.com/google/uuid"
 	"github.com/spf13/pflag"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/pkg/apis/lunarway/v1alpha1"
 	"go.lunarway.com/postgresql-controller/pkg/grants"
@@ -184,10 +185,16 @@ type ReconcilePostgreSQLUser struct {
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcilePostgreSQLUser) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
+	requestID, err := uuid.NewRandom()
+	if err != nil {
+		reqLogger.Error(err, "Failed to pick a request ID. Continuing without")
+	}
+	reqLogger = reqLogger.WithValues("requestId", requestID.String())
 	reqLogger.Info("Reconciling PostgreSQLUSer")
+
 	// Fetch the PostgreSQLUser instance
 	user := &lunarwayv1alpha1.PostgreSQLUser{}
-	err := r.client.Get(context.TODO(), request.NamespacedName, user)
+	err = r.client.Get(context.TODO(), request.NamespacedName, user)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -202,12 +209,13 @@ func (r *ReconcilePostgreSQLUser) Reconcile(request reconcile.Request) (reconcil
 
 	// User instance created or updated
 	reqLogger = reqLogger.WithValues("user", user.Spec.Name)
+	reqLogger.Info("Updating PostgreSQLUser resource")
 
-	reqLogger.Info("Reconciling PostgreSQLUser", "user", user.Spec.Name)
 	accesses, err := r.granter.GroupAccesses(reqLogger, request.Namespace, user.Spec.Read, user.Spec.Write)
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("group accesses: %w", err)
 	}
+	reqLogger.Info(fmt.Sprintf("Found access requests for %d hosts", len(accesses)))
 
 	hosts, err := r.connectToHosts(accesses)
 	if err != nil {
