@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/go-logr/logr"
+	"github.com/google/uuid"
 	"github.com/spf13/pflag"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/pkg/apis/lunarway/v1alpha1"
 	ctlerrors "go.lunarway.com/postgresql-controller/pkg/errors"
@@ -121,12 +122,18 @@ type ReconcilePostgreSQLDatabase struct {
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcilePostgreSQLDatabase) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
+	requestID, err := uuid.NewRandom()
+	if err != nil {
+		reqLogger.Error(err, "Failed to pick a request ID. Continuing without")
+	}
+	reqLogger = reqLogger.WithValues("requestId", requestID.String())
 	status, err := r.reconcile(reqLogger, request)
 	status.Persist(err)
 	return reconcile.Result{}, stopRequeueOnInvalid(reqLogger, err)
 }
 
 func (r *ReconcilePostgreSQLDatabase) reconcile(reqLogger logr.Logger, request reconcile.Request) (status, error) {
+	reqLogger.Info("Reconciling PostgreSQLDatabase")
 	// Fetch the PostgreSQLDatabase instance
 	database := &lunarwayv1alpha1.PostgreSQLDatabase{}
 	err := r.client.Get(context.TODO(), request.NamespacedName, database)
@@ -141,7 +148,7 @@ func (r *ReconcilePostgreSQLDatabase) reconcile(reqLogger logr.Logger, request r
 		return status{}, err
 	}
 	reqLogger = reqLogger.WithValues("database", database.Spec.Name)
-	reqLogger.Info("Reconciling PostgreSQLDatabase")
+	reqLogger.Info("Updating PostgreSQLDatabase resource")
 
 	status := status{
 		log:      reqLogger,
