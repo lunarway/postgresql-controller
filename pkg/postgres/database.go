@@ -16,6 +16,20 @@ type Credentials struct {
 	Name     string
 	User     string
 	Password string
+	Shared   bool
+}
+
+func (c Credentials) Validate() error {
+	if c.Name == "" {
+		return fmt.Errorf("name is empty")
+	}
+	if c.User == "" {
+		return fmt.Errorf("user is empty")
+	}
+	if c.Password == "" {
+		return fmt.Errorf("password is empty")
+	}
+	return nil
 }
 
 // ParseUsernamePassword parses string s as a PostgreSQL user name and password
@@ -37,16 +51,38 @@ func ParseUsernamePassword(s string) (Credentials, error) {
 	return c, nil
 }
 
+// Database ensures that a user with provided password exists on the host and
+// that read and readwrite roles are created with default priviledges on a
+// schema named after the database name.
 func Database(log logr.Logger, db *sql.DB, host string, credentials Credentials) error {
+	if host == "" {
+		return fmt.Errorf("host is required")
+	}
+	err := credentials.Validate()
+	if err != nil {
+		return fmt.Errorf("credentials not valid: %w", err)
+	}
+
 	// Create the service user
-	err := createUser(log, db, credentials.User, credentials.Password)
+	err = createUser(log, db, credentials.User, credentials.Password)
 	if err != nil {
 		return fmt.Errorf("create service user: %w", err)
 	}
 	var (
-		readRole      = fmt.Sprintf("%s_read", credentials.Name)
-		readWriteRole = fmt.Sprintf("%s_readwrite", credentials.Name)
+		readRole      = fmt.Sprintf("%s_read", credentials.User)
+		readWriteRole = fmt.Sprintf("%s_readwrite", credentials.User)
 	)
+
+	// if the database is shared we need to grant the existing database role to
+	// the user to allow it to create schemas etc. this is a terrible hack to
+	// support services using a shared database with mixed owners of the resources.
+	if credentials.Shared {
+		// ensures access to existing schemas and tables
+		err = execf(db, fmt.Sprintf("GRANT %s TO %s", credentials.Name, credentials.User))
+		if err != nil {
+			return fmt.Errorf("grant %s to service user %s: %w", credentials.Name, credentials.User, err)
+		}
+	}
 
 	// Create read and readwrite roles that can be used to grant users access to
 	// the objects in this database.
@@ -61,19 +97,23 @@ func Database(log logr.Logger, db *sql.DB, host string, credentials Credentials)
 		return fmt.Errorf("create service database '%s': %w", credentials.Name, err)
 	}
 
-	// Alter ownership of the database to the database user. The current user
-	// needs to belong to the new role before owner ship can be changed.
-	err = execf(db, "GRANT %s TO CURRENT_USER", credentials.Name)
-	if err != nil {
-		return fmt.Errorf("grant new role '%s' to creator role: %w", credentials.Name, err)
-	}
-	err = execf(db, "ALTER DATABASE %s OWNER TO %s", credentials.Name, credentials.Name)
-	if err != nil {
-		return fmt.Errorf("alter owner of database %s: %w", credentials.Name, err)
-	}
-	err = execf(db, "REVOKE %s FROM CURRENT_USER", credentials.Name)
-	if err != nil {
-		return fmt.Errorf("revoke new role '%s' to creator role: %w", credentials.Name, err)
+	// if the database is shared we cannot grant the service user ownership of the
+	// database as that would break the actual owners rights.
+	if !credentials.Shared {
+		// Alter ownership of the database to the database user. The current user
+		// needs to belong to the new role before owner ship can be changed.
+		err = execf(db, "GRANT %s TO CURRENT_USER", credentials.User)
+		if err != nil {
+			return fmt.Errorf("grant new role '%s' to creator role: %w", credentials.User, err)
+		}
+		err = execf(db, "ALTER DATABASE %s OWNER TO %s", credentials.Name, credentials.User)
+		if err != nil {
+			return fmt.Errorf("alter owner of database %s to %s: %w", credentials.Name, credentials.User, err)
+		}
+		err = execf(db, "REVOKE %s FROM CURRENT_USER", credentials.User)
+		if err != nil {
+			return fmt.Errorf("revoke new role '%s' to creator role: %w", credentials.User, err)
+		}
 	}
 
 	// Connect with the newly created role to create the schema with that role.
@@ -103,11 +143,11 @@ func Database(log logr.Logger, db *sql.DB, host string, credentials Credentials)
 
 	// set default read and write priviledges on the read and readwrite roles as
 	// to ensure the roles' priviledges apply to all objects created later on.
-	err = setReadPriviledges(serviceConnection, credentials.Name, readRole)
+	err = setReadPriviledges(serviceConnection, credentials.User, readRole)
 	if err != nil {
 		return fmt.Errorf("set default read priviledges for role %s: %w", readRole, err)
 	}
-	err = setReadWritePriviledges(serviceConnection, credentials.Name, readWriteRole)
+	err = setReadWritePriviledges(serviceConnection, credentials.User, readWriteRole)
 	if err != nil {
 		return fmt.Errorf("set default readwrite priviledges for role %s: %w", readWriteRole, err)
 	}
@@ -128,20 +168,20 @@ func Database(log logr.Logger, db *sql.DB, host string, credentials Credentials)
 	if err != nil {
 		return fmt.Errorf("grant connect to database '%s' to PUBLIC: %w", credentials.Name, err)
 	}
-	log.Info("Grant usage on schema to PUBLIC")
-	err = execf(serviceConnection, "GRANT USAGE ON SCHEMA %s TO PUBLIC", credentials.Name)
+	log.Info(fmt.Sprintf("Grant usage on schema '%s' to PUBLIC", credentials.User))
+	err = execf(serviceConnection, "GRANT USAGE ON SCHEMA %s TO PUBLIC", credentials.User)
 	if err != nil {
-		return fmt.Errorf("grant connect to database '%s' to PUBLIC: %w", credentials.Name, err)
+		return fmt.Errorf("grant usage on schema '%s' to PUBLIC: %w", credentials.User, err)
 	}
 	return nil
 }
 
-func createUser(log logr.Logger, db *sql.DB, name, password string) error {
-	log = log.WithValues("database", name)
+func createUser(log logr.Logger, db *sql.DB, user, password string) error {
+	log = log.WithValues("user", user)
 	return idempotentExec(log, db, idempotentExecReq{
 		objectType: "service user",
 		errorCode:  "duplicate_object",
-		query:      fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s' NOCREATEROLE VALID UNTIL 'infinity'", name, password),
+		query:      fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s' NOCREATEROLE VALID UNTIL 'infinity'", user, password),
 	})
 }
 

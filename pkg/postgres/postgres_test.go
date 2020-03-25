@@ -422,7 +422,8 @@ func createServiceDatabase(t *testing.T, log logr.Logger, database *sql.DB, host
 	t.Helper()
 	err := postgres.Database(log, database, host, postgres.Credentials{
 		Name:     service,
-		Password: "",
+		User:     service,
+		Password: "1234",
 	})
 	if err != nil {
 		t.Fatalf("Failed to create database: %v", err)

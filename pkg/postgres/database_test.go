@@ -93,6 +93,7 @@ func TestDatabase_sunshine(t *testing.T) {
 
 	err = postgres.Database(logf.Log, db, postgresqlHost, postgres.Credentials{
 		Name:     name,
+		User:     name,
 		Password: password,
 	})
 	if err != nil {
@@ -180,6 +181,7 @@ func TestDatabase_existingResourcePrivilegesForReadWriteRoles(t *testing.T) {
 	log.Info("TC: Run controller database creation")
 	err = postgres.Database(log, db, postgresqlHost, postgres.Credentials{
 		Name:     name,
+		User:     name,
 		Password: password,
 	})
 	if err != nil {
@@ -219,7 +221,7 @@ func TestDatabase_existingResourcePrivilegesForReadWriteRoles(t *testing.T) {
 func TestDatabase_defaultDatabaseName(t *testing.T) {
 	postgresqlHost := test.Integration(t)
 	log := test.SetLogger(t)
-	log.Info("TC: Connection as iam_creator")
+	log.Info("TC: Connecting as iam_creator")
 	db, err := postgres.Connect(log, postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: "postgres",
@@ -231,14 +233,25 @@ func TestDatabase_defaultDatabaseName(t *testing.T) {
 	}
 	defer db.Close()
 
-	// default database on the postgres instance
-	name := "postgres"
-	password := "test"
-
-	log.Info("TC: Run controller database creation")
+	// setup a database that will be shared
+	log.Info("TC: Create a legacy database that will be shared with other services")
 	err = postgres.Database(log, db, postgresqlHost, postgres.Credentials{
-		Name:     name,
-		Password: password,
+		Name:     "legacy",
+		User:     "legacy",
+		Password: "legacy_pass",
+		Shared:   false,
+	})
+	if err != nil {
+		t.Fatalf("create legacy database failed: %v", err)
+	}
+
+	// setup a new schema on the shared database
+	log.Info("TC: Request new database using default postgres database (postgres)")
+	err = postgres.Database(log, db, postgresqlHost, postgres.Credentials{
+		Name:     "legacy",
+		User:     "service",
+		Password: "service_pass",
+		Shared:   true,
 	})
 	if err != nil {
 		t.Fatalf("Create service database failed: %v", err)
@@ -264,6 +277,7 @@ func TestDatabase_idempotency(t *testing.T) {
 
 	err = postgres.Database(log, db, postgresqlHost, postgres.Credentials{
 		Name:     name,
+		User:     name,
 		Password: password,
 	})
 	if err != nil {
@@ -273,6 +287,7 @@ func TestDatabase_idempotency(t *testing.T) {
 	// Invoke again with same name
 	err = postgres.Database(log, db, postgresqlHost, postgres.Credentials{
 		Name:     name,
+		User:     name,
 		Password: password,
 	})
 	if err != nil {
