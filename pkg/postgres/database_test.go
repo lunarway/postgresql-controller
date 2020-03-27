@@ -258,6 +258,141 @@ func TestDatabase_defaultDatabaseName(t *testing.T) {
 	}
 }
 
+// TestDatabase_mixedOwnershipOnSharedDatabase tests that we can handle shared
+// databases where ownership is mixed. It will setup a shared database and
+// create a role for it. It then creates a table with the shared user and a
+// table with a service user. Lastly it verifies that both the service role and
+// a developer requesting access to it can access data on both the non-owned and
+// owned tables.
+func TestDatabase_mixedOwnershipOnSharedDatabase(t *testing.T) {
+	postgresqlHost := test.Integration(t)
+	log := test.NewLogger(t)
+	log.Info("TC: Connecting as iam_creator on defaul database")
+	db, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		Database: "postgres",
+		User:     "iam_creator",
+		Password: "",
+	})
+	if err != nil {
+		t.Fatalf("connect to default database failed: %v", err)
+	}
+	defer db.Close()
+
+	epoch := time.Now().UnixNano()
+	sharedDatabaseName := fmt.Sprintf("shared_%d", epoch)
+
+	// create the shared database with a role of the same name and owned by the
+	// shared role
+	dbExec(t, db, `CREATE ROLE %s WITH login`, sharedDatabaseName)
+	dbExec(t, db, `CREATE ROLE %s_read`, sharedDatabaseName)
+	dbExec(t, db, `CREATE ROLE %s_readwrite`, sharedDatabaseName)
+	dbExec(t, db, `CREATE DATABASE %s`, sharedDatabaseName)
+	dbExec(t, db, `GRANT %s TO CURRENT_USER`, sharedDatabaseName)
+	dbExec(t, db, `ALTER DATABASE %s OWNER TO %s`, sharedDatabaseName, sharedDatabaseName)
+	dbExec(t, db, `REVOKE %s FROM CURRENT_USER`, sharedDatabaseName)
+
+	// connect to shared database with created role
+	sharedConn, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		Database: sharedDatabaseName,
+		User:     sharedDatabaseName,
+		Password: "",
+	})
+	if err != nil {
+		t.Fatalf("connect to sahred database failed: %v", err)
+	}
+	defer sharedConn.Close()
+
+	newUser := "new_user"
+
+	// create schema and table that is to be used by a new role but owned by the
+	// existing shared user
+	dbExec(t, sharedConn, `CREATE SCHEMA %s`, newUser)
+	dbExec(t, sharedConn, `CREATE TABLE %s.not_owned (title varchar(40) NOT NULL)`, newUser)
+	dbExec(t, sharedConn, `INSERT INTO %s.not_owned VALUES('value-from-shared-user')`, newUser)
+
+	// create schema and table that should not be possible to access with the new
+	// shared user
+	dbExec(t, sharedConn, `CREATE SCHEMA another`)
+	dbExec(t, sharedConn, `CREATE TABLE another.another (title varchar(40) NOT NULL)`)
+	dbExec(t, sharedConn, `INSERT INTO another.another VALUES('another')`)
+
+	// this is the functionality we want to ensure works. It requests access to a
+	// shared database with a new user where the schema exists created by the
+	// shared user
+	log.Info("TC: Create new_user database on shared database")
+	err = postgres.Database(log, db, postgresqlHost, postgres.Credentials{
+		Name:     sharedDatabaseName,
+		User:     newUser,
+		Password: newUser,
+		Shared:   true,
+	})
+	if err != nil {
+		t.Fatalf("create new_user schema on shared database failed: %v", err)
+	}
+
+	// connect as the new user and do some queries to ensure permissions are
+	// correct
+	newUserConn, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		Database: sharedDatabaseName,
+		User:     newUser,
+		Password: newUser,
+	})
+	if err != nil {
+		t.Fatalf("connect to shared database failed: %v", err)
+	}
+	defer newUserConn.Close()
+
+	// validate that we can create tables and insert data into them
+	dbExec(t, newUserConn, `CREATE TABLE %s.owned (title varchar(40) NOT NULL)`, newUser)
+	dbExec(t, newUserConn, `INSERT INTO %s.owned VALUES('owned-row')`, newUser)
+
+	// validate that we can insert rows into the existing non-owned table
+	dbExec(t, newUserConn, `INSERT INTO %s.not_owned VALUES('value-from-new-user')`, newUser)
+
+	// validate that we can query data from the owned table
+	ownedRows := dbQuery(t, newUserConn, `SELECT * FROM %s.owned`, newUser)
+	assert.Equal(t, []string{"owned-row"}, ownedRows, "owned rows not as expected")
+
+	// validate that we can query data from the existing non-owned table
+	nonOwned := dbQuery(t, newUserConn, `SELECT * FROM %s.not_owned`, newUser)
+	assert.Equal(t, []string{"value-from-new-user", "value-from-shared-user"}, nonOwned, "nonowned rows not as expected")
+
+	// request access to the new user schema of the shared database
+	err = postgres.Role(log, db, "developer", nil, []postgres.DatabaseSchema{
+		postgres.DatabaseSchema{
+			Name:       newUser,
+			Privileges: postgres.PrivilegeRead,
+			Schema:     newUser,
+		},
+	})
+	if err != nil {
+		t.Fatalf("create developer role to new user database failed: %v", err)
+	}
+
+	// connect as the developer on the shared database
+	developerConn, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		Database: sharedDatabaseName,
+		User:     "developer",
+		Password: "",
+	})
+	if err != nil {
+		t.Fatalf("connect to newUser with developer failed: %v", err)
+	}
+	defer developerConn.Close()
+
+	// validate that the developer can query data from the owned table
+	developerOwnedRows := dbQuery(t, developerConn, `SELECT * FROM %s.owned`, newUser)
+	assert.Equal(t, []string{"owned-row"}, developerOwnedRows, "owned rows not as expected")
+
+	// validate that we can query data from the existing non-owned table
+	developerNonOwnedRows := dbQuery(t, developerConn, `SELECT * FROM %s.not_owned`, newUser)
+	assert.Equal(t, []string{"value-from-new-user", "value-from-shared-user"}, developerNonOwnedRows, "nonowned rows not as expected")
+}
+
 func TestDatabase_idempotency(t *testing.T) {
 	postgresqlHost := test.Integration(t)
 	log := test.SetLogger(t)

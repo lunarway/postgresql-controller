@@ -487,3 +487,14 @@ func dbExec(t *testing.T, db *sql.DB, query string, args ...interface{}) {
 		t.Fatalf("DB EXEC failed: Query: %s: %v", query, err)
 	}
 }
+
+func dbQuery(t *testing.T, db *sql.DB, query string, args ...interface{}) []string {
+	t.Helper()
+	query = fmt.Sprintf(query, args...)
+	rows, err := db.Query(query)
+	if err != nil {
+		t.Fatalf("DB QUERY failed: Query: %s: %v", query, err)
+		return nil
+	}
+	return stringsResult(t, rows)
+}
