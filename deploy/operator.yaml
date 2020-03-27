@@ -15,7 +15,7 @@ spec:
       serviceAccountName: postgresql-controller
       containers:
         - name: postgresql-controller
-          image: quay.io/lunarway/postgresql-controller:v0.0.10
+          image: quay.io/lunarway/postgresql-controller:v0.0.11
           command:
           - postgresql-controller
           imagePullPolicy: Always
