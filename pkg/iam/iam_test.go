@@ -2,8 +2,9 @@ package iam
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestPolicyDocument_appendStatement(t *testing.T) {
@@ -53,5 +54,5 @@ func entry(userID string) StatementEntry {
 		Effect:    "Allow",
 		Action:    []string{"rds-db:connect"},
 		Resource:  []string{fmt.Sprintf("arn:aws:rds-db:%s:%s:dbuser:*/iam_developer_%s", "region", "account", userID)},
-		Condition: StringLike{StringLike: UserID{AWSUserID: fmt.Sprintf("*:%s@lunarway.com", userID)}}}
+		Condition: StringLike{StringLike: UserID{AWSUserID: fmt.Sprintf("*:%s@lunar.app", userID)}}}
 }

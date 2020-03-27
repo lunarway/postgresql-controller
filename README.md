@@ -144,7 +144,7 @@ A policy will also be added to AWS IAM for the specific user allowing it to conn
       ],
       "Condition": {
         "StringLike": {
-          "aws:userid": "*:<name>@lunarway.com"
+          "aws:userid": "*:<name>@lunar.app"
         }
       }
     }

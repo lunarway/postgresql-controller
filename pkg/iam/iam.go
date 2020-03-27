@@ -107,7 +107,7 @@ func SetAWSPolicy(log logr.Logger, credentials *credentials.Credentials, policy 
 }
 
 func (p *PolicyDocument) appendStatement(userID, awsAccountID, region string) {
-	awsUserID := fmt.Sprintf("*:%s@lunarway.com", userID)
+	awsUserID := fmt.Sprintf("*:%s@lunar.app", userID)
 	s := StatementEntry{
 		Effect:    "Allow",
 		Action:    []string{"rds-db:connect"},
