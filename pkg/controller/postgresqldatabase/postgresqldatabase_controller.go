@@ -147,8 +147,12 @@ func (r *ReconcilePostgreSQLDatabase) reconcile(reqLogger logr.Logger, request r
 		// Error reading the object - requeue the request.
 		return status{}, err
 	}
-	reqLogger = reqLogger.WithValues("database", database.Spec.Name)
-	reqLogger = reqLogger.WithValues("database", database.Spec.Name, "user", database.Spec.User)
+	reqLogger = reqLogger.WithValues(
+		"database", database.Spec.Name,
+		"user", database.Spec.User,
+		"databaseName", database.Spec.Name,
+		"isShared", database.Spec.IsShared,
+	)
 	reqLogger.Info("Updating PostgreSQLDatabase resource")
 
 	status := status{
@@ -171,9 +175,10 @@ func (r *ReconcilePostgreSQLDatabase) reconcile(reqLogger logr.Logger, request r
 	if err != nil {
 		return status, fmt.Errorf("resolve password reference: %w", err)
 	}
+	isShared := database.Spec.IsShared
 
 	// Ensure the database is in sync with the object
-	err = r.EnsurePostgreSQLDatabase(reqLogger, host, database.Spec.Name, user, password)
+	err = r.EnsurePostgreSQLDatabase(reqLogger, host, database.Spec.Name, user, password, isShared)
 	if err != nil {
 		return status, fmt.Errorf("ensure database: %w", err)
 	}
@@ -244,7 +249,7 @@ func stopRequeueOnInvalid(log logr.Logger, err error) error {
 	return nil
 }
 
-func (r *ReconcilePostgreSQLDatabase) EnsurePostgreSQLDatabase(log logr.Logger, host, name, user, password string) error {
+func (r *ReconcilePostgreSQLDatabase) EnsurePostgreSQLDatabase(log logr.Logger, host, name, user, password string, isShared bool) error {
 	credentials, ok := r.hostCredentials[host]
 	if !ok {
 		return &ctlerrors.Invalid{
@@ -264,12 +269,14 @@ func (r *ReconcilePostgreSQLDatabase) EnsurePostgreSQLDatabase(log logr.Logger, 
 	defer func() {
 		err := db.Close()
 		if err != nil {
-			log.Error(err, "failed to close database connection", "host", host, "database", "postgres", "user", name)
+			log.Error(err, "failed to close database connection", "host", host, "database", "postgres", "user", credentials.Name)
 		}
 	}()
 	err = postgres.Database(log, db, host, postgres.Credentials{
 		Name:     name,
+		User:     user,
 		Password: password,
+		Shared:   isShared,
 	})
 	if err != nil {
 		return fmt.Errorf("create database %s on host %s: %w", name, connectionString, err)
