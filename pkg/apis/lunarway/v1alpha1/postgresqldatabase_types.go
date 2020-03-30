@@ -16,10 +16,10 @@ type PostgreSQLDatabaseSpec struct {
 	// Password used with the User name to connect to the database
 	Password ResourceVar `json:"password"`
 
-	// IsShared indicates if the database is shared between multiple
+	// IsShared indicates whether the database is shared between multiple
 	// PostgreSQLDatabase objects. The controller will not grant ownership of the
 	// database if this is set to true. Further the owning role of the database is
-	// granted to this user to allow access tot he resources it may have created
+	// granted to this user to allow access to the resources it may have created
 	// before this user was enabled.
 	//
 	// This option is here to support legacy applications sharing database
@@ -28,7 +28,7 @@ type PostgreSQLDatabaseSpec struct {
 	// +optional
 	IsShared bool `json:"isShared"`
 
-	// Host
+	// Host that the database should be created on.
 	Host ResourceVar `json:"host"`
 }
 

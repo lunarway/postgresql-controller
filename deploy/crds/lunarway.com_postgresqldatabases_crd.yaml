@@ -51,7 +51,7 @@ spec:
           description: PostgreSQLDatabaseSpec defines the desired state of PostgreSQLDatabase
           properties:
             host:
-              description: Host
+              description: Host that the database should be created on.
               properties:
                 value:
                   description: Defaults to "".
@@ -92,13 +92,13 @@ spec:
                   type: object
               type: object
             isShared:
-              description: "IsShared indicates if the database is shared between multiple
-                PostgreSQLDatabase objects. The controller will not grant ownership
-                of the database if this is set to true. Further the owning role of
-                the database is granted to this user to allow access tot he resources
-                it may have created before this user was enabled. \n This option is
-                here to support legacy applications sharing database instances and
-                should never be used for new databases."
+              description: "IsShared indicates whether the database is shared between
+                multiple PostgreSQLDatabase objects. The controller will not grant
+                ownership of the database if this is set to true. Further the owning
+                role of the database is granted to this user to allow access to the
+                resources it may have created before this user was enabled. \n This
+                option is here to support legacy applications sharing database instances
+                and should never be used for new databases."
               type: boolean
             name:
               description: Name of the database

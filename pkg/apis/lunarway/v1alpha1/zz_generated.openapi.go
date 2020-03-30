@@ -92,14 +92,14 @@ func schema_pkg_apis_lunarway_v1alpha1_PostgreSQLDatabaseSpec(ref common.Referen
 					},
 					"isShared": {
 						SchemaProps: spec.SchemaProps{
-							Description: "IsShared indicates if the database is shared between multiple PostgreSQLDatabase objects. The controller will not grant ownership of the database if this is set to true. Further the owning role of the database is granted to this user to allow access tot he resources it may have created before this user was enabled.\n\nThis option is here to support legacy applications sharing database instances and should never be used for new databases.",
+							Description: "IsShared indicates whether the database is shared between multiple PostgreSQLDatabase objects. The controller will not grant ownership of the database if this is set to true. Further the owning role of the database is granted to this user to allow access to the resources it may have created before this user was enabled.\n\nThis option is here to support legacy applications sharing database instances and should never be used for new databases.",
 							Type:        []string{"boolean"},
 							Format:      "",
 						},
 					},
 					"host": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Host",
+							Description: "Host that the database should be created on.",
 							Ref:         ref("./pkg/apis/lunarway/v1alpha1.ResourceVar"),
 						},
 					},
