@@ -149,8 +149,6 @@ func (r *ReconcilePostgreSQLDatabase) reconcile(reqLogger logr.Logger, request r
 	}
 	reqLogger = reqLogger.WithValues(
 		"database", database.Spec.Name,
-		"user", database.Spec.User,
-		"databaseName", database.Spec.Name,
 		"isShared", database.Spec.IsShared,
 	)
 	reqLogger.Info("Updating PostgreSQLDatabase resource")
@@ -166,16 +164,20 @@ func (r *ReconcilePostgreSQLDatabase) reconcile(reqLogger logr.Logger, request r
 		return status, fmt.Errorf("resolve host reference: %w", err)
 	}
 	status.host = host
+	reqLogger = reqLogger.WithValues("host", host)
 	user, err := kube.ResourceValue(r.client, database.Spec.User, request.Namespace)
 	if err != nil {
 		return status, fmt.Errorf("resolve user reference: %w", err)
 	}
 	status.user = user
+	reqLogger = reqLogger.WithValues("user", user)
 	password, err := kube.ResourceValue(r.client, database.Spec.Password, request.Namespace)
 	if err != nil {
 		return status, fmt.Errorf("resolve password reference: %w", err)
 	}
 	isShared := database.Spec.IsShared
+
+	reqLogger.Info("Resolved all referenced values for PostgreSQLDatabase resource")
 
 	// Ensure the database is in sync with the object
 	err = r.EnsurePostgreSQLDatabase(reqLogger, host, database.Spec.Name, user, password, isShared)
