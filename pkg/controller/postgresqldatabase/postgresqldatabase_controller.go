@@ -147,7 +147,10 @@ func (r *ReconcilePostgreSQLDatabase) reconcile(reqLogger logr.Logger, request r
 		// Error reading the object - requeue the request.
 		return status{}, err
 	}
-	reqLogger = reqLogger.WithValues("database", database.Spec.Name)
+	reqLogger = reqLogger.WithValues(
+		"database", database.Spec.Name,
+		"isShared", database.Spec.IsShared,
+	)
 	reqLogger.Info("Updating PostgreSQLDatabase resource")
 
 	status := status{
@@ -161,13 +164,28 @@ func (r *ReconcilePostgreSQLDatabase) reconcile(reqLogger logr.Logger, request r
 		return status, fmt.Errorf("resolve host reference: %w", err)
 	}
 	status.host = host
+	reqLogger = reqLogger.WithValues("host", host)
+	user, err := kube.ResourceValue(r.client, database.Spec.User, request.Namespace)
+	if err != nil {
+		if !ctlerrors.IsInvalid(err) {
+			return status, fmt.Errorf("resolve user reference: %w", err)
+		}
+		// backwards compatibility to support resources without a User
+		reqLogger.Info("User name fallback to database name")
+		user = database.Spec.Name
+	}
+	status.user = user
+	reqLogger = reqLogger.WithValues("user", user)
 	password, err := kube.ResourceValue(r.client, database.Spec.Password, request.Namespace)
 	if err != nil {
 		return status, fmt.Errorf("resolve password reference: %w", err)
 	}
+	isShared := database.Spec.IsShared
+
+	reqLogger.Info("Resolved all referenced values for PostgreSQLDatabase resource")
 
 	// Ensure the database is in sync with the object
-	err = r.EnsurePostgreSQLDatabase(reqLogger, host, database.Spec.Name, password)
+	err = r.EnsurePostgreSQLDatabase(reqLogger, host, database.Spec.Name, user, password, isShared)
 	if err != nil {
 		return status, fmt.Errorf("ensure database: %w", err)
 	}
@@ -181,6 +199,7 @@ type status struct {
 
 	database *lunarwayv1alpha1.PostgreSQLDatabase
 	host     string
+	user     string
 }
 
 // Persist writes the status to a PostgreSQLDatabase instance and persists it on
@@ -221,6 +240,7 @@ func (s *status) update(err error) bool {
 	s.database.Status.PhaseUpdated = s.now()
 	s.database.Status.Phase = phase
 	s.database.Status.Host = s.host
+	s.database.Status.User = s.user
 	s.database.Status.Error = errorMessage
 	return true
 }
@@ -237,7 +257,7 @@ func stopRequeueOnInvalid(log logr.Logger, err error) error {
 	return nil
 }
 
-func (r *ReconcilePostgreSQLDatabase) EnsurePostgreSQLDatabase(log logr.Logger, host, name, password string) error {
+func (r *ReconcilePostgreSQLDatabase) EnsurePostgreSQLDatabase(log logr.Logger, host, name, user, password string, isShared bool) error {
 	credentials, ok := r.hostCredentials[host]
 	if !ok {
 		return &ctlerrors.Invalid{
@@ -257,12 +277,14 @@ func (r *ReconcilePostgreSQLDatabase) EnsurePostgreSQLDatabase(log logr.Logger, 
 	defer func() {
 		err := db.Close()
 		if err != nil {
-			log.Error(err, "failed to close database connection", "host", host, "database", "postgres", "user", name)
+			log.Error(err, "failed to close database connection", "host", host, "database", "postgres", "user", credentials.Name)
 		}
 	}()
 	err = postgres.Database(log, db, host, postgres.Credentials{
 		Name:     name,
+		User:     user,
 		Password: password,
+		Shared:   isShared,
 	})
 	if err != nil {
 		return fmt.Errorf("create database %s on host %s: %w", name, connectionString, err)

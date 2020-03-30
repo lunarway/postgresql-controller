@@ -422,7 +422,8 @@ func createServiceDatabase(t *testing.T, log logr.Logger, database *sql.DB, host
 	t.Helper()
 	err := postgres.Database(log, database, host, postgres.Credentials{
 		Name:     service,
-		Password: "",
+		User:     service,
+		Password: "1234",
 	})
 	if err != nil {
 		t.Fatalf("Failed to create database: %v", err)
@@ -485,4 +486,15 @@ func dbExec(t *testing.T, db *sql.DB, query string, args ...interface{}) {
 	if err != nil {
 		t.Fatalf("DB EXEC failed: Query: %s: %v", query, err)
 	}
+}
+
+func dbQuery(t *testing.T, db *sql.DB, query string, args ...interface{}) []string {
+	t.Helper()
+	query = fmt.Sprintf(query, args...)
+	rows, err := db.Query(query)
+	if err != nil {
+		t.Fatalf("DB QUERY failed: Query: %s: %v", query, err)
+		return nil
+	}
+	return stringsResult(t, rows)
 }

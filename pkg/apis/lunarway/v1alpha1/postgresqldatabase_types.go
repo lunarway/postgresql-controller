@@ -10,10 +10,26 @@ type PostgreSQLDatabaseSpec struct {
 	// Name of the database
 	Name string `json:"name"`
 
-	// Password
+	// User name used to connect to the database. If empty Name is used.
+	// +optional
+	User ResourceVar `json:"user"`
+
+	// Password used with the User name to connect to the database
 	Password ResourceVar `json:"password"`
 
-	// Host
+	// IsShared indicates whether the database is shared between multiple
+	// PostgreSQLDatabase objects. The controller will not grant ownership of the
+	// database if this is set to true. Further the owning role of the database is
+	// granted to this user to allow access to the resources it may have created
+	// before this user was enabled.
+	//
+	// This option is here to support legacy applications sharing database
+	// instances and should never be used for new databases.
+	//
+	// +optional
+	IsShared bool `json:"isShared"`
+
+	// Host that the database should be created on.
 	Host ResourceVar `json:"host"`
 }
 
@@ -34,6 +50,7 @@ type PostgreSQLDatabaseStatus struct {
 	PhaseUpdated metav1.Time             `json:"phaseUpdated"`
 	Phase        PostgreSQLDatabasePhase `json:"phase"`
 	Host         string                  `json:"host,omitempty"`
+	User         string                  `json:"user,omitempty"`
 	Error        string                  `json:"error,omitempty"`
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html

@@ -7,4 +7,6 @@ spec:
   password:
     value: "1234"
   host:
-    value: "localhost:5432"
+    value: "postgresql:5432"
+  user:
+    value: "username"

@@ -51,7 +51,7 @@ spec:
           description: PostgreSQLDatabaseSpec defines the desired state of PostgreSQLDatabase
           properties:
             host:
-              description: Host
+              description: Host that the database should be created on.
               properties:
                 value:
                   description: Defaults to "".
@@ -91,11 +91,62 @@ spec:
                       type: object
                   type: object
               type: object
+            isShared:
+              description: "IsShared indicates whether the database is shared between
+                multiple PostgreSQLDatabase objects. The controller will not grant
+                ownership of the database if this is set to true. Further the owning
+                role of the database is granted to this user to allow access to the
+                resources it may have created before this user was enabled. \n This
+                option is here to support legacy applications sharing database instances
+                and should never be used for new databases."
+              type: boolean
             name:
               description: Name of the database
               type: string
             password:
-              description: Password
+              description: Password used with the User name to connect to the database
+              properties:
+                value:
+                  description: Defaults to "".
+                  type: string
+                valueFrom:
+                  description: Source to read the value from.
+                  properties:
+                    configMapKeyRef:
+                      description: Selects a key of a config map in the custom resource's
+                        namespace
+                      properties:
+                        key:
+                          description: The key of the secret or config map to select
+                            from.  Must be a valid key.
+                          type: string
+                        name:
+                          description: The name of the secret or config map in the
+                            namespace to select from.
+                          type: string
+                      required:
+                      - key
+                      type: object
+                    secretKeyRef:
+                      description: Selects a key of a secret in the custom resource's
+                        namespace
+                      properties:
+                        key:
+                          description: The key of the secret or config map to select
+                            from.  Must be a valid key.
+                          type: string
+                        name:
+                          description: The name of the secret or config map in the
+                            namespace to select from.
+                          type: string
+                      required:
+                      - key
+                      type: object
+                  type: object
+              type: object
+            user:
+              description: User name used to connect to the database. If empty Name
+                is used.
               properties:
                 value:
                   description: Defaults to "".
@@ -153,6 +204,8 @@ spec:
               type: string
             phaseUpdated:
               format: date-time
+              type: string
+            user:
               type: string
           required:
           - phase

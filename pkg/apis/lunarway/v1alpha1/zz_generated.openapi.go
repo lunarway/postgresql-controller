@@ -78,15 +78,28 @@ func schema_pkg_apis_lunarway_v1alpha1_PostgreSQLDatabaseSpec(ref common.Referen
 							Format:      "",
 						},
 					},
+					"user": {
+						SchemaProps: spec.SchemaProps{
+							Description: "User name used to connect to the database. If empty Name is used.",
+							Ref:         ref("./pkg/apis/lunarway/v1alpha1.ResourceVar"),
+						},
+					},
 					"password": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Password",
+							Description: "Password used with the User name to connect to the database",
 							Ref:         ref("./pkg/apis/lunarway/v1alpha1.ResourceVar"),
+						},
+					},
+					"isShared": {
+						SchemaProps: spec.SchemaProps{
+							Description: "IsShared indicates whether the database is shared between multiple PostgreSQLDatabase objects. The controller will not grant ownership of the database if this is set to true. Further the owning role of the database is granted to this user to allow access to the resources it may have created before this user was enabled.\n\nThis option is here to support legacy applications sharing database instances and should never be used for new databases.",
+							Type:        []string{"boolean"},
+							Format:      "",
 						},
 					},
 					"host": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Host",
+							Description: "Host that the database should be created on.",
 							Ref:         ref("./pkg/apis/lunarway/v1alpha1.ResourceVar"),
 						},
 					},
@@ -118,6 +131,12 @@ func schema_pkg_apis_lunarway_v1alpha1_PostgreSQLDatabaseStatus(ref common.Refer
 						},
 					},
 					"host": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"user": {
 						SchemaProps: spec.SchemaProps{
 							Type:   []string{"string"},
 							Format: "",
