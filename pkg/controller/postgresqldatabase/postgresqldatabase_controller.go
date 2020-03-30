@@ -235,6 +235,7 @@ func (s *status) update(err error) bool {
 	s.database.Status.PhaseUpdated = s.now()
 	s.database.Status.Phase = phase
 	s.database.Status.Host = s.host
+	s.database.Status.User = s.user
 	s.database.Status.Error = errorMessage
 	return true
 }

@@ -205,6 +205,8 @@ spec:
             phaseUpdated:
               format: date-time
               type: string
+            user:
+              type: string
           required:
           - phase
           - phaseUpdated
