@@ -10,7 +10,8 @@ type PostgreSQLDatabaseSpec struct {
 	// Name of the database
 	Name string `json:"name"`
 
-	// User name used to connect to the database
+	// User name used to connect to the database. If empty Name is used.
+	// +optional
 	User ResourceVar `json:"user"`
 
 	// Password used with the User name to connect to the database

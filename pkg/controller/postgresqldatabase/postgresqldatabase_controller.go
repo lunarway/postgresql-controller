@@ -167,7 +167,12 @@ func (r *ReconcilePostgreSQLDatabase) reconcile(reqLogger logr.Logger, request r
 	reqLogger = reqLogger.WithValues("host", host)
 	user, err := kube.ResourceValue(r.client, database.Spec.User, request.Namespace)
 	if err != nil {
-		return status, fmt.Errorf("resolve user reference: %w", err)
+		if !ctlerrors.IsInvalid(err) {
+			return status, fmt.Errorf("resolve user reference: %w", err)
+		}
+		// backwards compatibility to support resources without a User
+		reqLogger.Info("User name fallback to database name")
+		user = database.Spec.Name
 	}
 	status.user = user
 	reqLogger = reqLogger.WithValues("user", user)

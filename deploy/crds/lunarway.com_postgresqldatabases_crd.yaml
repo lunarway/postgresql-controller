@@ -145,7 +145,8 @@ spec:
                   type: object
               type: object
             user:
-              description: User name used to connect to the database
+              description: User name used to connect to the database. If empty Name
+                is used.
               properties:
                 value:
                   description: Defaults to "".
@@ -189,7 +190,6 @@ spec:
           - host
           - name
           - password
-          - user
           type: object
         status:
           description: PostgreSQLDatabaseStatus defines the observed state of PostgreSQLDatabase

@@ -80,7 +80,7 @@ func schema_pkg_apis_lunarway_v1alpha1_PostgreSQLDatabaseSpec(ref common.Referen
 					},
 					"user": {
 						SchemaProps: spec.SchemaProps{
-							Description: "User name used to connect to the database",
+							Description: "User name used to connect to the database. If empty Name is used.",
 							Ref:         ref("./pkg/apis/lunarway/v1alpha1.ResourceVar"),
 						},
 					},
@@ -104,7 +104,7 @@ func schema_pkg_apis_lunarway_v1alpha1_PostgreSQLDatabaseSpec(ref common.Referen
 						},
 					},
 				},
-				Required: []string{"name", "user", "password", "host"},
+				Required: []string{"name", "password", "host"},
 			},
 		},
 		Dependencies: []string{
