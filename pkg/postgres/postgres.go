@@ -113,10 +113,15 @@ func Role(log logr.Logger, db *sql.DB, name string, roles []string, databases []
 		if len(schemaPrivileges) == 0 {
 			continue
 		}
+		schema := database.Schema
+		if strings.EqualFold(schema, "public") {
+			schema = database.Name
+		}
+		schemaPrivileges = fmt.Sprintf("%s_%s", schema, schemaPrivileges)
 		log.Info(fmt.Sprintf("Granting %s to %s", schemaPrivileges, name))
-		_, err = db.Exec(fmt.Sprintf("GRANT %s_%s TO %s", database.Name, schemaPrivileges, name))
+		_, err = db.Exec(fmt.Sprintf("GRANT %s TO %s", schemaPrivileges, name))
 		if err != nil {
-			return fmt.Errorf("grant access privileges '%s' on schema '%s': %w", schemaPrivileges, database.Schema, err)
+			return fmt.Errorf("grant access privileges '%s' on schema '%s': %w", schemaPrivileges, schema, err)
 		}
 	}
 	return nil

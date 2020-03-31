@@ -142,6 +142,9 @@ func TestReconcilePostgreSQLUser_groupAccesses_withAllDatabases(t *testing.T) {
 				Host: lunarwayv1alpha1.ResourceVar{
 					Value: host,
 				},
+				User: lunarwayv1alpha1.ResourceVar{
+					Value: "user",
+				},
 			},
 		}
 	}
@@ -159,7 +162,7 @@ func TestReconcilePostgreSQLUser_groupAccesses_withAllDatabases(t *testing.T) {
 			Host: host,
 			Database: postgres.DatabaseSchema{
 				Name:       database,
-				Schema:     database,
+				Schema:     "user",
 				Privileges: privilige,
 			},
 			Access: spec(host, reason),
@@ -316,6 +319,9 @@ func TestReconcilePostgreSQLUser_groupAccesses_allDatabasesFeatureFlags(t *testi
 				Host: lunarwayv1alpha1.ResourceVar{
 					Value: host,
 				},
+				User: lunarwayv1alpha1.ResourceVar{
+					Value: "user",
+				},
 			},
 		}
 	}
@@ -333,7 +339,7 @@ func TestReconcilePostgreSQLUser_groupAccesses_allDatabasesFeatureFlags(t *testi
 			Host: host,
 			Database: postgres.DatabaseSchema{
 				Name:       database,
-				Schema:     database,
+				Schema:     "user",
 				Privileges: privilige,
 			},
 			Access: spec(host, reason),
@@ -422,6 +428,9 @@ func TestReconcilePostgreSQLUser_groupAccesses_mixedSpecs(t *testing.T) {
 				Host: lunarwayv1alpha1.ResourceVar{
 					Value: host,
 				},
+				User: lunarwayv1alpha1.ResourceVar{
+					Value: "user",
+				},
 			},
 		}
 	}
@@ -443,7 +452,7 @@ func TestReconcilePostgreSQLUser_groupAccesses_mixedSpecs(t *testing.T) {
 				Value: database,
 			},
 			Schema: lunarwayv1alpha1.ResourceVar{
-				Value: database,
+				Value: "user",
 			},
 			Reason: reason,
 		}
@@ -453,7 +462,7 @@ func TestReconcilePostgreSQLUser_groupAccesses_mixedSpecs(t *testing.T) {
 			Host: host,
 			Database: postgres.DatabaseSchema{
 				Name:       database,
-				Schema:     database,
+				Schema:     "user",
 				Privileges: privilige,
 			},
 			Access: allDatabasesSpec(host, reason),
@@ -464,7 +473,7 @@ func TestReconcilePostgreSQLUser_groupAccesses_mixedSpecs(t *testing.T) {
 			Host: host,
 			Database: postgres.DatabaseSchema{
 				Name:       database,
-				Schema:     database,
+				Schema:     "user",
 				Privileges: privilige,
 			},
 			Access: singleDatabaseSpec(host, database, reason),
