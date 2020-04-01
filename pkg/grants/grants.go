@@ -117,22 +117,26 @@ func (g *Granter) groupAllDatabasesByHost(reqLogger logr.Logger, hosts HostAcces
 		reqLogger.WithValues("spec", access, "privilege", privilege, "host", host, "namespace", namespace).Info(fmt.Sprintf("Flag allDatabases results in no privileges granted: no PostgreSQLDatabase resources found on host '%s'", host))
 		return nil
 	}
-	reqLogger.Info(fmt.Sprintf("Found %d databases on host", len(databases)))
+	reqLogger.Info(fmt.Sprintf("Found %d PostgreSQLDatabase resources in namespace '%s'", len(databases), namespace))
 	var errs error
 	for _, databaseResource := range databases {
 		database := databaseResource.Spec.Name
-		// this limits the `allDatabases` field to only work grant access in a
-		// schema named after the database
-		schema := databaseResource.Spec.Name
 		databaseHost, err := g.ResourceResolver(databaseResource.Spec.Host, namespace)
 		if err != nil {
 			errs = multierr.Append(errs, fmt.Errorf("resolve database '%s' host name: %w", databaseResource.Spec.Name, err))
 			continue
 		}
 		if host != databaseHost {
+			reqLogger.Info(fmt.Sprintf("Skipping resource '%s' as it is on another host (%s)", database, databaseHost))
+			continue
+		}
+		schema, err := g.ResourceResolver(databaseResource.Spec.User, namespace)
+		if err != nil {
+			errs = multierr.Append(errs, fmt.Errorf("resolve database '%s' user name: %w", databaseResource.Spec.Name, err))
 			continue
 		}
 		hostKey := fmt.Sprintf("%s/%s", host, database)
+		reqLogger.Info(fmt.Sprintf("Resolved database '%s' with schema '%s'", database, schema))
 		hosts[hostKey] = append(hosts[hostKey], ReadWriteAccess{
 			Host: host,
 			Database: postgres.DatabaseSchema{

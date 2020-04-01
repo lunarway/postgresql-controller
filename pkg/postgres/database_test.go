@@ -281,6 +281,8 @@ func TestDatabase_mixedOwnershipOnSharedDatabase(t *testing.T) {
 
 	epoch := time.Now().UnixNano()
 	sharedDatabaseName := fmt.Sprintf("shared_%d", epoch)
+	newUser := fmt.Sprintf("new_user_%d", epoch)
+	developer := fmt.Sprintf("developer_%d", epoch)
 
 	// create the shared database with a role of the same name and owned by the
 	// shared role
@@ -303,8 +305,6 @@ func TestDatabase_mixedOwnershipOnSharedDatabase(t *testing.T) {
 		t.Fatalf("connect to sahred database failed: %v", err)
 	}
 	defer sharedConn.Close()
-
-	newUser := "new_user"
 
 	// create schema and table that is to be used by a new role but owned by the
 	// existing shared user
@@ -361,9 +361,9 @@ func TestDatabase_mixedOwnershipOnSharedDatabase(t *testing.T) {
 	assert.Equal(t, []string{"value-from-new-user", "value-from-shared-user"}, nonOwned, "nonowned rows not as expected")
 
 	// request access to the new user schema of the shared database
-	err = postgres.Role(log, db, "developer", nil, []postgres.DatabaseSchema{
+	err = postgres.Role(log, db, developer, nil, []postgres.DatabaseSchema{
 		postgres.DatabaseSchema{
-			Name:       newUser,
+			Name:       sharedDatabaseName,
 			Privileges: postgres.PrivilegeRead,
 			Schema:     newUser,
 		},
@@ -376,7 +376,7 @@ func TestDatabase_mixedOwnershipOnSharedDatabase(t *testing.T) {
 	developerConn, err := postgres.Connect(log, postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: sharedDatabaseName,
-		User:     "developer",
+		User:     developer,
 		Password: "",
 	})
 	if err != nil {
