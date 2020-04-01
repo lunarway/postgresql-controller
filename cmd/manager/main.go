@@ -11,14 +11,11 @@ import (
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
-	"k8s.io/client-go/rest"
 
 	"go.lunarway.com/postgresql-controller/pkg/apis"
 	"go.lunarway.com/postgresql-controller/pkg/controller"
 	"go.lunarway.com/postgresql-controller/pkg/controller/postgresqldatabase"
 	"go.lunarway.com/postgresql-controller/pkg/controller/postgresqluser"
-	"go.lunarway.com/postgresql-controller/pkg/daemon"
-	"go.lunarway.com/postgresql-controller/pkg/instrumentation"
 
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	kubemetrics "github.com/operator-framework/operator-sdk/pkg/kube-metrics"
@@ -30,11 +27,11 @@ import (
 	"github.com/spf13/pflag"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
-	runtimemetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
 // Change below variables to serve metrics on different host or port.
@@ -171,35 +168,6 @@ func main() {
 			componentErr <- nil
 		case <-shutdown:
 		}
-	}()
-
-	instrumentation, err := instrumentation.New(runtimemetrics.Registry)
-	if err != nil {
-		log.Error(err, "Instantiate instrumentation probes failed")
-		os.Exit(1)
-	}
-
-	log.Info("Starting grant expiration daemon")
-	daemon := daemon.New(daemon.Configuration{
-		Logger:       log.WithName("daemon"),
-		SyncInterval: 5 * time.Second,
-		Sync: func() {
-			s := time.Now()
-			log.Info("Syncing resources...")
-			var err error
-			// TODO: do actual syncing
-			if err != nil {
-				log.Error(err, "Syncronization of resources failed")
-			}
-			instrumentation.ObserveSyncDuration(time.Since(s), err == nil)
-		},
-	})
-	shutdownWg.Add(1)
-	// no link to componentErr as the daemon loop should only ever exit on the
-	// shutdown signal.
-	go func() {
-		defer shutdownWg.Done()
-		daemon.Loop(shutdown)
 	}()
 
 	log.Info("Starting the Cmd.")
