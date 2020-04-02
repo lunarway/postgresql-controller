@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/pkg/apis/lunarway/v1alpha1"
 	"go.lunarway.com/postgresql-controller/pkg/grants"
+	"go.lunarway.com/postgresql-controller/pkg/kube"
 	"go.lunarway.com/postgresql-controller/pkg/postgres"
 	"go.lunarway.com/postgresql-controller/test"
 )
@@ -574,4 +575,71 @@ func TestReconcilePostgreSQLUser_groupAccesses_errors(t *testing.T) {
 
 	assert.EqualError(t, err, expectedError, "output error not as exepcted")
 	assert.Equal(t, grants.HostAccess(nil), output, "output map not as expected")
+}
+
+// TestGranter_GroupAccesses_noUserSchemaFallback_allDatabases tests that the
+// database name is used as a fallback if no user is specified in the access
+// spec and the spec has AllDatabases set.
+func TestGranter_GroupAccesses_noUserSchemaFallback_allDatabases(t *testing.T) {
+	reads := []lunarwayv1alpha1.AccessSpec{
+		{
+			Host: lunarwayv1alpha1.ResourceVar{
+				Value: "host1:5432",
+			},
+			AllDatabases: true,
+			Reason:       "I am a developer",
+		},
+	}
+	expectedHostAccesses := grants.HostAccess{
+		"host1:5432/db1": []grants.ReadWriteAccess{
+			grants.ReadWriteAccess{
+				Host: "host1:5432",
+				Access: lunarwayv1alpha1.AccessSpec{
+					Host: lunarwayv1alpha1.ResourceVar{
+						Value: "host1:5432",
+					},
+					AllDatabases: true,
+					Reason:       "I am a developer",
+				},
+				Database: postgres.DatabaseSchema{
+					Name:       "db1",
+					Schema:     "db1", // this is the important part of the expectation
+					Privileges: postgres.PrivilegeRead,
+				},
+			},
+		},
+	}
+
+	logger := test.NewLogger(t)
+	r := grants.Granter{
+		AllDatabasesReadEnabled: true,
+		AllDatabases: func(namespace string) ([]lunarwayv1alpha1.PostgreSQLDatabase, error) {
+			return []lunarwayv1alpha1.PostgreSQLDatabase{
+				lunarwayv1alpha1.PostgreSQLDatabase{
+					Spec: lunarwayv1alpha1.PostgreSQLDatabaseSpec{
+						Name: "db1",
+						User: lunarwayv1alpha1.ResourceVar{
+							// will resolve to a kube.ErrNoValue error in the resource
+							// resolver
+							Value: "user",
+						},
+						Host: lunarwayv1alpha1.ResourceVar{
+							Value: "host1:5432",
+						},
+					},
+				},
+			}, nil
+		},
+		ResourceResolver: func(r lunarwayv1alpha1.ResourceVar, ns string) (string, error) {
+			// fake that the user lookup has no value
+			if r.Value == "user" {
+				return "", kube.ErrNoValue
+			}
+			return r.Value, nil
+		},
+	}
+	output, err := r.GroupAccesses(logger, "namespace", reads, nil)
+
+	assert.NoError(t, err, "unexpected output error")
+	assert.Equal(t, expectedHostAccesses, output, "output map not as expected")
 }
