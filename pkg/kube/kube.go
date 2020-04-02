@@ -14,7 +14,8 @@ import (
 )
 
 var (
-	errNoValue    = ctrerrors.NewInvalid(errors.New("no value"))
+	// ErrNoValue indicates that a resource could not be resolved to a value.
+	ErrNoValue    = ctrerrors.NewInvalid(errors.New("no value"))
 	errNotFound   = ctrerrors.NewTemporary(ctrerrors.NewInvalid(errors.New("not found")))
 	errUnknownKey = ctrerrors.NewTemporary(ctrerrors.NewInvalid(errors.New("unknown key")))
 )
@@ -51,7 +52,7 @@ func ResourceValue(client client.Client, resource lunarwayv1alpha1.ResourceVar, 
 		return v, nil
 	}
 
-	return "", errNoValue
+	return "", ErrNoValue
 }
 
 func SecretValue(client client.Client, namespacedName types.NamespacedName, key string) (string, error) {

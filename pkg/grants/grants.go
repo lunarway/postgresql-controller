@@ -1,10 +1,12 @@
 package grants
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/go-logr/logr"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/pkg/apis/lunarway/v1alpha1"
+	"go.lunarway.com/postgresql-controller/pkg/kube"
 	"go.lunarway.com/postgresql-controller/pkg/postgres"
 	"go.uber.org/multierr"
 )
@@ -131,9 +133,12 @@ func (g *Granter) groupAllDatabasesByHost(reqLogger logr.Logger, hosts HostAcces
 			continue
 		}
 		schema, err := g.ResourceResolver(databaseResource.Spec.User, namespace)
-		if err != nil {
+		if err != nil && !errors.Is(err, kube.ErrNoValue) {
 			errs = multierr.Append(errs, fmt.Errorf("resolve database '%s' user name: %w", databaseResource.Spec.Name, err))
 			continue
+		}
+		if schema == "" {
+			schema = database
 		}
 		hostKey := fmt.Sprintf("%s/%s", host, database)
 		reqLogger.Info(fmt.Sprintf("Resolved database '%s' with schema '%s'", database, schema))
