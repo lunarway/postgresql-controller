@@ -183,7 +183,7 @@ type ReconcilePostgreSQLUser struct {
 // Note:
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-func (r *ReconcilePostgreSQLUser) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcilePostgreSQLUser) Reconcile(request reconcile.Request) (_ reconcile.Result, err error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	requestID, err := uuid.NewRandom()
 	if err != nil {
@@ -192,9 +192,17 @@ func (r *ReconcilePostgreSQLUser) Reconcile(request reconcile.Request) (reconcil
 	reqLogger = reqLogger.WithValues("requestId", requestID.String())
 	reqLogger.Info("Reconciling PostgreSQLUSer")
 
+	result, err := r.reconcile(reqLogger, request)
+	if err != nil {
+		reqLogger.Error(err, "Failed to reconcile PostgreSQLUser object")
+	}
+	return result, err
+}
+
+func (r *ReconcilePostgreSQLUser) reconcile(reqLogger logr.Logger, request reconcile.Request) (reconcile.Result, error) {
 	// Fetch the PostgreSQLUser instance
 	user := &lunarwayv1alpha1.PostgreSQLUser{}
-	err = r.client.Get(context.TODO(), request.NamespacedName, user)
+	err := r.client.Get(context.TODO(), request.NamespacedName, user)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.

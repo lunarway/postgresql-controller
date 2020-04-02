@@ -129,6 +129,10 @@ func (r *ReconcilePostgreSQLDatabase) Reconcile(request reconcile.Request) (reco
 	reqLogger = reqLogger.WithValues("requestId", requestID.String())
 	status, err := r.reconcile(reqLogger, request)
 	status.Persist(err)
+
+	if err != nil {
+		reqLogger.Error(err, "Failed to reconcile PostgreSQLDatabase object")
+	}
 	return reconcile.Result{}, stopRequeueOnInvalid(reqLogger, err)
 }
 
