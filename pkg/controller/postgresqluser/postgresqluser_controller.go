@@ -192,9 +192,17 @@ func (r *ReconcilePostgreSQLUser) Reconcile(request reconcile.Request) (reconcil
 	reqLogger = reqLogger.WithValues("requestId", requestID.String())
 	reqLogger.Info("Reconciling PostgreSQLUSer")
 
+	result, err := r.reconcile(reqLogger, request)
+	if err != nil {
+		reqLogger.Error(err, "Failed to reconcile PostgreSQLUser object")
+	}
+	return result, err
+}
+
+func (r *ReconcilePostgreSQLUser) reconcile(reqLogger logr.Logger, request reconcile.Request) (reconcile.Result, error) {
 	// Fetch the PostgreSQLUser instance
 	user := &lunarwayv1alpha1.PostgreSQLUser{}
-	err = r.client.Get(context.TODO(), request.NamespacedName, user)
+	err := r.client.Get(context.TODO(), request.NamespacedName, user)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
