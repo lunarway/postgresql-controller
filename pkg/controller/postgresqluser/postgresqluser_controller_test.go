@@ -20,7 +20,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/runtime/log"
+	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
 func TestReconcile_connectToHosts(t *testing.T) {
@@ -178,7 +178,7 @@ func TestParseHostCredentials(t *testing.T) {
 // reconciliation of the remaining ones.
 func TestReconcile_badConfigmapReference(t *testing.T) {
 	// Set the logger to development mode for verbose logs.
-	log.SetLogger(log.ZapLogger(true))
+	logf.SetLogger(logf.ZapLogger(true))
 
 	host := test.Integration(t)
 	var (
@@ -292,7 +292,7 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 	}
 
 	// seed database1 into the postgres host
-	dbConn, err := postgres.Connect(log, postgres.ConnectionString{
+	dbConn, err := postgres.Connect(logf.Log, postgres.ConnectionString{
 		Database: "postgres",
 		Host:     host,
 		Password: "",
@@ -301,7 +301,7 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 	if !assert.NoError(t, err, "failed to connect to database to seed database") {
 		return
 	}
-	err = postgres.Database(log, dbConn, host, postgres.Credentials{
+	err = postgres.Database(logf.Log, dbConn, host, postgres.Credentials{
 		Name:     database1Name,
 		Password: "123456",
 		User:     database1Name,
