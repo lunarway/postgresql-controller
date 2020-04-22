@@ -221,7 +221,10 @@ func (r *ReconcilePostgreSQLUser) reconcile(reqLogger logr.Logger, request recon
 
 	accesses, err := r.granter.GroupAccesses(reqLogger, request.Namespace, user.Spec.Read, user.Spec.Write)
 	if err != nil {
-		return reconcile.Result{}, fmt.Errorf("group accesses: %w", err)
+		if len(accesses) == 0 {
+			return reconcile.Result{}, fmt.Errorf("group accesses: %w", err)
+		}
+		reqLogger.Error(err, fmt.Sprintf("Some access requests could not be resolved. Continuating with the resolved ones"))
 	}
 	reqLogger.Info(fmt.Sprintf("Found access requests for %d hosts", len(accesses)))
 
