@@ -58,7 +58,7 @@ func (g *Granter) groupAccesses(namespace string, reads []lunarwayv1alpha1.Acces
 func (g *Granter) groupByHosts(hosts HostAccess, namespace string, accesses []lunarwayv1alpha1.AccessSpec, privilege postgres.Privilege, allDatabasesEnabled bool) error {
 	var errs error
 	for i, access := range accesses {
-		reqLogger = reqLogger.WithValues("spec", access)
+		reqLogger := g.Log.WithValues("spec", access)
 		host, err := g.ResourceResolver(access.Host, namespace)
 		if err != nil {
 			errs = multierr.Append(errs, fmt.Errorf("resolve host: %w", &AccessError{
