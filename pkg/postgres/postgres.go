@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -98,10 +99,11 @@ func Role(log logr.Logger, db *sql.DB, name string, roles []string, databases []
 // GrantRoles grants role name with all roles from the roles slice along with
 // extrated roles from databases slice.
 func GrantRoles(log logr.Logger, db *sql.DB, name string, roles []string, databases []DatabaseSchema) error {
-	grantableRoles, revokeableRoles, err := rolesDiff(db, name, roles, databases)
+	existingRoles, err := persistedRoles(db, name)
 	if err != nil {
-		return fmt.Errorf("resolve roles diff: %w", err)
+		return fmt.Errorf("get existing roles: %w", err)
 	}
+	grantableRoles, revokeableRoles := rolesDiff(log, existingRoles, roles, databases)
 	log.Info(fmt.Sprintf("Found %d grantable and %d revokable roles for %s", len(grantableRoles), len(revokeableRoles), name), "grantable", grantableRoles, "revokeable", revokeableRoles)
 	if len(grantableRoles) != 0 {
 		joinedRoles := strings.Join(grantableRoles, ",")
@@ -120,38 +122,63 @@ func GrantRoles(log logr.Logger, db *sql.DB, name string, roles []string, databa
 	return nil
 }
 
-func rolesDiff(db *sql.DB, name string, staticRoles []string, databases []DatabaseSchema) ([]string, []string, error) {
-	var grantableRoles []string
-	if len(staticRoles) != 0 {
-		grantableRoles = append(grantableRoles, staticRoles...)
-	}
-
+// rolesDiff returns roles to add and remove from existingRoles slice based of
+// the databases that are requested access to.
+func rolesDiff(log logr.Logger, existingRoles []string, expectedRoles []string, databases []DatabaseSchema) ([]string, []string) {
+	// append to expectedRoles for each database access request
 	for _, database := range databases {
 		var schemaPrivileges string
-		if database.Privileges == PrivilegeRead {
+		switch database.Privileges {
+		case PrivilegeRead:
 			schemaPrivileges = "read"
-		}
-		if database.Privileges == PrivilegeWrite {
+		case PrivilegeWrite:
 			schemaPrivileges = "readwrite"
-		}
-		if len(schemaPrivileges) == 0 {
+		default:
+			log.Error(errors.New("priviledge unknown"), fmt.Sprintf("dropped database '%s.%s' as priviledge '%s' (%[3]d) is invalid", database.Name, database.Schema, database.Privileges), "database", database)
 			continue
 		}
-		grantableRoles = append(grantableRoles, fmt.Sprintf("%s_%s", database.Name, schemaPrivileges))
+		schema := database.Schema
+		if strings.EqualFold(schema, "public") {
+			schema = database.Name
+		}
+		schemaPrivileges = fmt.Sprintf("%s_%s", schema, schemaPrivileges)
+		expectedRoles = append(expectedRoles, schemaPrivileges)
 	}
-	existingRoles, err := persistedRoles(db, name)
-	if err != nil {
-		return nil, nil, fmt.Errorf("get existing roles: %w", err)
+
+	// find roles that are expected but not on the existing roles list
+	var addableRoles []string
+	for _, expectedRole := range expectedRoles {
+		if contains(existingRoles, expectedRole) {
+			continue
+		}
+		addableRoles = append(addableRoles, expectedRole)
 	}
-	var addableRoles, removeableRoles []string
-	for _, grantableRole := range grantableRoles {
-		for _, existingRole := range existingRoles {
-			if existingRole == grantableRole {
-				// FIXME: implement this filtering
-			}
+
+	// find existing roles that are not in the expected list
+	var removeableRoles []string
+	for _, existingRole := range existingRoles {
+		if contains(expectedRoles, existingRole) {
+			continue
+		}
+		// only remove roles that look like some we control, ie. suffixed with _read
+		// or _readwrite. This is to make sure we do not change roles granted out of
+		// band to specific users.
+		if !strings.HasSuffix(existingRole, fmt.Sprintf("_%s", PrivilegeRead.String())) && !strings.HasSuffix(existingRole, fmt.Sprintf("_%s", PrivilegeWrite.String())) {
+			continue
+		}
+		removeableRoles = append(removeableRoles, existingRole)
+	}
+
+	return addableRoles, removeableRoles
+}
+
+func contains(roles []string, role string) bool {
+	for _, r := range roles {
+		if r == role {
+			return true
 		}
 	}
-	return addableRoles, removeableRoles, nil
+	return false
 }
 
 func persistedRoles(db *sql.DB, name string) ([]string, error) {
