@@ -44,8 +44,12 @@ func (g *Granter) SyncUser(namespace string, user lunarwayv1alpha1.PostgreSQLUse
 	//   revoke/grant what is needed
 	accesses, err := g.groupAccesses(namespace, user.Spec.Read, user.Spec.Write)
 	if err != nil {
-		return fmt.Errorf("group accesses: %w", err)
+		if len(accesses) == 0 {
+			return fmt.Errorf("group accesses: %w", err)
+		}
+		g.Log.Error(err, fmt.Sprintf("Some access requests could not be resolved. Continuating with the resolved ones"))
 	}
+	g.Log.Info(fmt.Sprintf("Found access requests for %d hosts", len(accesses)))
 
 	hosts, err := g.connectToHosts(accesses)
 	if err != nil {
