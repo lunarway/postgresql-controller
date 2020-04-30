@@ -756,7 +756,7 @@ func TestGranter_connectToHosts(t *testing.T) {
 			logger := test.NewLogger(t)
 
 			r := Granter{
-				Now: time.Now,
+				Now:             time.Now,
 				Log:             logger,
 				HostCredentials: tc.credentials,
 			}
@@ -833,7 +833,7 @@ func TestGranter_groupAccesses_partialErrors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			logger := test.NewLogger(t)
 			r := Granter{
-				Now: time.Now,
+				Now:                     time.Now,
 				Log:                     logger,
 				AllDatabasesReadEnabled: true,
 				AllDatabases: func(namespace string) ([]lunarwayv1alpha1.PostgreSQLDatabase, error) {
@@ -912,7 +912,7 @@ func TestGranter_groupAccesses_noUserSchemaFallback_allDatabases(t *testing.T) {
 
 	logger := test.NewLogger(t)
 	r := Granter{
-		Now: time.Now,
+		Now:                     time.Now,
 		Log:                     logger,
 		AllDatabasesReadEnabled: true,
 		AllDatabases: func(namespace string) ([]lunarwayv1alpha1.PostgreSQLDatabase, error) {
