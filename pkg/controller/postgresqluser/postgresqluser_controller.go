@@ -63,10 +63,10 @@ func parseFlags(c *ReconcilePostgreSQLUser) {
 	parseError(err, "aws-secret-access-key")
 	hosts, err := FlagSet.GetStringToString("host-credentials-user")
 	parseError(err, "host-credentials-user")
-	c.hostCredentials, err = parseHostCredentials(hosts)
+	c.granter.HostCredentials, err = parseHostCredentials(hosts)
 	parseError(err, "host-credentials: invalid format")
 	var hostNames []string
-	for host := range c.hostCredentials {
+	for host := range c.granter.HostCredentials {
 		hostNames = append(hostNames, host)
 	}
 	c.granter.AllDatabasesReadEnabled, err = FlagSet.GetBool("all-databases-enabled-read")
@@ -168,9 +168,6 @@ type ReconcilePostgreSQLUser struct {
 	awsProfile         string
 	awsAccessKeyID     string
 	awsSecretAccessKey string
-
-	// contains a map of credentials for hosts
-	hostCredentials map[string]postgres.Credentials
 }
 
 // Reconcile reads that state of the cluster for a PostgreSQLUser object and makes changes based on the state read
@@ -214,9 +211,8 @@ func (r *ReconcilePostgreSQLUser) reconcile(reqLogger logr.Logger, request recon
 
 	// User instance created or updated
 	reqLogger = reqLogger.WithValues("user", user.Spec.Name)
-	reqLogger.Info("Updating PostgreSQLUser resource")
+	reqLogger.Info("Reconciling found PostgreSQLUser resource", "user", user.Spec.Name)
 
-	reqLogger.Info("Reconciling PostgreSQLUser", "user", user.Spec.Name)
 	err = r.granter.SyncUser(request.Namespace, *user)
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("sync user grants: %w", err)

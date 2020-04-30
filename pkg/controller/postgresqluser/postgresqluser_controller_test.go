@@ -185,13 +185,13 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 	// with database interaction
 	r := &ReconcilePostgreSQLUser{
 		client: cl,
-		hostCredentials: map[string]postgres.Credentials{
-			host: {
-				Name:     "iam_creator",
-				Password: "",
-			},
-		},
 		granter: grants.Granter{
+			HostCredentials: map[string]postgres.Credentials{
+				host: {
+					Name:     "iam_creator",
+					Password: "",
+				},
+			},
 			Log:                      logger,
 			AllDatabasesReadEnabled:  true,
 			AllDatabasesWriteEnabled: true,

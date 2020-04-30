@@ -93,12 +93,8 @@ func Role(log logr.Logger, db *sql.DB, name string, roles []string, databases []
 	} else {
 		log.Info(fmt.Sprintf("Role %s created", name))
 	}
-	return GrantRoles(log, db, name, roles, databases)
-}
 
-// GrantRoles grants role name with all roles from the roles slice along with
-// extrated roles from databases slice.
-func GrantRoles(log logr.Logger, db *sql.DB, name string, roles []string, databases []DatabaseSchema) error {
+	// grant database access roles to created role
 	existingRoles, err := persistedRoles(db, name)
 	if err != nil {
 		return fmt.Errorf("get existing roles: %w", err)

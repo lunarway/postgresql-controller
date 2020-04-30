@@ -119,7 +119,7 @@ func (g *Granter) setRolesOnHosts(name string, accesses HostAccess, hosts map[st
 		if !ok {
 			return fmt.Errorf("connection for host %s not found", host)
 		}
-		err := postgres.GrantRoles(g.Log, connection, name, g.StaticRoles, databaseSchemas(access))
+		err := postgres.Role(g.Log, connection, name, g.StaticRoles, databaseSchemas(access))
 		if err != nil {
 			errs = multierr.Append(errs, fmt.Errorf("grant roles: %w", err))
 		}
