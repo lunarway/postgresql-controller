@@ -95,7 +95,7 @@ func TestParseHostCredentials(t *testing.T) {
 func TestReconcile_badConfigmapReference(t *testing.T) {
 	// Set the logger to development mode for verbose logs.
 	logf.SetLogger(logf.ZapLogger(true))
-	logger := logf.Log
+
 	host := test.Integration(t)
 	var (
 		namespace     = "default"
