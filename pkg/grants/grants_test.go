@@ -121,7 +121,6 @@ func TestGranter_groupAccesses(t *testing.T) {
 			logger := test.NewLogger(t)
 			r := Granter{
 				Now: time.Now,
-				Log: logger,
 				ResourceResolver: func(r lunarwayv1alpha1.ResourceVar, ns string) (string, error) {
 					return r.Value, nil
 				},
@@ -131,7 +130,7 @@ func TestGranter_groupAccesses(t *testing.T) {
 				},
 			}
 
-			output, err := r.groupAccesses("namespace", tc.reads, tc.writes)
+			output, err := r.groupAccesses(logger, "namespace", tc.reads, tc.writes)
 
 			assert.NoError(t, err, "unexpected output error")
 			assert.Equal(t, tc.output, output, "output map not as expected")
@@ -223,7 +222,6 @@ func TestGranter_groupAccesses_startStopHandling(t *testing.T) {
 				Now: func() time.Time {
 					return now
 				},
-				Log: logger,
 				ResourceResolver: func(r lunarwayv1alpha1.ResourceVar, ns string) (string, error) {
 					return r.Value, nil
 				},
@@ -233,7 +231,7 @@ func TestGranter_groupAccesses_startStopHandling(t *testing.T) {
 				},
 			}
 
-			output, err := r.groupAccesses("namespace", []lunarwayv1alpha1.AccessSpec{tc.access}, nil)
+			output, err := r.groupAccesses(logger, "namespace", []lunarwayv1alpha1.AccessSpec{tc.access}, nil)
 
 			assert.NoError(t, err, "unexpected output error")
 			var hostAccess HostAccess
@@ -409,7 +407,6 @@ func TestGranter_groupAccesses_withAllDatabases(t *testing.T) {
 			logger := test.NewLogger(t)
 			r := Granter{
 				Now: time.Now,
-				Log: logger,
 				ResourceResolver: func(r lunarwayv1alpha1.ResourceVar, ns string) (string, error) {
 					return r.Value, nil
 				},
@@ -420,7 +417,7 @@ func TestGranter_groupAccesses_withAllDatabases(t *testing.T) {
 				},
 			}
 
-			output, err := r.groupAccesses("namespace", tc.reads, tc.writes)
+			output, err := r.groupAccesses(logger, "namespace", tc.reads, tc.writes)
 
 			assert.NoError(t, err, "unexpected output error")
 			assert.Equal(t, tc.output, output, "output map not as expected")
@@ -520,7 +517,6 @@ func TestGranter_groupAccesses_allDatabasesFeatureFlags(t *testing.T) {
 			logger := test.NewLogger(t)
 			r := Granter{
 				Now: time.Now,
-				Log: logger,
 				ResourceResolver: func(r lunarwayv1alpha1.ResourceVar, ns string) (string, error) {
 					return r.Value, nil
 				},
@@ -531,7 +527,7 @@ func TestGranter_groupAccesses_allDatabasesFeatureFlags(t *testing.T) {
 				},
 			}
 
-			output, err := r.groupAccesses("namespace", tc.reads, tc.writes)
+			output, err := r.groupAccesses(logger, "namespace", tc.reads, tc.writes)
 
 			assert.NoError(t, err, "unexpected output error")
 			assert.Equal(t, tc.output, output, "output map not as expected")
@@ -633,7 +629,6 @@ func TestGranter_groupAccesses_mixedSpecs(t *testing.T) {
 			logger := test.NewLogger(t)
 			r := Granter{
 				Now: time.Now,
-				Log: logger,
 				ResourceResolver: func(r lunarwayv1alpha1.ResourceVar, ns string) (string, error) {
 					return r.Value, nil
 				},
@@ -644,7 +639,7 @@ func TestGranter_groupAccesses_mixedSpecs(t *testing.T) {
 				},
 			}
 
-			output, err := r.groupAccesses("namespace", tc.reads, tc.writes)
+			output, err := r.groupAccesses(logger, "namespace", tc.reads, tc.writes)
 
 			assert.NoError(t, err, "unexpected output error")
 			assert.Equal(t, tc.output, output, "output map not as expected")
@@ -688,12 +683,11 @@ func TestGranter_groupAccesses_errors(t *testing.T) {
 	logger := test.NewLogger(t)
 	r := Granter{
 		Now: time.Now,
-		Log: logger,
 		ResourceResolver: func(r lunarwayv1alpha1.ResourceVar, ns string) (string, error) {
 			return r.Value, fmt.Errorf("no value")
 		},
 	}
-	output, err := r.groupAccesses("namespace", reads, nil)
+	output, err := r.groupAccesses(logger, "namespace", reads, nil)
 
 	assert.EqualError(t, err, expectedError, "output error not as exepcted")
 	assert.Equal(t, HostAccess(nil), output, "output map not as expected")
@@ -757,12 +751,11 @@ func TestGranter_connectToHosts(t *testing.T) {
 
 			r := Granter{
 				Now:             time.Now,
-				Log:             logger,
 				HostCredentials: tc.credentials,
 			}
 
 			// act
-			connections, err := r.connectToHosts(tc.hostAccess)
+			connections, err := r.connectToHosts(logger, tc.hostAccess)
 
 			defer func() {
 				for _, db := range connections {
@@ -834,7 +827,6 @@ func TestGranter_groupAccesses_partialErrors(t *testing.T) {
 			logger := test.NewLogger(t)
 			r := Granter{
 				Now:                     time.Now,
-				Log:                     logger,
 				AllDatabasesReadEnabled: true,
 				AllDatabases: func(namespace string) ([]lunarwayv1alpha1.PostgreSQLDatabase, error) {
 					return []lunarwayv1alpha1.PostgreSQLDatabase{
@@ -865,7 +857,7 @@ func TestGranter_groupAccesses_partialErrors(t *testing.T) {
 					return r.Value, nil
 				},
 			}
-			output, err := r.groupAccesses("namespace", tc.reads, nil)
+			output, err := r.groupAccesses(logger, "namespace", tc.reads, nil)
 
 			if tc.err != nil {
 				assert.EqualError(t, err, tc.err.Error(), "output error not as exepcted")
@@ -913,7 +905,6 @@ func TestGranter_groupAccesses_noUserSchemaFallback_allDatabases(t *testing.T) {
 	logger := test.NewLogger(t)
 	r := Granter{
 		Now:                     time.Now,
-		Log:                     logger,
 		AllDatabasesReadEnabled: true,
 		AllDatabases: func(namespace string) ([]lunarwayv1alpha1.PostgreSQLDatabase, error) {
 			return []lunarwayv1alpha1.PostgreSQLDatabase{
@@ -940,7 +931,7 @@ func TestGranter_groupAccesses_noUserSchemaFallback_allDatabases(t *testing.T) {
 			return r.Value, nil
 		},
 	}
-	output, err := r.groupAccesses("namespace", reads, nil)
+	output, err := r.groupAccesses(logger, "namespace", reads, nil)
 
 	assert.NoError(t, err, "unexpected output error")
 	assert.Equal(t, expectedHostAccesses, output, "output map not as expected")

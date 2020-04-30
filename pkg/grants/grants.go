@@ -19,7 +19,6 @@ type Granter struct {
 	AllUsers                 func(namespace string) ([]lunarwayv1alpha1.PostgreSQLUser, error)
 	ResourceResolver         func(resource lunarwayv1alpha1.ResourceVar, namespace string) (string, error)
 
-	Log             logr.Logger
 	StaticRoles     []string
 	HostCredentials map[string]postgres.Credentials
 	Now             func() time.Time
@@ -35,18 +34,18 @@ type ReadWriteAccess struct {
 	Access   lunarwayv1alpha1.AccessSpec
 }
 
-func (g *Granter) groupAccesses(namespace string, reads []lunarwayv1alpha1.AccessSpec, writes []lunarwayv1alpha1.AccessSpec) (HostAccess, error) {
+func (g *Granter) groupAccesses(log logr.Logger, namespace string, reads []lunarwayv1alpha1.AccessSpec, writes []lunarwayv1alpha1.AccessSpec) (HostAccess, error) {
 	if len(reads) == 0 {
 		return nil, nil
 	}
 	hosts := make(HostAccess)
 	var errs error
 
-	err := g.groupByHosts(hosts, namespace, reads, postgres.PrivilegeRead, g.AllDatabasesReadEnabled)
+	err := g.groupByHosts(log, hosts, namespace, reads, postgres.PrivilegeRead, g.AllDatabasesReadEnabled)
 	if err != nil {
 		errs = multierr.Append(errs, err)
 	}
-	err = g.groupByHosts(hosts, namespace, writes, postgres.PrivilegeWrite, g.AllDatabasesWriteEnabled)
+	err = g.groupByHosts(log, hosts, namespace, writes, postgres.PrivilegeWrite, g.AllDatabasesWriteEnabled)
 	if err != nil {
 		errs = multierr.Append(errs, err)
 	}
@@ -57,10 +56,10 @@ func (g *Granter) groupAccesses(namespace string, reads []lunarwayv1alpha1.Acces
 	return hosts, errs
 }
 
-func (g *Granter) groupByHosts(hosts HostAccess, namespace string, accesses []lunarwayv1alpha1.AccessSpec, privilege postgres.Privilege, allDatabasesEnabled bool) error {
+func (g *Granter) groupByHosts(log logr.Logger, hosts HostAccess, namespace string, accesses []lunarwayv1alpha1.AccessSpec, privilege postgres.Privilege, allDatabasesEnabled bool) error {
 	var errs error
 	for i, access := range accesses {
-		reqLogger := g.Log.WithValues("spec", access, "privilege", privilege)
+		reqLogger := log.WithValues("spec", access, "privilege", privilege)
 		// access it not requested to be granted yet
 		if g.Now().Before(access.Start.Time) {
 			reqLogger.Info("Skipping access spec: start time is in the future")

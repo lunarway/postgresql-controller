@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/go-logr/logr"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/pkg/apis/lunarway/v1alpha1"
 	"go.lunarway.com/postgresql-controller/pkg/postgres"
 	"go.uber.org/multierr"
@@ -13,31 +14,31 @@ import (
 // SyncUser syncronizes a PostgreSQL user's access requests against the roles
 // defined in the host instances. Any excessive roles are removed and missing
 // ones are added.
-func (g *Granter) SyncUser(namespace string, user lunarwayv1alpha1.PostgreSQLUser) error {
+func (g *Granter) SyncUser(log logr.Logger, namespace string, user lunarwayv1alpha1.PostgreSQLUser) error {
 	//   resolve required grants taking expiration into account
 	//   diff against existing
 	//   revoke/grant what is needed
-	accesses, err := g.groupAccesses(namespace, user.Spec.Read, user.Spec.Write)
+	accesses, err := g.groupAccesses(log, namespace, user.Spec.Read, user.Spec.Write)
 	if err != nil {
 		if len(accesses) == 0 {
 			return fmt.Errorf("group accesses: %w", err)
 		}
-		g.Log.Error(err, fmt.Sprintf("Some access requests could not be resolved. Continuating with the resolved ones"))
+		log.Error(err, fmt.Sprintf("Some access requests could not be resolved. Continuating with the resolved ones"))
 	}
-	g.Log.Info(fmt.Sprintf("Found access requests for %d hosts", len(accesses)))
+	log.Info(fmt.Sprintf("Found access requests for %d hosts", len(accesses)))
 
-	hosts, err := g.connectToHosts(accesses)
+	hosts, err := g.connectToHosts(log, accesses)
 	if err != nil {
 		return fmt.Errorf("connect to hosts: %w", err)
 	}
 	defer func() {
 		err := closeConnectionToHosts(hosts)
 		if err != nil {
-			g.Log.Error(err, "failed to close connection to hosts")
+			log.Error(err, "failed to close connection to hosts")
 		}
 	}()
 
-	err = g.setRolesOnHosts(user.Name, accesses, hosts)
+	err = g.setRolesOnHosts(log, user.Name, accesses, hosts)
 	if err != nil {
 		return fmt.Errorf("grant access on host: %w", err)
 	}
@@ -45,7 +46,7 @@ func (g *Granter) SyncUser(namespace string, user lunarwayv1alpha1.PostgreSQLUse
 	return nil
 }
 
-func (g *Granter) connectToHosts(accesses HostAccess) (map[string]*sql.DB, error) {
+func (g *Granter) connectToHosts(log logr.Logger, accesses HostAccess) (map[string]*sql.DB, error) {
 	hosts := make(map[string]*sql.DB)
 	var errs error
 	for hostDatabase := range accesses {
@@ -66,7 +67,7 @@ func (g *Granter) connectToHosts(accesses HostAccess) (map[string]*sql.DB, error
 			User:     credentials.Name,
 			Password: credentials.Password,
 		}
-		db, err := postgres.Connect(g.Log, connectionString)
+		db, err := postgres.Connect(log, connectionString)
 		if err != nil {
 			errs = multierr.Append(errs, fmt.Errorf("connect to %s: %w", connectionString, err))
 			continue
@@ -87,14 +88,14 @@ func closeConnectionToHosts(hosts map[string]*sql.DB) error {
 	return errs
 }
 
-func (g *Granter) setRolesOnHosts(name string, accesses HostAccess, hosts map[string]*sql.DB) error {
+func (g *Granter) setRolesOnHosts(log logr.Logger, name string, accesses HostAccess, hosts map[string]*sql.DB) error {
 	var errs error
 	for host, access := range accesses {
 		connection, ok := hosts[host]
 		if !ok {
 			return fmt.Errorf("connection for host %s not found", host)
 		}
-		err := postgres.Role(g.Log, connection, name, g.StaticRoles, databaseSchemas(access))
+		err := postgres.Role(log, connection, name, g.StaticRoles, databaseSchemas(access))
 		if err != nil {
 			errs = multierr.Append(errs, fmt.Errorf("grant roles: %w", err))
 		}

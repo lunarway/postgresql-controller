@@ -95,7 +95,7 @@ func TestParseHostCredentials(t *testing.T) {
 func TestReconcile_badConfigmapReference(t *testing.T) {
 	// Set the logger to development mode for verbose logs.
 	logf.SetLogger(logf.ZapLogger(true))
-	logger := logf.Log
+
 	host := test.Integration(t)
 	var (
 		namespace     = "default"
@@ -194,7 +194,6 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 					Password: "",
 				},
 			},
-			Log:                      logger,
 			AllDatabasesReadEnabled:  true,
 			AllDatabasesWriteEnabled: true,
 			AllDatabases: func(namespace string) ([]lunarwayv1alpha1.PostgreSQLDatabase, error) {
