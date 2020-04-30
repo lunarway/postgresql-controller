@@ -3,6 +3,7 @@ package grants
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/pkg/apis/lunarway/v1alpha1"
@@ -15,7 +16,13 @@ type Granter struct {
 	AllDatabasesReadEnabled  bool
 	AllDatabasesWriteEnabled bool
 	AllDatabases             func(namespace string) ([]lunarwayv1alpha1.PostgreSQLDatabase, error)
+	AllUsers                 func(namespace string) ([]lunarwayv1alpha1.PostgreSQLUser, error)
 	ResourceResolver         func(resource lunarwayv1alpha1.ResourceVar, namespace string) (string, error)
+
+	Log             logr.Logger
+	StaticRoles     []string
+	HostCredentials map[string]postgres.Credentials
+	Now             func() time.Time
 }
 
 // HostAccess represents a map of read and write access requests on host names
@@ -28,18 +35,18 @@ type ReadWriteAccess struct {
 	Access   lunarwayv1alpha1.AccessSpec
 }
 
-func (g *Granter) GroupAccesses(reqLogger logr.Logger, namespace string, reads []lunarwayv1alpha1.AccessSpec, writes []lunarwayv1alpha1.AccessSpec) (HostAccess, error) {
+func (g *Granter) groupAccesses(namespace string, reads []lunarwayv1alpha1.AccessSpec, writes []lunarwayv1alpha1.AccessSpec) (HostAccess, error) {
 	if len(reads) == 0 {
 		return nil, nil
 	}
 	hosts := make(HostAccess)
 	var errs error
 
-	err := g.groupByHosts(reqLogger, hosts, namespace, reads, postgres.PrivilegeRead, g.AllDatabasesReadEnabled)
+	err := g.groupByHosts(hosts, namespace, reads, postgres.PrivilegeRead, g.AllDatabasesReadEnabled)
 	if err != nil {
 		errs = multierr.Append(errs, err)
 	}
-	err = g.groupByHosts(reqLogger, hosts, namespace, writes, postgres.PrivilegeWrite, g.AllDatabasesWriteEnabled)
+	err = g.groupByHosts(hosts, namespace, writes, postgres.PrivilegeWrite, g.AllDatabasesWriteEnabled)
 	if err != nil {
 		errs = multierr.Append(errs, err)
 	}
@@ -50,11 +57,20 @@ func (g *Granter) GroupAccesses(reqLogger logr.Logger, namespace string, reads [
 	return hosts, errs
 }
 
-func (g *Granter) groupByHosts(reqLogger logr.Logger, hosts HostAccess, namespace string, accesses []lunarwayv1alpha1.AccessSpec, privilege postgres.Privilege, allDatabasesEnabled bool) error {
-	reqLogger = reqLogger.WithValues("privilege", privilege)
+func (g *Granter) groupByHosts(hosts HostAccess, namespace string, accesses []lunarwayv1alpha1.AccessSpec, privilege postgres.Privilege, allDatabasesEnabled bool) error {
 	var errs error
 	for i, access := range accesses {
-		reqLogger = reqLogger.WithValues("spec", access)
+		reqLogger := g.Log.WithValues("spec", access, "privilege", privilege)
+		// access it not requested to be granted yet
+		if g.Now().Before(access.Start.Time) {
+			reqLogger.Info("Skipping access spec: start time is in the future")
+			continue
+		}
+		// access request has expired
+		if !access.Stop.IsZero() && g.Now().After(access.Stop.Time) {
+			reqLogger.Info("Skipping access spec: stop time is in the past")
+			continue
+		}
 		host, err := g.ResourceResolver(access.Host, namespace)
 		if err != nil {
 			errs = multierr.Append(errs, fmt.Errorf("resolve host: %w", &AccessError{

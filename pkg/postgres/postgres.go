@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -82,9 +83,6 @@ func (p Privilege) String() string {
 func Role(log logr.Logger, db *sql.DB, name string, roles []string, databases []DatabaseSchema) error {
 	log.Info(fmt.Sprintf("Creating role %s", name))
 	query := fmt.Sprintf("CREATE ROLE %s WITH LOGIN", name)
-	if len(roles) != 0 {
-		query += fmt.Sprintf(" IN ROLE %s", strings.Join(roles, ", "))
-	}
 	_, err := db.Exec(query)
 	if err != nil {
 		pqError, ok := err.(*pq.Error)
@@ -95,22 +93,44 @@ func Role(log logr.Logger, db *sql.DB, name string, roles []string, databases []
 	} else {
 		log.Info(fmt.Sprintf("Role %s created", name))
 	}
-	if len(roles) != 0 {
-		_, err = db.Exec(fmt.Sprintf("GRANT %s TO %s", strings.Join(roles, ", "), name))
+
+	// grant database access roles to created role
+	existingRoles, err := persistedRoles(db, name)
+	if err != nil {
+		return fmt.Errorf("get existing roles: %w", err)
+	}
+	grantableRoles, revokeableRoles := rolesDiff(log, existingRoles, roles, databases)
+	log.Info(fmt.Sprintf("Found %d grantable and %d revokable roles for %s", len(grantableRoles), len(revokeableRoles), name), "grantable", grantableRoles, "revokeable", revokeableRoles)
+	if len(grantableRoles) != 0 {
+		joinedRoles := strings.Join(grantableRoles, ",")
+		_, err = db.Exec(fmt.Sprintf("GRANT %s TO %s", joinedRoles, name))
 		if err != nil {
-			return fmt.Errorf("grant static roles '%v': %w", roles, err)
+			return fmt.Errorf("grant access privileges '%s' to '%s': %w", joinedRoles, name, err)
 		}
 	}
+	if len(revokeableRoles) != 0 {
+		joinedRoles := strings.Join(revokeableRoles, ",")
+		_, err = db.Exec(fmt.Sprintf("REVOKE %s FROM %s", joinedRoles, name))
+		if err != nil {
+			return fmt.Errorf("revoke access privileges '%s' to '%s': %w", joinedRoles, name, err)
+		}
+	}
+	return nil
+}
 
+// rolesDiff returns roles to add and remove from existingRoles slice based of
+// the databases that are requested access to.
+func rolesDiff(log logr.Logger, existingRoles []string, expectedRoles []string, databases []DatabaseSchema) ([]string, []string) {
+	// append to expectedRoles for each database access request
 	for _, database := range databases {
 		var schemaPrivileges string
-		if database.Privileges == PrivilegeRead {
+		switch database.Privileges {
+		case PrivilegeRead:
 			schemaPrivileges = "read"
-		}
-		if database.Privileges == PrivilegeWrite {
+		case PrivilegeWrite:
 			schemaPrivileges = "readwrite"
-		}
-		if len(schemaPrivileges) == 0 {
+		default:
+			log.Error(errors.New("priviledge unknown"), fmt.Sprintf("dropped database '%s.%s' as priviledge '%s' (%[3]d) is invalid", database.Name, database.Schema, database.Privileges), "database", database)
 			continue
 		}
 		schema := database.Schema
@@ -118,11 +138,63 @@ func Role(log logr.Logger, db *sql.DB, name string, roles []string, databases []
 			schema = database.Name
 		}
 		schemaPrivileges = fmt.Sprintf("%s_%s", schema, schemaPrivileges)
-		log.Info(fmt.Sprintf("Granting %s to %s", schemaPrivileges, name))
-		_, err = db.Exec(fmt.Sprintf("GRANT %s TO %s", schemaPrivileges, name))
-		if err != nil {
-			return fmt.Errorf("grant access privileges '%s' on schema '%s': %w", schemaPrivileges, schema, err)
+		expectedRoles = append(expectedRoles, schemaPrivileges)
+	}
+
+	// find roles that are expected but not on the existing roles list
+	var addableRoles []string
+	for _, expectedRole := range expectedRoles {
+		if contains(existingRoles, expectedRole) {
+			continue
+		}
+		addableRoles = append(addableRoles, expectedRole)
+	}
+
+	// find existing roles that are not in the expected list
+	var removeableRoles []string
+	for _, existingRole := range existingRoles {
+		if contains(expectedRoles, existingRole) {
+			continue
+		}
+		// only remove roles that look like some we control, ie. suffixed with _read
+		// or _readwrite. This is to make sure we do not change roles granted out of
+		// band to specific users.
+		if !strings.HasSuffix(existingRole, fmt.Sprintf("_%s", PrivilegeRead.String())) && !strings.HasSuffix(existingRole, fmt.Sprintf("_%s", PrivilegeWrite.String())) {
+			continue
+		}
+		removeableRoles = append(removeableRoles, existingRole)
+	}
+
+	return addableRoles, removeableRoles
+}
+
+func contains(roles []string, role string) bool {
+	for _, r := range roles {
+		if r == role {
+			return true
 		}
 	}
-	return nil
+	return false
+}
+
+func persistedRoles(db *sql.DB, name string) ([]string, error) {
+	rows, err := db.Query("SELECT rolname FROM pg_user JOIN pg_auth_members ON (pg_user.usesysid=pg_auth_members.member) JOIN pg_roles ON (pg_roles.oid=pg_auth_members.roleid) WHERE pg_user.usename=$1", name)
+	if err != nil {
+		return nil, fmt.Errorf("select roles: %w", err)
+	}
+	defer rows.Close()
+	var roles []string
+	for rows.Next() {
+		var rolName string
+		err = rows.Scan(&rolName)
+		if err != nil {
+			return nil, fmt.Errorf("scan row: %w", err)
+		}
+		roles = append(roles, rolName)
+	}
+	err = rows.Err()
+	if err != nil {
+		return nil, fmt.Errorf("scanning rows: %w", err)
+	}
+	return roles, nil
 }

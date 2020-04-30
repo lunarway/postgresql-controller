@@ -1,19 +1,20 @@
-package grants_test
+package grants
 
 import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/pkg/apis/lunarway/v1alpha1"
-	"go.lunarway.com/postgresql-controller/pkg/grants"
 	"go.lunarway.com/postgresql-controller/pkg/kube"
 	"go.lunarway.com/postgresql-controller/pkg/postgres"
 	"go.lunarway.com/postgresql-controller/test"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestReconcilePostgreSQLUser_groupAccesses(t *testing.T) {
+func TestGranter_groupAccesses(t *testing.T) {
 	accessSpec := func(host, reason string) lunarwayv1alpha1.AccessSpec {
 		return lunarwayv1alpha1.AccessSpec{
 			Host: lunarwayv1alpha1.ResourceVar{
@@ -29,8 +30,8 @@ func TestReconcilePostgreSQLUser_groupAccesses(t *testing.T) {
 		}
 	}
 
-	access := func(host, database string, privilige postgres.Privilege, reason string) grants.ReadWriteAccess {
-		return grants.ReadWriteAccess{
+	access := func(host, database string, privilige postgres.Privilege, reason string) ReadWriteAccess {
+		return ReadWriteAccess{
 			Host: host,
 			Database: postgres.DatabaseSchema{
 				Name:       database,
@@ -44,7 +45,7 @@ func TestReconcilePostgreSQLUser_groupAccesses(t *testing.T) {
 		name   string
 		reads  []lunarwayv1alpha1.AccessSpec
 		writes []lunarwayv1alpha1.AccessSpec
-		output grants.HostAccess
+		output HostAccess
 	}{
 		{
 			name:   "no reads",
@@ -57,8 +58,8 @@ func TestReconcilePostgreSQLUser_groupAccesses(t *testing.T) {
 				accessSpec("localhost:5432", "I am a developer"),
 			},
 			writes: nil,
-			output: grants.HostAccess{
-				"localhost:5432/database": []grants.ReadWriteAccess{
+			output: HostAccess{
+				"localhost:5432/database": []ReadWriteAccess{
 					access("localhost:5432", "database", postgres.PrivilegeRead, "I am a developer"),
 				},
 			},
@@ -70,8 +71,8 @@ func TestReconcilePostgreSQLUser_groupAccesses(t *testing.T) {
 				accessSpec("localhost:5432", "I really am a developer"),
 			},
 			writes: nil,
-			output: grants.HostAccess{
-				"localhost:5432/database": []grants.ReadWriteAccess{
+			output: HostAccess{
+				"localhost:5432/database": []ReadWriteAccess{
 					access("localhost:5432", "database", postgres.PrivilegeRead, "I am a developer"),
 					access("localhost:5432", "database", postgres.PrivilegeRead, "I really am a developer"),
 				},
@@ -84,11 +85,11 @@ func TestReconcilePostgreSQLUser_groupAccesses(t *testing.T) {
 				accessSpec("host2:5432", "I really am a developer"),
 			},
 			writes: nil,
-			output: grants.HostAccess{
-				"host1:5432/database": []grants.ReadWriteAccess{
+			output: HostAccess{
+				"host1:5432/database": []ReadWriteAccess{
 					access("host1:5432", "database", postgres.PrivilegeRead, "I am a developer"),
 				},
-				"host2:5432/database": []grants.ReadWriteAccess{
+				"host2:5432/database": []ReadWriteAccess{
 					access("host2:5432", "database", postgres.PrivilegeRead, "I really am a developer"),
 				},
 			},
@@ -103,12 +104,12 @@ func TestReconcilePostgreSQLUser_groupAccesses(t *testing.T) {
 				accessSpec("host1:5432", "I'am a writing developer"),
 				accessSpec("host2:5432", "I really am a writing developer"),
 			},
-			output: grants.HostAccess{
-				"host1:5432/database": []grants.ReadWriteAccess{
+			output: HostAccess{
+				"host1:5432/database": []ReadWriteAccess{
 					access("host1:5432", "database", postgres.PrivilegeRead, "I am a developer"),
 					access("host1:5432", "database", postgres.PrivilegeWrite, "I'am a writing developer"),
 				},
-				"host2:5432/database": []grants.ReadWriteAccess{
+				"host2:5432/database": []ReadWriteAccess{
 					access("host2:5432", "database", postgres.PrivilegeRead, "I really am a developer"),
 					access("host2:5432", "database", postgres.PrivilegeWrite, "I really am a writing developer"),
 				},
@@ -118,7 +119,9 @@ func TestReconcilePostgreSQLUser_groupAccesses(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			logger := test.NewLogger(t)
-			r := grants.Granter{
+			r := Granter{
+				Now: time.Now,
+				Log: logger,
 				ResourceResolver: func(r lunarwayv1alpha1.ResourceVar, ns string) (string, error) {
 					return r.Value, nil
 				},
@@ -128,7 +131,7 @@ func TestReconcilePostgreSQLUser_groupAccesses(t *testing.T) {
 				},
 			}
 
-			output, err := r.GroupAccesses(logger, "namespace", tc.reads, tc.writes)
+			output, err := r.groupAccesses("namespace", tc.reads, tc.writes)
 
 			assert.NoError(t, err, "unexpected output error")
 			assert.Equal(t, tc.output, output, "output map not as expected")
@@ -136,7 +139,117 @@ func TestReconcilePostgreSQLUser_groupAccesses(t *testing.T) {
 	}
 }
 
-func TestReconcilePostgreSQLUser_groupAccesses_withAllDatabases(t *testing.T) {
+// TestGranter_groupAccesses_startStopHandling tests that groupAccesses filteres
+// future and expired access requests correctly.
+func TestGranter_groupAccesses_startStopHandling(t *testing.T) {
+	var (
+		now          = time.Date(2020, 4, 30, 13, 0, 0, 0, time.UTC)
+		past1Hour    = now.Add(-1 * time.Hour)
+		past2Hours   = now.Add(-2 * time.Hour)
+		future1Hour  = now.Add(1 * time.Hour)
+		future2Hours = now.Add(2 * time.Hour)
+
+		// dummy values for access instances
+		host         = "localhost:5432"
+		database     = "database"
+		hostDatabase = fmt.Sprintf("%s/%s", host, database)
+		privilige    = postgres.PrivilegeRead
+		reason       = "A good reason"
+	)
+
+	accessSpec := func(start, stop time.Time) lunarwayv1alpha1.AccessSpec {
+		return lunarwayv1alpha1.AccessSpec{
+			Host: lunarwayv1alpha1.ResourceVar{
+				Value: host,
+			},
+			Database: lunarwayv1alpha1.ResourceVar{
+				Value: database,
+			},
+			Schema: lunarwayv1alpha1.ResourceVar{
+				Value: database,
+			},
+			Reason: reason,
+			Start:  v1.NewTime(start),
+			Stop:   v1.NewTime(stop),
+		}
+	}
+
+	access := func(start, stop time.Time) *ReadWriteAccess {
+		return &ReadWriteAccess{
+			Host: host,
+			Database: postgres.DatabaseSchema{
+				Name:       database,
+				Schema:     database,
+				Privileges: privilige,
+			},
+			Access: accessSpec(start, stop),
+		}
+	}
+	tt := []struct {
+		name   string
+		access lunarwayv1alpha1.AccessSpec
+		output *ReadWriteAccess
+	}{
+		{
+			name:   "read starting in the future",
+			access: accessSpec(future1Hour, future2Hours),
+			output: nil,
+		},
+		{
+			name:   "read started and ends in the future",
+			access: accessSpec(past1Hour, future1Hour),
+			output: access(past1Hour, future1Hour),
+		},
+		{
+			name:   "read started and ends in the past",
+			access: accessSpec(past2Hours, past1Hour),
+			output: nil,
+		},
+		{
+			name:   "empty start time",
+			access: accessSpec(time.Time{}, future1Hour),
+			output: access(time.Time{}, future1Hour),
+		},
+		{
+			name:   "empty stop time",
+			access: accessSpec(past1Hour, time.Time{}),
+			output: access(past1Hour, time.Time{}),
+		},
+	}
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			logger := test.NewLogger(t)
+			r := Granter{
+				Now: func() time.Time {
+					return now
+				},
+				Log: logger,
+				ResourceResolver: func(r lunarwayv1alpha1.ResourceVar, ns string) (string, error) {
+					return r.Value, nil
+				},
+				AllDatabases: func(namespace string) ([]lunarwayv1alpha1.PostgreSQLDatabase, error) {
+					t.Fatalf("allDatabases was not expected to be used")
+					return nil, nil
+				},
+			}
+
+			output, err := r.groupAccesses("namespace", []lunarwayv1alpha1.AccessSpec{tc.access}, nil)
+
+			assert.NoError(t, err, "unexpected output error")
+			var hostAccess HostAccess
+			if tc.output != nil {
+				hostAccess = HostAccess{
+					hostDatabase: []ReadWriteAccess{
+						*tc.output,
+					},
+				}
+			}
+			assert.Equal(t, hostAccess, output, "output map not as expected")
+		})
+	}
+}
+
+func TestGranter_groupAccesses_withAllDatabases(t *testing.T) {
 	database := func(host, name string) lunarwayv1alpha1.PostgreSQLDatabase {
 		return lunarwayv1alpha1.PostgreSQLDatabase{
 			Spec: lunarwayv1alpha1.PostgreSQLDatabaseSpec{
@@ -159,8 +272,8 @@ func TestReconcilePostgreSQLUser_groupAccesses_withAllDatabases(t *testing.T) {
 			Reason:       reason,
 		}
 	}
-	access := func(host, database string, privilige postgres.Privilege, reason string) grants.ReadWriteAccess {
-		return grants.ReadWriteAccess{
+	access := func(host, database string, privilige postgres.Privilege, reason string) ReadWriteAccess {
+		return ReadWriteAccess{
 			Host: host,
 			Database: postgres.DatabaseSchema{
 				Name:       database,
@@ -175,7 +288,7 @@ func TestReconcilePostgreSQLUser_groupAccesses_withAllDatabases(t *testing.T) {
 		databases []lunarwayv1alpha1.PostgreSQLDatabase
 		reads     []lunarwayv1alpha1.AccessSpec
 		writes    []lunarwayv1alpha1.AccessSpec
-		output    grants.HostAccess
+		output    HostAccess
 	}{
 		{
 			name:      "no databases on host",
@@ -195,8 +308,8 @@ func TestReconcilePostgreSQLUser_groupAccesses_withAllDatabases(t *testing.T) {
 				spec("host1:5432", "I am a developer"),
 			},
 			writes: nil,
-			output: grants.HostAccess{
-				"host1:5432/database": []grants.ReadWriteAccess{
+			output: HostAccess{
+				"host1:5432/database": []ReadWriteAccess{
 					access("host1:5432", "database", postgres.PrivilegeRead, "I am a developer"),
 				},
 			},
@@ -213,12 +326,12 @@ func TestReconcilePostgreSQLUser_groupAccesses_withAllDatabases(t *testing.T) {
 			writes: []lunarwayv1alpha1.AccessSpec{
 				spec("host1:5432", "I am a writing developer"),
 			},
-			output: grants.HostAccess{
-				"host1:5432/database1": []grants.ReadWriteAccess{
+			output: HostAccess{
+				"host1:5432/database1": []ReadWriteAccess{
 					access("host1:5432", "database1", postgres.PrivilegeRead, "I am a developer"),
 					access("host1:5432", "database1", postgres.PrivilegeWrite, "I am a writing developer"),
 				},
-				"host1:5432/database2": []grants.ReadWriteAccess{
+				"host1:5432/database2": []ReadWriteAccess{
 					access("host1:5432", "database2", postgres.PrivilegeRead, "I am a developer"),
 					access("host1:5432", "database2", postgres.PrivilegeWrite, "I am a writing developer"),
 				},
@@ -236,11 +349,11 @@ func TestReconcilePostgreSQLUser_groupAccesses_withAllDatabases(t *testing.T) {
 			writes: []lunarwayv1alpha1.AccessSpec{
 				spec("host2:5432", "I am a writing developer"),
 			},
-			output: grants.HostAccess{
-				"host1:5432/database1": []grants.ReadWriteAccess{
+			output: HostAccess{
+				"host1:5432/database1": []ReadWriteAccess{
 					access("host1:5432", "database1", postgres.PrivilegeRead, "I am a developer"),
 				},
-				"host2:5432/database2": []grants.ReadWriteAccess{
+				"host2:5432/database2": []ReadWriteAccess{
 					access("host2:5432", "database2", postgres.PrivilegeWrite, "I am a writing developer"),
 				},
 			},
@@ -259,17 +372,17 @@ func TestReconcilePostgreSQLUser_groupAccesses_withAllDatabases(t *testing.T) {
 			writes: []lunarwayv1alpha1.AccessSpec{
 				spec("host2:5432", "I am a writing developer"),
 			},
-			output: grants.HostAccess{
-				"host1:5432/database1": []grants.ReadWriteAccess{
+			output: HostAccess{
+				"host1:5432/database1": []ReadWriteAccess{
 					access("host1:5432", "database1", postgres.PrivilegeRead, "I am a developer"),
 				},
-				"host1:5432/database2": []grants.ReadWriteAccess{
+				"host1:5432/database2": []ReadWriteAccess{
 					access("host1:5432", "database2", postgres.PrivilegeRead, "I am a developer"),
 				},
-				"host2:5432/database3": []grants.ReadWriteAccess{
+				"host2:5432/database3": []ReadWriteAccess{
 					access("host2:5432", "database3", postgres.PrivilegeWrite, "I am a writing developer"),
 				},
-				"host2:5432/database4": []grants.ReadWriteAccess{
+				"host2:5432/database4": []ReadWriteAccess{
 					access("host2:5432", "database4", postgres.PrivilegeWrite, "I am a writing developer"),
 				},
 			},
@@ -284,8 +397,8 @@ func TestReconcilePostgreSQLUser_groupAccesses_withAllDatabases(t *testing.T) {
 				spec("host1:5432", "I am a developer"),
 			},
 			writes: nil,
-			output: grants.HostAccess{
-				"host1:5432/database1": []grants.ReadWriteAccess{
+			output: HostAccess{
+				"host1:5432/database1": []ReadWriteAccess{
 					access("host1:5432", "database1", postgres.PrivilegeRead, "I am a developer"),
 				},
 			},
@@ -294,7 +407,9 @@ func TestReconcilePostgreSQLUser_groupAccesses_withAllDatabases(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			logger := test.NewLogger(t)
-			r := grants.Granter{
+			r := Granter{
+				Now: time.Now,
+				Log: logger,
 				ResourceResolver: func(r lunarwayv1alpha1.ResourceVar, ns string) (string, error) {
 					return r.Value, nil
 				},
@@ -305,7 +420,7 @@ func TestReconcilePostgreSQLUser_groupAccesses_withAllDatabases(t *testing.T) {
 				},
 			}
 
-			output, err := r.GroupAccesses(logger, "namespace", tc.reads, tc.writes)
+			output, err := r.groupAccesses("namespace", tc.reads, tc.writes)
 
 			assert.NoError(t, err, "unexpected output error")
 			assert.Equal(t, tc.output, output, "output map not as expected")
@@ -313,7 +428,7 @@ func TestReconcilePostgreSQLUser_groupAccesses_withAllDatabases(t *testing.T) {
 	}
 }
 
-func TestReconcilePostgreSQLUser_groupAccesses_allDatabasesFeatureFlags(t *testing.T) {
+func TestGranter_groupAccesses_allDatabasesFeatureFlags(t *testing.T) {
 	database := func(host, name string) lunarwayv1alpha1.PostgreSQLDatabase {
 		return lunarwayv1alpha1.PostgreSQLDatabase{
 			Spec: lunarwayv1alpha1.PostgreSQLDatabaseSpec{
@@ -336,8 +451,8 @@ func TestReconcilePostgreSQLUser_groupAccesses_allDatabasesFeatureFlags(t *testi
 			Reason:       reason,
 		}
 	}
-	access := func(host, database string, privilige postgres.Privilege, reason string) grants.ReadWriteAccess {
-		return grants.ReadWriteAccess{
+	access := func(host, database string, privilige postgres.Privilege, reason string) ReadWriteAccess {
+		return ReadWriteAccess{
 			Host: host,
 			Database: postgres.DatabaseSchema{
 				Name:       database,
@@ -354,7 +469,7 @@ func TestReconcilePostgreSQLUser_groupAccesses_allDatabasesFeatureFlags(t *testi
 		writeFeatureEnabled bool
 		reads               []lunarwayv1alpha1.AccessSpec
 		writes              []lunarwayv1alpha1.AccessSpec
-		output              grants.HostAccess
+		output              HostAccess
 	}{
 		{
 			name: "read allDatabases disabled",
@@ -393,8 +508,8 @@ func TestReconcilePostgreSQLUser_groupAccesses_allDatabasesFeatureFlags(t *testi
 				spec("host1:5432", "I am a developer"),
 			},
 			writes: nil,
-			output: grants.HostAccess{
-				"host1:5432/database": []grants.ReadWriteAccess{
+			output: HostAccess{
+				"host1:5432/database": []ReadWriteAccess{
 					access("host1:5432", "database", postgres.PrivilegeRead, "I am a developer"),
 				},
 			},
@@ -403,7 +518,9 @@ func TestReconcilePostgreSQLUser_groupAccesses_allDatabasesFeatureFlags(t *testi
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			logger := test.NewLogger(t)
-			r := grants.Granter{
+			r := Granter{
+				Now: time.Now,
+				Log: logger,
 				ResourceResolver: func(r lunarwayv1alpha1.ResourceVar, ns string) (string, error) {
 					return r.Value, nil
 				},
@@ -414,7 +531,7 @@ func TestReconcilePostgreSQLUser_groupAccesses_allDatabasesFeatureFlags(t *testi
 				},
 			}
 
-			output, err := r.GroupAccesses(logger, "namespace", tc.reads, tc.writes)
+			output, err := r.groupAccesses("namespace", tc.reads, tc.writes)
 
 			assert.NoError(t, err, "unexpected output error")
 			assert.Equal(t, tc.output, output, "output map not as expected")
@@ -422,7 +539,7 @@ func TestReconcilePostgreSQLUser_groupAccesses_allDatabasesFeatureFlags(t *testi
 	}
 }
 
-func TestReconcilePostgreSQLUser_groupAccesses_mixedSpecs(t *testing.T) {
+func TestGranter_groupAccesses_mixedSpecs(t *testing.T) {
 	database := func(host, name string) lunarwayv1alpha1.PostgreSQLDatabase {
 		return lunarwayv1alpha1.PostgreSQLDatabase{
 			Spec: lunarwayv1alpha1.PostgreSQLDatabaseSpec{
@@ -459,8 +576,8 @@ func TestReconcilePostgreSQLUser_groupAccesses_mixedSpecs(t *testing.T) {
 			Reason: reason,
 		}
 	}
-	allDatabasesAccess := func(host, database string, privilige postgres.Privilege, reason string) grants.ReadWriteAccess {
-		return grants.ReadWriteAccess{
+	allDatabasesAccess := func(host, database string, privilige postgres.Privilege, reason string) ReadWriteAccess {
+		return ReadWriteAccess{
 			Host: host,
 			Database: postgres.DatabaseSchema{
 				Name:       database,
@@ -470,8 +587,8 @@ func TestReconcilePostgreSQLUser_groupAccesses_mixedSpecs(t *testing.T) {
 			Access: allDatabasesSpec(host, reason),
 		}
 	}
-	singleDatabaseAccess := func(host, database string, privilige postgres.Privilege, reason string) grants.ReadWriteAccess {
-		return grants.ReadWriteAccess{
+	singleDatabaseAccess := func(host, database string, privilige postgres.Privilege, reason string) ReadWriteAccess {
+		return ReadWriteAccess{
 			Host: host,
 			Database: postgres.DatabaseSchema{
 				Name:       database,
@@ -486,7 +603,7 @@ func TestReconcilePostgreSQLUser_groupAccesses_mixedSpecs(t *testing.T) {
 		databases []lunarwayv1alpha1.PostgreSQLDatabase
 		reads     []lunarwayv1alpha1.AccessSpec
 		writes    []lunarwayv1alpha1.AccessSpec
-		output    grants.HostAccess
+		output    HostAccess
 	}{
 		{
 			name: "single write and allDatabases read on same host",
@@ -500,11 +617,11 @@ func TestReconcilePostgreSQLUser_groupAccesses_mixedSpecs(t *testing.T) {
 			writes: []lunarwayv1alpha1.AccessSpec{
 				singleDatabaseSpec("host1:5432", "database2", "I am a writing developer"),
 			},
-			output: grants.HostAccess{
-				"host1:5432/database1": []grants.ReadWriteAccess{
+			output: HostAccess{
+				"host1:5432/database1": []ReadWriteAccess{
 					allDatabasesAccess("host1:5432", "database1", postgres.PrivilegeRead, "I am a developer"),
 				},
-				"host1:5432/database2": []grants.ReadWriteAccess{
+				"host1:5432/database2": []ReadWriteAccess{
 					allDatabasesAccess("host1:5432", "database2", postgres.PrivilegeRead, "I am a developer"),
 					singleDatabaseAccess("host1:5432", "database2", postgres.PrivilegeWrite, "I am a writing developer"),
 				},
@@ -514,7 +631,9 @@ func TestReconcilePostgreSQLUser_groupAccesses_mixedSpecs(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			logger := test.NewLogger(t)
-			r := grants.Granter{
+			r := Granter{
+				Now: time.Now,
+				Log: logger,
 				ResourceResolver: func(r lunarwayv1alpha1.ResourceVar, ns string) (string, error) {
 					return r.Value, nil
 				},
@@ -525,7 +644,7 @@ func TestReconcilePostgreSQLUser_groupAccesses_mixedSpecs(t *testing.T) {
 				},
 			}
 
-			output, err := r.GroupAccesses(logger, "namespace", tc.reads, tc.writes)
+			output, err := r.groupAccesses("namespace", tc.reads, tc.writes)
 
 			assert.NoError(t, err, "unexpected output error")
 			assert.Equal(t, tc.output, output, "output map not as expected")
@@ -533,7 +652,7 @@ func TestReconcilePostgreSQLUser_groupAccesses_mixedSpecs(t *testing.T) {
 	}
 }
 
-func TestReconcilePostgreSQLUser_groupAccesses_errors(t *testing.T) {
+func TestGranter_groupAccesses_errors(t *testing.T) {
 	reads := []lunarwayv1alpha1.AccessSpec{
 		{
 			Host: lunarwayv1alpha1.ResourceVar{
@@ -567,21 +686,109 @@ func TestReconcilePostgreSQLUser_groupAccesses_errors(t *testing.T) {
 	expectedError := "resolve host: access to host host1:5432: no value; resolve host: access to host from secret 'secret' key 'key': no value; resolve host: access to host from config map 'configmap' key 'key': no value"
 
 	logger := test.NewLogger(t)
-	r := grants.Granter{
+	r := Granter{
+		Now: time.Now,
+		Log: logger,
 		ResourceResolver: func(r lunarwayv1alpha1.ResourceVar, ns string) (string, error) {
 			return r.Value, fmt.Errorf("no value")
 		},
 	}
-	output, err := r.GroupAccesses(logger, "namespace", reads, nil)
+	output, err := r.groupAccesses("namespace", reads, nil)
 
 	assert.EqualError(t, err, expectedError, "output error not as exepcted")
-	assert.Equal(t, grants.HostAccess(nil), output, "output map not as expected")
+	assert.Equal(t, HostAccess(nil), output, "output map not as expected")
 }
 
-// TestGranter_GroupAccesses_partialErrors tests that GroupAccesses returns a
+func TestGranter_connectToHosts(t *testing.T) {
+	test.Integration(t)
+	tt := []struct {
+		name            string
+		credentials     map[string]postgres.Credentials
+		hostAccess      HostAccess
+		connectionCount int
+		err             error
+	}{
+		{
+			name: "single host with credentials",
+			credentials: map[string]postgres.Credentials{
+				"localhost:5432": {
+					Name:     "iam_creator",
+					Password: "",
+				},
+			},
+			hostAccess: HostAccess{
+				"localhost:5432/postgres": []ReadWriteAccess{},
+			},
+			connectionCount: 1,
+			err:             nil,
+		},
+		{
+			name: "multiple hosts without upstream",
+			credentials: map[string]postgres.Credentials{
+				"localhost:5432": {
+					Name:     "iam_creator",
+					Password: "",
+				},
+				"unknown": {
+					Name:     "iam_creator",
+					Password: "12345678",
+				},
+			},
+			hostAccess: HostAccess{
+				"localhost:5432/postgres": []ReadWriteAccess{},
+				"unknown/postgres":        []ReadWriteAccess{},
+			},
+			connectionCount: 1,
+			err:             fmt.Errorf("connect to postgresql://iam_creator:********@unknown/postgres?sslmode=disable: dial tcp:"),
+		},
+		{
+			name:        "missing credentials",
+			credentials: map[string]postgres.Credentials{},
+			hostAccess: HostAccess{
+				"localhost:5432/postgres": []ReadWriteAccess{},
+			},
+			connectionCount: 0,
+			err:             fmt.Errorf("no credentials for host 'localhost:5432'"),
+		},
+	}
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			logger := test.NewLogger(t)
+
+			r := Granter{
+				Now:             time.Now,
+				Log:             logger,
+				HostCredentials: tc.credentials,
+			}
+
+			// act
+			connections, err := r.connectToHosts(tc.hostAccess)
+
+			defer func() {
+				for _, db := range connections {
+					db.Close()
+				}
+			}()
+
+			// assert
+			t.Logf("Connections: %v", connections)
+			if tc.err != nil {
+				if !assert.Error(t, err, "an output error was expected") {
+					return
+				}
+				assert.Contains(t, err.Error(), tc.err.Error(), "error not as expected")
+			} else {
+				assert.NoError(t, err, "unexpected output error")
+			}
+			assert.Len(t, connections, tc.connectionCount, "connection count not as expected")
+		})
+	}
+}
+
+// TestGranter_groupAccesses_partialErrors tests that GroupAccesses returns a
 // partial result in case of errors, eg. database2 cannot be resolved but
 // database1 can.
-func TestGranter_GroupAccesses_partialErrors(t *testing.T) {
+func TestGranter_groupAccesses_partialErrors(t *testing.T) {
 	tt := []struct {
 		name            string
 		reads           []lunarwayv1alpha1.AccessSpec
@@ -589,7 +796,7 @@ func TestGranter_GroupAccesses_partialErrors(t *testing.T) {
 			value string
 			err   error
 		}
-		hosts grants.HostAccess
+		hosts HostAccess
 		err   error
 	}{
 		{
@@ -602,8 +809,8 @@ func TestGranter_GroupAccesses_partialErrors(t *testing.T) {
 					AllDatabases: true,
 				},
 			},
-			hosts: grants.HostAccess{
-				"host1/database1": []grants.ReadWriteAccess{
+			hosts: HostAccess{
+				"host1/database1": []ReadWriteAccess{
 					{
 						Host: "host1",
 						Database: postgres.DatabaseSchema{
@@ -625,7 +832,9 @@ func TestGranter_GroupAccesses_partialErrors(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			logger := test.NewLogger(t)
-			r := grants.Granter{
+			r := Granter{
+				Now:                     time.Now,
+				Log:                     logger,
 				AllDatabasesReadEnabled: true,
 				AllDatabases: func(namespace string) ([]lunarwayv1alpha1.PostgreSQLDatabase, error) {
 					return []lunarwayv1alpha1.PostgreSQLDatabase{
@@ -656,7 +865,7 @@ func TestGranter_GroupAccesses_partialErrors(t *testing.T) {
 					return r.Value, nil
 				},
 			}
-			output, err := r.GroupAccesses(logger, "namespace", tc.reads, nil)
+			output, err := r.groupAccesses("namespace", tc.reads, nil)
 
 			if tc.err != nil {
 				assert.EqualError(t, err, tc.err.Error(), "output error not as exepcted")
@@ -668,10 +877,10 @@ func TestGranter_GroupAccesses_partialErrors(t *testing.T) {
 	}
 }
 
-// TestGranter_GroupAccesses_noUserSchemaFallback_allDatabases tests that the
+// TestGranter_groupAccesses_noUserSchemaFallback_allDatabases tests that the
 // database name is used as a fallback if no user is specified in the access
 // spec and the spec has AllDatabases set.
-func TestGranter_GroupAccesses_noUserSchemaFallback_allDatabases(t *testing.T) {
+func TestGranter_groupAccesses_noUserSchemaFallback_allDatabases(t *testing.T) {
 	reads := []lunarwayv1alpha1.AccessSpec{
 		{
 			Host: lunarwayv1alpha1.ResourceVar{
@@ -681,8 +890,8 @@ func TestGranter_GroupAccesses_noUserSchemaFallback_allDatabases(t *testing.T) {
 			Reason:       "I am a developer",
 		},
 	}
-	expectedHostAccesses := grants.HostAccess{
-		"host1:5432/db1": []grants.ReadWriteAccess{
+	expectedHostAccesses := HostAccess{
+		"host1:5432/db1": []ReadWriteAccess{
 			{
 				Host: "host1:5432",
 				Access: lunarwayv1alpha1.AccessSpec{
@@ -702,7 +911,9 @@ func TestGranter_GroupAccesses_noUserSchemaFallback_allDatabases(t *testing.T) {
 	}
 
 	logger := test.NewLogger(t)
-	r := grants.Granter{
+	r := Granter{
+		Now:                     time.Now,
+		Log:                     logger,
 		AllDatabasesReadEnabled: true,
 		AllDatabases: func(namespace string) ([]lunarwayv1alpha1.PostgreSQLDatabase, error) {
 			return []lunarwayv1alpha1.PostgreSQLDatabase{
@@ -729,7 +940,7 @@ func TestGranter_GroupAccesses_noUserSchemaFallback_allDatabases(t *testing.T) {
 			return r.Value, nil
 		},
 	}
-	output, err := r.GroupAccesses(logger, "namespace", reads, nil)
+	output, err := r.groupAccesses("namespace", reads, nil)
 
 	assert.NoError(t, err, "unexpected output error")
 	assert.Equal(t, expectedHostAccesses, output, "output map not as expected")
