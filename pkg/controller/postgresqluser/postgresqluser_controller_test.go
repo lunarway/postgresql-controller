@@ -3,6 +3,7 @@ package postgresqluser
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/go-logr/logr"
@@ -186,6 +187,7 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 	r := &ReconcilePostgreSQLUser{
 		client: cl,
 		granter: grants.Granter{
+			Now: time.Now,
 			HostCredentials: map[string]postgres.Credentials{
 				host: {
 					Name:     "iam_creator",

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/go-logr/logr"
@@ -119,6 +120,7 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 	c := &ReconcilePostgreSQLUser{
 		client: mgr.GetClient(),
 		granter: grants.Granter{
+			Now: time.Now,
 			AllDatabases: func(namespace string) ([]lunarwayv1alpha1.PostgreSQLDatabase, error) {
 				return kube.PostgreSQLDatabases(mgr.GetClient(), namespace)
 			},

@@ -4,12 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/pkg/apis/lunarway/v1alpha1"
 	"go.lunarway.com/postgresql-controller/pkg/kube"
 	"go.lunarway.com/postgresql-controller/pkg/postgres"
 	"go.lunarway.com/postgresql-controller/test"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestGranter_groupAccesses(t *testing.T) {
@@ -118,6 +120,7 @@ func TestGranter_groupAccesses(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			logger := test.NewLogger(t)
 			r := Granter{
+				Now: time.Now,
 				Log: logger,
 				ResourceResolver: func(r lunarwayv1alpha1.ResourceVar, ns string) (string, error) {
 					return r.Value, nil
@@ -132,6 +135,116 @@ func TestGranter_groupAccesses(t *testing.T) {
 
 			assert.NoError(t, err, "unexpected output error")
 			assert.Equal(t, tc.output, output, "output map not as expected")
+		})
+	}
+}
+
+// TestGranter_groupAccesses_startStopHandling tests that groupAccesses filteres
+// future and expired access requests correctly.
+func TestGranter_groupAccesses_startStopHandling(t *testing.T) {
+	var (
+		now          = time.Date(2020, 4, 30, 13, 0, 0, 0, time.UTC)
+		past1Hour    = now.Add(-1 * time.Hour)
+		past2Hours   = now.Add(-2 * time.Hour)
+		future1Hour  = now.Add(1 * time.Hour)
+		future2Hours = now.Add(2 * time.Hour)
+
+		// dummy values for access instances
+		host         = "localhost:5432"
+		database     = "database"
+		hostDatabase = fmt.Sprintf("%s/%s", host, database)
+		privilige    = postgres.PrivilegeRead
+		reason       = "A good reason"
+	)
+
+	accessSpec := func(start, stop time.Time) lunarwayv1alpha1.AccessSpec {
+		return lunarwayv1alpha1.AccessSpec{
+			Host: lunarwayv1alpha1.ResourceVar{
+				Value: host,
+			},
+			Database: lunarwayv1alpha1.ResourceVar{
+				Value: database,
+			},
+			Schema: lunarwayv1alpha1.ResourceVar{
+				Value: database,
+			},
+			Reason: reason,
+			Start:  v1.NewTime(start),
+			Stop:   v1.NewTime(stop),
+		}
+	}
+
+	access := func(start, stop time.Time) *ReadWriteAccess {
+		return &ReadWriteAccess{
+			Host: host,
+			Database: postgres.DatabaseSchema{
+				Name:       database,
+				Schema:     database,
+				Privileges: privilige,
+			},
+			Access: accessSpec(start, stop),
+		}
+	}
+	tt := []struct {
+		name   string
+		access lunarwayv1alpha1.AccessSpec
+		output *ReadWriteAccess
+	}{
+		{
+			name:   "read starting in the future",
+			access: accessSpec(future1Hour, future2Hours),
+			output: nil,
+		},
+		{
+			name:   "read started and ends in the future",
+			access: accessSpec(past1Hour, future1Hour),
+			output: access(past1Hour, future1Hour),
+		},
+		{
+			name:   "read started and ends in the past",
+			access: accessSpec(past2Hours, past1Hour),
+			output: nil,
+		},
+		{
+			name:   "empty start time",
+			access: accessSpec(time.Time{}, future1Hour),
+			output: access(time.Time{}, future1Hour),
+		},
+		{
+			name:   "empty stop time",
+			access: accessSpec(past1Hour, time.Time{}),
+			output: access(past1Hour, time.Time{}),
+		},
+	}
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			logger := test.NewLogger(t)
+			r := Granter{
+				Now: func() time.Time {
+					return now
+				},
+				Log: logger,
+				ResourceResolver: func(r lunarwayv1alpha1.ResourceVar, ns string) (string, error) {
+					return r.Value, nil
+				},
+				AllDatabases: func(namespace string) ([]lunarwayv1alpha1.PostgreSQLDatabase, error) {
+					t.Fatalf("allDatabases was not expected to be used")
+					return nil, nil
+				},
+			}
+
+			output, err := r.groupAccesses("namespace", []lunarwayv1alpha1.AccessSpec{tc.access}, nil)
+
+			assert.NoError(t, err, "unexpected output error")
+			var hostAccess HostAccess
+			if tc.output != nil {
+				hostAccess = HostAccess{
+					hostDatabase: []ReadWriteAccess{
+						*tc.output,
+					},
+				}
+			}
+			assert.Equal(t, hostAccess, output, "output map not as expected")
 		})
 	}
 }
@@ -295,6 +408,7 @@ func TestGranter_groupAccesses_withAllDatabases(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			logger := test.NewLogger(t)
 			r := Granter{
+				Now: time.Now,
 				Log: logger,
 				ResourceResolver: func(r lunarwayv1alpha1.ResourceVar, ns string) (string, error) {
 					return r.Value, nil
@@ -405,6 +519,7 @@ func TestGranter_groupAccesses_allDatabasesFeatureFlags(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			logger := test.NewLogger(t)
 			r := Granter{
+				Now: time.Now,
 				Log: logger,
 				ResourceResolver: func(r lunarwayv1alpha1.ResourceVar, ns string) (string, error) {
 					return r.Value, nil
@@ -517,6 +632,7 @@ func TestGranter_groupAccesses_mixedSpecs(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			logger := test.NewLogger(t)
 			r := Granter{
+				Now: time.Now,
 				Log: logger,
 				ResourceResolver: func(r lunarwayv1alpha1.ResourceVar, ns string) (string, error) {
 					return r.Value, nil
@@ -571,6 +687,7 @@ func TestGranter_groupAccesses_errors(t *testing.T) {
 
 	logger := test.NewLogger(t)
 	r := Granter{
+		Now: time.Now,
 		Log: logger,
 		ResourceResolver: func(r lunarwayv1alpha1.ResourceVar, ns string) (string, error) {
 			return r.Value, fmt.Errorf("no value")
@@ -594,7 +711,7 @@ func TestGranter_connectToHosts(t *testing.T) {
 		{
 			name: "single host with credentials",
 			credentials: map[string]postgres.Credentials{
-				"localhost:5432": postgres.Credentials{
+				"localhost:5432": {
 					Name:     "iam_creator",
 					Password: "",
 				},
@@ -608,11 +725,11 @@ func TestGranter_connectToHosts(t *testing.T) {
 		{
 			name: "multiple hosts without upstream",
 			credentials: map[string]postgres.Credentials{
-				"localhost:5432": postgres.Credentials{
+				"localhost:5432": {
 					Name:     "iam_creator",
 					Password: "",
 				},
-				"unknown": postgres.Credentials{
+				"unknown": {
 					Name:     "iam_creator",
 					Password: "12345678",
 				},
@@ -639,6 +756,7 @@ func TestGranter_connectToHosts(t *testing.T) {
 			logger := test.NewLogger(t)
 
 			r := Granter{
+				Now: time.Now,
 				Log:             logger,
 				HostCredentials: tc.credentials,
 			}
@@ -715,6 +833,7 @@ func TestGranter_groupAccesses_partialErrors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			logger := test.NewLogger(t)
 			r := Granter{
+				Now: time.Now,
 				Log:                     logger,
 				AllDatabasesReadEnabled: true,
 				AllDatabases: func(namespace string) ([]lunarwayv1alpha1.PostgreSQLDatabase, error) {
@@ -793,6 +912,7 @@ func TestGranter_groupAccesses_noUserSchemaFallback_allDatabases(t *testing.T) {
 
 	logger := test.NewLogger(t)
 	r := Granter{
+		Now: time.Now,
 		Log:                     logger,
 		AllDatabasesReadEnabled: true,
 		AllDatabases: func(namespace string) ([]lunarwayv1alpha1.PostgreSQLDatabase, error) {
