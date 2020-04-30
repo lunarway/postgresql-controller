@@ -10,34 +10,9 @@ import (
 	"go.uber.org/multierr"
 )
 
-// Sync syncronizes PostgreSQL role grants for current users and their
-// capability mappings.
-//
-// It collects all users and resolves the required grants for each user. The
-// updates the stored grants in the database instance if there are any changes
-// required.
-// func (g *Granter) Sync(namespace string) error {
-// 	// Get all users
-// 	users, err := g.AllUsers(namespace)
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	// get all grants for users in database controlled by the controller
-
-// 	var errs error
-// 	for _, user := range users {
-// 		err := g.SyncUser(namespace, user)
-// 		if err != nil {
-// 			errs = multierr.Append(errs, fmt.Errorf("user %s: %w", user.Name, err))
-// 		}
-// 	}
-// 	if errs != nil {
-// 		return errs
-// 	}
-// 	return nil
-// }
-
+// SyncUser syncronizes a PostgreSQL user's access requests against the roles
+// defined in the host instances. Any excessive roles are removed and missing
+// ones are added.
 func (g *Granter) SyncUser(namespace string, user lunarwayv1alpha1.PostgreSQLUser) error {
 	//   resolve required grants taking expiration into account
 	//   diff against existing
