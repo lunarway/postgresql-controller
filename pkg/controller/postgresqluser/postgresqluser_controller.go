@@ -215,7 +215,7 @@ func (r *ReconcilePostgreSQLUser) reconcile(reqLogger logr.Logger, request recon
 	reqLogger = reqLogger.WithValues("user", user.Spec.Name)
 	reqLogger.Info("Reconciling found PostgreSQLUser resource", "user", user.Spec.Name)
 
-	err = r.granter.SyncUser(request.Namespace, *user)
+	err = r.granter.SyncUser(reqLogger, request.Namespace, *user)
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("sync user grants: %w", err)
 	}

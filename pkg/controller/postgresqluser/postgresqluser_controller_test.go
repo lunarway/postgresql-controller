@@ -194,7 +194,6 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 					Password: "",
 				},
 			},
-			Log:                      logger,
 			AllDatabasesReadEnabled:  true,
 			AllDatabasesWriteEnabled: true,
 			AllDatabases: func(namespace string) ([]lunarwayv1alpha1.PostgreSQLDatabase, error) {
