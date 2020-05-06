@@ -212,7 +212,11 @@ func (r *ReconcilePostgreSQLUser) reconcile(reqLogger logr.Logger, request recon
 	}
 
 	// User instance created or updated
-	reqLogger = reqLogger.WithValues("user", user.Spec.Name)
+
+	// prefix name with configured rolePrefix
+	user.Spec.Name = fmt.Sprintf("%s%s", r.rolePrefix, user.Spec.Name)
+
+	reqLogger = reqLogger.WithValues("user", user.Spec.Name, "rolePrefix", r.rolePrefix)
 	reqLogger.Info("Reconciling found PostgreSQLUser resource", "user", user.Spec.Name)
 
 	err = r.granter.SyncUser(reqLogger, request.Namespace, *user)

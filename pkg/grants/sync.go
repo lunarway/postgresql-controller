@@ -15,6 +15,7 @@ import (
 // defined in the host instances. Any excessive roles are removed and missing
 // ones are added.
 func (g *Granter) SyncUser(log logr.Logger, namespace string, user lunarwayv1alpha1.PostgreSQLUser) error {
+	log.Info(fmt.Sprintf("Syncing user %s", user.Spec.Name), "user", user)
 	//   resolve required grants taking expiration into account
 	//   diff against existing
 	//   revoke/grant what is needed
@@ -38,7 +39,7 @@ func (g *Granter) SyncUser(log logr.Logger, namespace string, user lunarwayv1alp
 		}
 	}()
 
-	err = g.setRolesOnHosts(log, user.Name, accesses, hosts)
+	err = g.setRolesOnHosts(log, user.Spec.Name, accesses, hosts)
 	if err != nil {
 		return fmt.Errorf("grant access on host: %w", err)
 	}
