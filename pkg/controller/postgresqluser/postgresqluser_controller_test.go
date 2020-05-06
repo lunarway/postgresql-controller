@@ -2,6 +2,7 @@ package postgresqluser
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -241,4 +242,148 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 		Requeue:      false,
 		RequeueAfter: 0,
 	}, res, "result not as expected")
+}
+
+// TestReconcile_rolePrefix tests that reconciliations respect the rolePrefix
+// setting. The PostgreSQLUser reconciler is configured with a prefix and a
+// database and user are reconciled. Then a connect attempt is done with the
+// prefixed user name.
+func TestReconcile_rolePrefix(t *testing.T) {
+	// Set the logger to development mode for verbose logs.
+	logf.SetLogger(logf.ZapLogger(true))
+
+	host := test.Integration(t)
+	var (
+		namespace     = "default"
+		database1Name = "database1"
+		userName      = "user"
+		rolePrefix    = "iam_developer_"
+
+		// user requesting access to all databases on host
+		userResource = &lunarwayv1alpha1.PostgreSQLUser{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      userName,
+				Namespace: namespace,
+			},
+			Spec: lunarwayv1alpha1.PostgreSQLUserSpec{
+				Name: userName,
+				Read: []lunarwayv1alpha1.AccessSpec{
+					{
+						Host: lunarwayv1alpha1.ResourceVar{
+							Value: host,
+						},
+						AllDatabases: true,
+					},
+				},
+			},
+		}
+
+		// valid database on host
+		database1Resource = &lunarwayv1alpha1.PostgreSQLDatabase{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      database1Name,
+				Namespace: namespace,
+			},
+			Spec: lunarwayv1alpha1.PostgreSQLDatabaseSpec{
+				Name: database1Name,
+				Host: lunarwayv1alpha1.ResourceVar{
+					Value: host,
+				},
+				Password: lunarwayv1alpha1.ResourceVar{
+					Value: "123456",
+				},
+				User: lunarwayv1alpha1.ResourceVar{
+					Value: database1Name,
+				},
+			},
+		}
+	)
+
+	// Register operator types with the runtime scheme.
+	s := scheme.Scheme
+	s.AddKnownTypes(lunarwayv1alpha1.SchemeGroupVersion, database1Resource)
+	s.AddKnownTypes(lunarwayv1alpha1.SchemeGroupVersion, userResource)
+	s.AddKnownTypes(lunarwayv1alpha1.SchemeGroupVersion, &lunarwayv1alpha1.PostgreSQLDatabaseList{})
+
+	// Add tracked objects to the fake client simulating their existence in a k8s
+	// cluster
+	objs := []runtime.Object{
+		database1Resource,
+		userResource,
+	}
+	cl := fake.NewFakeClient(objs...)
+
+	// Create a controller object with the fake client but otherwise "live" setup
+	// with database interaction
+	r := &ReconcilePostgreSQLUser{
+		client:     cl,
+		rolePrefix: rolePrefix,
+		granter: grants.Granter{
+			Now: time.Now,
+			HostCredentials: map[string]postgres.Credentials{
+				host: {
+					Name:     "iam_creator",
+					Password: "",
+				},
+			},
+			AllDatabasesReadEnabled:  true,
+			AllDatabasesWriteEnabled: true,
+			AllDatabases: func(namespace string) ([]lunarwayv1alpha1.PostgreSQLDatabase, error) {
+				return kube.PostgreSQLDatabases(cl, namespace)
+			},
+			ResourceResolver: func(resource lunarwayv1alpha1.ResourceVar, namespace string) (string, error) {
+				return kube.ResourceValue(cl, resource, namespace)
+			},
+		},
+		setAWSPolicy: func(log logr.Logger, credentials *credentials.Credentials, policy iam.AWSPolicy, userID string) error {
+			return nil
+		},
+	}
+
+	// seed database1 into the postgres host
+	dbConn, err := postgres.Connect(logf.Log, postgres.ConnectionString{
+		Database: "postgres",
+		Host:     host,
+		Password: "",
+		User:     "iam_creator",
+	})
+	if !assert.NoError(t, err, "failed to connect to database to seed database") {
+		return
+	}
+	err = postgres.Database(logf.Log, dbConn, host, postgres.Credentials{
+		Name:     database1Name,
+		Password: "123456",
+		User:     database1Name,
+	})
+	if !assert.NoError(t, err, "failed to seed database") {
+		return
+	}
+
+	// reconcile user requesting access to all databases with a bad database
+	// reference
+	req := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      userName,
+			Namespace: namespace,
+		},
+	}
+	res, err := r.Reconcile(req)
+	assert.NoError(t, err, "reconciliation failed")
+	assert.Equal(t, reconcile.Result{
+		Requeue:      false,
+		RequeueAfter: 0,
+	}, res, "result not as expected")
+
+	// assert that the user can connect with a prefixed role
+	userConn, err := postgres.Connect(logf.Log, postgres.ConnectionString{
+		Database: database1Name,
+		Host:     host,
+		Password: "",
+		User:     fmt.Sprintf("%s%s", rolePrefix, userName), // simulates what users will sign in with through AWS
+	})
+	if !assert.NoError(t, err, "failed to connect to database with prefixed role") {
+		return
+	}
+	_, err = userConn.Query("SELECT 1")
+	assert.NoError(t, err, "failed to query")
 }
