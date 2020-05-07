@@ -10,6 +10,7 @@ import (
 func TestPolicyDocument_appendStatement(t *testing.T) {
 	type input struct {
 		userID       string
+		rolePrefix   string
 		awsAccountID string
 		region       string
 	}
@@ -22,19 +23,19 @@ func TestPolicyDocument_appendStatement(t *testing.T) {
 		{
 			name:      "empty policy",
 			statement: nil,
-			input:     input{userID: "test", awsAccountID: "account", region: "region"},
+			input:     input{userID: "test", rolePrefix: "iam_developer_", awsAccountID: "account", region: "region"},
 			output:    []StatementEntry{entry("test")},
 		},
 		{
 			name:      "policy already exists",
 			statement: []StatementEntry{entry("test")},
-			input:     input{userID: "test", awsAccountID: "account", region: "region"},
+			input:     input{userID: "test", rolePrefix: "iam_developer_", awsAccountID: "account", region: "region"},
 			output:    []StatementEntry{entry("test")},
 		},
 		{
 			name:      "multiple policies",
 			statement: []StatementEntry{entry("test1"), entry("test2")},
-			input:     input{userID: "test3", awsAccountID: "account", region: "region"},
+			input:     input{userID: "test3", rolePrefix: "iam_developer_", awsAccountID: "account", region: "region"},
 			output:    []StatementEntry{entry("test1"), entry("test2"), entry("test3")},
 		},
 	}
@@ -43,7 +44,7 @@ func TestPolicyDocument_appendStatement(t *testing.T) {
 			p := &PolicyDocument{
 				Statement: tt.statement,
 			}
-			p.appendStatement(tt.input.userID, tt.input.awsAccountID, tt.input.region)
+			p.appendStatement(tt.input.userID, tt.input.rolePrefix, tt.input.awsAccountID, tt.input.region)
 			assert.Equal(t, tt.output, p.Statement, "")
 		})
 	}

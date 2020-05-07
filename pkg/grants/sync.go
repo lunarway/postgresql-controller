@@ -14,8 +14,9 @@ import (
 // SyncUser syncronizes a PostgreSQL user's access requests against the roles
 // defined in the host instances. Any excessive roles are removed and missing
 // ones are added.
-func (g *Granter) SyncUser(log logr.Logger, namespace string, user lunarwayv1alpha1.PostgreSQLUser) error {
-	log.Info(fmt.Sprintf("Syncing user %s", user.Spec.Name), "user", user)
+func (g *Granter) SyncUser(log logr.Logger, namespace, rolePrefix string, user lunarwayv1alpha1.PostgreSQLUser) error {
+	prefixedUsername := fmt.Sprintf("%s%s", rolePrefix, user.Spec.Name)
+	log.Info(fmt.Sprintf("Syncing user %s", prefixedUsername), "user", user)
 	//   resolve required grants taking expiration into account
 	//   diff against existing
 	//   revoke/grant what is needed
@@ -39,7 +40,7 @@ func (g *Granter) SyncUser(log logr.Logger, namespace string, user lunarwayv1alp
 		}
 	}()
 
-	err = g.setRolesOnHosts(log, user.Spec.Name, accesses, hosts)
+	err = g.setRolesOnHosts(log, prefixedUsername, accesses, hosts)
 	if err != nil {
 		return fmt.Errorf("grant access on host: %w", err)
 	}

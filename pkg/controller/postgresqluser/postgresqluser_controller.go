@@ -160,7 +160,7 @@ type ReconcilePostgreSQLUser struct {
 	// that reads objects from the cache and writes to the apiserver
 	client       client.Client
 	granter      grants.Granter
-	setAWSPolicy func(log logr.Logger, credentials *credentials.Credentials, policy iam.AWSPolicy, userID string) error
+	setAWSPolicy func(log logr.Logger, credentials *credentials.Credentials, policy iam.AWSPolicy, userID, rolePrefix string) error
 
 	grantRoles         []string
 	rolePrefix         string
@@ -212,14 +212,10 @@ func (r *ReconcilePostgreSQLUser) reconcile(reqLogger logr.Logger, request recon
 	}
 
 	// User instance created or updated
-
-	// prefix name with configured rolePrefix
-	user.Spec.Name = fmt.Sprintf("%s%s", r.rolePrefix, user.Spec.Name)
-
 	reqLogger = reqLogger.WithValues("user", user.Spec.Name, "rolePrefix", r.rolePrefix)
 	reqLogger.Info("Reconciling found PostgreSQLUser resource", "user", user.Spec.Name)
 
-	err = r.granter.SyncUser(reqLogger, request.Namespace, *user)
+	err = r.granter.SyncUser(reqLogger, request.Namespace, r.rolePrefix, *user)
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("sync user grants: %w", err)
 	}
@@ -234,7 +230,7 @@ func (r *ReconcilePostgreSQLUser) reconcile(reqLogger logr.Logger, request recon
 		Name:      r.awsPolicyName,
 		Region:    r.awsRegion,
 		AccountID: r.awsAccountID,
-	}, user.Spec.Name)
+	}, user.Spec.Name, r.rolePrefix)
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("set aws policy: %w", err)
 	}
