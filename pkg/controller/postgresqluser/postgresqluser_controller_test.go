@@ -99,10 +99,11 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 
 	host := test.Integration(t)
 	var (
+		epoch         = time.Now().UnixNano()
 		namespace     = "default"
-		database1Name = "database1"
-		database2Name = "database2"
-		userName      = "service_user"
+		database1Name = fmt.Sprintf("database1_%d", epoch)
+		database2Name = fmt.Sprintf("database2_%d", epoch)
+		userName      = fmt.Sprintf("service_user_%d", epoch)
 
 		// user requesting access to all databases on host
 		userResource = &lunarwayv1alpha1.PostgreSQLUser{
@@ -210,23 +211,7 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 	}
 
 	// seed database1 into the postgres host
-	dbConn, err := postgres.Connect(logf.Log, postgres.ConnectionString{
-		Database: "postgres",
-		Host:     host,
-		Password: "",
-		User:     "iam_creator",
-	})
-	if !assert.NoError(t, err, "failed to connect to database to seed database") {
-		return
-	}
-	err = postgres.Database(logf.Log, dbConn, host, postgres.Credentials{
-		Name:     database1Name,
-		Password: "123456",
-		User:     database1Name,
-	})
-	if !assert.NoError(t, err, "failed to seed database") {
-		return
-	}
+	seededDatabase(t, host, database1Name)
 
 	// reconcile user requesting access to all databases with a bad database
 	// reference
@@ -254,9 +239,10 @@ func TestReconcile_rolePrefix(t *testing.T) {
 
 	host := test.Integration(t)
 	var (
+		epoch         = time.Now().UnixNano()
 		namespace     = "default"
-		database1Name = "database1"
-		userName      = "user"
+		database1Name = fmt.Sprintf("database1_%d", epoch)
+		userName      = fmt.Sprintf("user_%d", epoch)
 		rolePrefix    = "iam_developer_"
 
 		// user requesting access to all databases on host
@@ -341,23 +327,7 @@ func TestReconcile_rolePrefix(t *testing.T) {
 	}
 
 	// seed database1 into the postgres host
-	dbConn, err := postgres.Connect(logf.Log, postgres.ConnectionString{
-		Database: "postgres",
-		Host:     host,
-		Password: "",
-		User:     "iam_creator",
-	})
-	if !assert.NoError(t, err, "failed to connect to database to seed database") {
-		return
-	}
-	err = postgres.Database(logf.Log, dbConn, host, postgres.Credentials{
-		Name:     database1Name,
-		Password: "123456",
-		User:     database1Name,
-	})
-	if !assert.NoError(t, err, "failed to seed database") {
-		return
-	}
+	seededDatabase(t, host, database1Name)
 
 	// reconcile user requesting access to all databases with a bad database
 	// reference
@@ -375,15 +345,200 @@ func TestReconcile_rolePrefix(t *testing.T) {
 	}, res, "result not as expected")
 
 	// assert that the user can connect with a prefixed role
-	userConn, err := postgres.Connect(logf.Log, postgres.ConnectionString{
-		Database: database1Name,
+	assertAccess(t, host, database1Name, fmt.Sprintf("%s%s", rolePrefix, userName)) // simulates what users will sign in with through AWS
+}
+
+// TestReconcile_multipleDatabaseResources tests that access granted by
+// allDatabases works as expected. Two databases on the same host are seeded
+// with a table. After reconciliation of a user requesting access to all
+// database a query on each table is made.
+//
+// The test confirms a regression in the role mechanism introduced in
+// 46e333a80e8dd6ea7829ccd53c3d9578ef0c0575 resulting in only a single database
+// role being active at any time.
+func TestReconcile_multipleDatabaseResources(t *testing.T) {
+	// Set the logger to development mode for verbose logs.
+	logf.SetLogger(logf.ZapLogger(true))
+
+	host := test.Integration(t)
+	var (
+		epoch         = time.Now().UnixNano()
+		namespace     = "default"
+		database1Name = fmt.Sprintf("database1_%d", epoch)
+		database2Name = fmt.Sprintf("database2_%d", epoch)
+		userName      = fmt.Sprintf("user_%d", epoch)
+
+		// user requesting access to all databases on host
+		userResource = &lunarwayv1alpha1.PostgreSQLUser{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      userName,
+				Namespace: namespace,
+			},
+			Spec: lunarwayv1alpha1.PostgreSQLUserSpec{
+				Name: userName,
+				Read: []lunarwayv1alpha1.AccessSpec{
+					{
+						Host: lunarwayv1alpha1.ResourceVar{
+							Value: host,
+						},
+						AllDatabases: true,
+					},
+				},
+			},
+		}
+
+		// valid database on host
+		database1Resource = &lunarwayv1alpha1.PostgreSQLDatabase{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      database1Name,
+				Namespace: namespace,
+			},
+			Spec: lunarwayv1alpha1.PostgreSQLDatabaseSpec{
+				Name: database1Name,
+				Host: lunarwayv1alpha1.ResourceVar{
+					Value: host,
+				},
+				Password: lunarwayv1alpha1.ResourceVar{
+					Value: "123456",
+				},
+				User: lunarwayv1alpha1.ResourceVar{
+					Value: database1Name,
+				},
+			},
+		}
+		database2Resource = &lunarwayv1alpha1.PostgreSQLDatabase{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      database2Name,
+				Namespace: namespace,
+			},
+			Spec: lunarwayv1alpha1.PostgreSQLDatabaseSpec{
+				Name: database2Name,
+				Host: lunarwayv1alpha1.ResourceVar{
+					Value: host,
+				},
+				Password: lunarwayv1alpha1.ResourceVar{
+					Value: "123456",
+				},
+				User: lunarwayv1alpha1.ResourceVar{
+					Value: database2Name,
+				},
+			},
+		}
+	)
+
+	// Register operator types with the runtime scheme.
+	s := scheme.Scheme
+	s.AddKnownTypes(lunarwayv1alpha1.SchemeGroupVersion, database1Resource)
+	s.AddKnownTypes(lunarwayv1alpha1.SchemeGroupVersion, userResource)
+	s.AddKnownTypes(lunarwayv1alpha1.SchemeGroupVersion, &lunarwayv1alpha1.PostgreSQLDatabaseList{})
+
+	// Add tracked objects to the fake client simulating their existence in a k8s
+	// cluster
+	objs := []runtime.Object{
+		database1Resource,
+		database2Resource,
+		userResource,
+	}
+	cl := fake.NewFakeClient(objs...)
+
+	// Create a controller object with the fake client but otherwise "live" setup
+	// with database interaction
+	r := &ReconcilePostgreSQLUser{
+		client: cl,
+		granter: grants.Granter{
+			Now: time.Now,
+			HostCredentials: map[string]postgres.Credentials{
+				host: {
+					Name:     "iam_creator",
+					Password: "",
+				},
+			},
+			AllDatabasesReadEnabled:  true,
+			AllDatabasesWriteEnabled: true,
+			AllDatabases: func(namespace string) ([]lunarwayv1alpha1.PostgreSQLDatabase, error) {
+				return kube.PostgreSQLDatabases(cl, namespace)
+			},
+			ResourceResolver: func(resource lunarwayv1alpha1.ResourceVar, namespace string) (string, error) {
+				return kube.ResourceValue(cl, resource, namespace)
+			},
+		},
+		setAWSPolicy: func(log logr.Logger, credentials *credentials.Credentials, policy iam.AWSPolicy, userID, rolePrefix string) error {
+			return nil
+		},
+	}
+
+	// seed database1 into the postgres host
+	seededDatabase(t, host, database1Name)
+	seededDatabase(t, host, database2Name)
+
+	// reconcile user requesting access to all databases with a bad database
+	// reference
+	req := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      userName,
+			Namespace: namespace,
+		},
+	}
+	res, err := r.Reconcile(req)
+	assert.NoError(t, err, "reconciliation failed")
+	assert.Equal(t, reconcile.Result{
+		Requeue:      false,
+		RequeueAfter: 0,
+	}, res, "result not as expected")
+
+	// assert that the user can connect to both databases
+	assertAccess(t, host, database1Name, userName)
+	assertAccess(t, host, database2Name, userName)
+}
+
+// seededDatabase creates a database with name along with a 'movies' table owned
+// by the database role.
+func seededDatabase(t *testing.T, host, name string) {
+	t.Helper()
+
+	dbConn, err := postgres.Connect(logf.Log, postgres.ConnectionString{
+		Database: "postgres",
 		Host:     host,
 		Password: "",
-		User:     fmt.Sprintf("%s%s", rolePrefix, userName), // simulates what users will sign in with through AWS
+		User:     "iam_creator",
 	})
-	if !assert.NoError(t, err, "failed to connect to database with prefixed role") {
+	if !assert.NoErrorf(t, err, "failed to connect to database host to seed database '%s'", name) {
 		return
 	}
-	_, err = userConn.Query("SELECT 1")
-	assert.NoError(t, err, "failed to query")
+	err = postgres.Database(logf.Log, dbConn, host, postgres.Credentials{
+		Name:     name,
+		Password: "123456",
+		User:     name,
+	})
+	if !assert.NoErrorf(t, err, "failed to created seeded database '%s'", name) {
+		return
+	}
+	db1Conn, err := postgres.Connect(logf.Log, postgres.ConnectionString{
+		Database: name,
+		Host:     host,
+		Password: "123456",
+		User:     name,
+	})
+	if !assert.NoErrorf(t, err, "failed to connect to database '%s' to create a table", name) {
+		return
+	}
+	_, err = db1Conn.Exec(`CREATE TABLE movies(title varchar(50));`)
+	if !assert.NoErrorf(t, err, "failed to create table in database '%s'", name) {
+		return
+	}
+}
+
+func assertAccess(t *testing.T, host, databaseName, userName string) {
+	userConn, err := postgres.Connect(logf.Log, postgres.ConnectionString{
+		Database: databaseName,
+		Host:     host,
+		Password: "",
+		User:     userName,
+	})
+	if !assert.NoErrorf(t, err, "failed to connect to database '%s' with user '%s'", databaseName, userName) {
+		return
+	}
+	defer userConn.Close()
+	_, err = userConn.Query(fmt.Sprintf("SELECT * from %s.movies", databaseName))
+	assert.NoErrorf(t, err, "failed to query table in database '%s'", databaseName)
 }

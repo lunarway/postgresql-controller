@@ -3,7 +3,6 @@ package grants
 import (
 	"database/sql"
 	"fmt"
-	"strings"
 
 	"github.com/go-logr/logr"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/pkg/apis/lunarway/v1alpha1"
@@ -51,13 +50,10 @@ func (g *Granter) SyncUser(log logr.Logger, namespace, rolePrefix string, user l
 func (g *Granter) connectToHosts(log logr.Logger, accesses HostAccess) (map[string]*sql.DB, error) {
 	hosts := make(map[string]*sql.DB)
 	var errs error
-	for hostDatabase := range accesses {
-		// hostDatabase contains the host name and the database but we expect host
-		// credentials to be without the database part
-		// This will not work for hosts with multiple / characters
-		hostDatabaseParts := strings.Split(hostDatabase, "/")
-		host := hostDatabaseParts[0]
-		database := hostDatabaseParts[1]
+	for host, access := range accesses {
+		// the zero index is safe as accesses are grouped by access requests so any
+		// host in the map has at least one ReadWriteAccess item
+		database := access[0].Database.Name
 		credentials, ok := g.HostCredentials[host]
 		if !ok {
 			errs = multierr.Append(errs, fmt.Errorf("no credentials for host '%s'", host))
@@ -74,7 +70,7 @@ func (g *Granter) connectToHosts(log logr.Logger, accesses HostAccess) (map[stri
 			errs = multierr.Append(errs, fmt.Errorf("connect to %s: %w", connectionString, err))
 			continue
 		}
-		hosts[hostDatabase] = db
+		hosts[host] = db
 	}
 	return hosts, errs
 }
@@ -93,6 +89,7 @@ func closeConnectionToHosts(hosts map[string]*sql.DB) error {
 func (g *Granter) setRolesOnHosts(log logr.Logger, name string, accesses HostAccess, hosts map[string]*sql.DB) error {
 	var errs error
 	for host, access := range accesses {
+		log = log.WithValues("host", host)
 		connection, ok := hosts[host]
 		if !ok {
 			return fmt.Errorf("connection for host %s not found", host)
