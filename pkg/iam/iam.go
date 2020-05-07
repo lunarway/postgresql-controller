@@ -37,7 +37,7 @@ type UserID struct {
 	AWSUserID string `json:"aws:userid,omitempty"`
 }
 
-func SetAWSPolicy(log logr.Logger, credentials *credentials.Credentials, policy AWSPolicy, userID string) error {
+func SetAWSPolicy(log logr.Logger, credentials *credentials.Credentials, policy AWSPolicy, userID, rolePrefix string) error {
 	// AWS Config Object to create a session
 	awsConfig := &aws.Config{
 		Region:      aws.String(policy.Region),
@@ -82,7 +82,7 @@ func SetAWSPolicy(log logr.Logger, credentials *credentials.Credentials, policy 
 	}
 
 	// Append the new user to the Policy
-	document.appendStatement(userID, policy.AccountID, policy.Region)
+	document.appendStatement(userID, rolePrefix, policy.AccountID, policy.Region)
 
 	// Marshal the updated policy document back to something AWS understands
 	jsonMarshal, err := json.Marshal(document)
@@ -106,12 +106,12 @@ func SetAWSPolicy(log logr.Logger, credentials *credentials.Credentials, policy 
 
 }
 
-func (p *PolicyDocument) appendStatement(userID, awsAccountID, region string) {
-	awsUserID := fmt.Sprintf("*:%s@lunar.app", userID)
+func (p *PolicyDocument) appendStatement(initials, rolePrefix, awsAccountID, region string) {
+	awsUserID := fmt.Sprintf("*:%s@lunar.app", initials)
 	s := StatementEntry{
 		Effect:    "Allow",
 		Action:    []string{"rds-db:connect"},
-		Resource:  []string{fmt.Sprintf("arn:aws:rds-db:%s:%s:dbuser:*/iam_developer_%s", region, awsAccountID, userID)},
+		Resource:  []string{fmt.Sprintf("arn:aws:rds-db:%s:%s:dbuser:*/%s_%s", region, awsAccountID, rolePrefix, initials)},
 		Condition: StringLike{StringLike: UserID{AWSUserID: awsUserID}},
 	}
 
