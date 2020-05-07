@@ -215,10 +215,8 @@ func (r *ReconcilePostgreSQLUser) reconcile(reqLogger logr.Logger, request recon
 	reqLogger = reqLogger.WithValues("user", user.Spec.Name, "rolePrefix", r.rolePrefix)
 	reqLogger.Info("Reconciling found PostgreSQLUser resource", "user", user.Spec.Name)
 
-	err = r.granter.SyncUser(reqLogger, request.Namespace, r.rolePrefix, *user)
-	if err != nil {
-		return reconcile.Result{}, fmt.Errorf("sync user grants: %w", err)
-	}
+	// Error check in the bottom because we want aws policy to be set no matter what.
+	granterErr := r.granter.SyncUser(reqLogger, request.Namespace, r.rolePrefix, *user)
 
 	var awsCredentials *credentials.Credentials
 	if len(r.awsProfile) != 0 {
@@ -226,13 +224,14 @@ func (r *ReconcilePostgreSQLUser) reconcile(reqLogger logr.Logger, request recon
 	} else {
 		awsCredentials = credentials.NewStaticCredentials(r.awsAccessKeyID, r.awsSecretAccessKey, "")
 	}
-	err = r.setAWSPolicy(reqLogger, awsCredentials, iam.AWSPolicy{
+	awsPolicyErr := r.setAWSPolicy(reqLogger, awsCredentials, iam.AWSPolicy{
 		Name:      r.awsPolicyName,
 		Region:    r.awsRegion,
 		AccountID: r.awsAccountID,
 	}, user.Spec.Name, r.rolePrefix)
-	if err != nil {
-		return reconcile.Result{}, fmt.Errorf("set aws policy: %w", err)
+
+	if granterErr != nil || awsPolicyErr != nil {
+		return reconcile.Result{}, fmt.Errorf("grantErr: %v, awsPolicyErr: %v", granterErr, awsPolicyErr)
 	}
 
 	return reconcile.Result{}, nil
