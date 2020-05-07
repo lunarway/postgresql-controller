@@ -111,7 +111,7 @@ func (p *PolicyDocument) appendStatement(initials, rolePrefix, awsAccountID, reg
 	s := StatementEntry{
 		Effect:    "Allow",
 		Action:    []string{"rds-db:connect"},
-		Resource:  []string{fmt.Sprintf("arn:aws:rds-db:%s:%s:dbuser:*/%s_%s", region, awsAccountID, rolePrefix, initials)},
+		Resource:  []string{fmt.Sprintf("arn:aws:rds-db:%s:%s:dbuser:*/%s%s", region, awsAccountID, rolePrefix, initials)},
 		Condition: StringLike{StringLike: UserID{AWSUserID: awsUserID}},
 	}
 
