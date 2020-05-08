@@ -110,8 +110,7 @@ func (g *Granter) groupByHosts(log logr.Logger, hosts HostAccess, namespace stri
 			}))
 			continue
 		}
-		hostDatabase := fmt.Sprintf("%s/%s", host, database)
-		hosts[hostDatabase] = append(hosts[hostDatabase], ReadWriteAccess{
+		hosts[host] = append(hosts[host], ReadWriteAccess{
 			Host: host,
 			Database: postgres.DatabaseSchema{
 				Name:       database,
@@ -155,9 +154,8 @@ func (g *Granter) groupAllDatabasesByHost(reqLogger logr.Logger, hosts HostAcces
 		if schema == "" {
 			schema = database
 		}
-		hostKey := fmt.Sprintf("%s/%s", host, database)
 		reqLogger.Info(fmt.Sprintf("Resolved database '%s' with schema '%s'", database, schema))
-		hosts[hostKey] = append(hosts[hostKey], ReadWriteAccess{
+		hosts[host] = append(hosts[host], ReadWriteAccess{
 			Host: host,
 			Database: postgres.DatabaseSchema{
 				Name:       database,

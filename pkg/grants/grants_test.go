@@ -59,7 +59,7 @@ func TestGranter_groupAccesses(t *testing.T) {
 			},
 			writes: nil,
 			output: HostAccess{
-				"localhost:5432/database": []ReadWriteAccess{
+				"localhost:5432": []ReadWriteAccess{
 					access("localhost:5432", "database", postgres.PrivilegeRead, "I am a developer"),
 				},
 			},
@@ -72,7 +72,7 @@ func TestGranter_groupAccesses(t *testing.T) {
 			},
 			writes: nil,
 			output: HostAccess{
-				"localhost:5432/database": []ReadWriteAccess{
+				"localhost:5432": []ReadWriteAccess{
 					access("localhost:5432", "database", postgres.PrivilegeRead, "I am a developer"),
 					access("localhost:5432", "database", postgres.PrivilegeRead, "I really am a developer"),
 				},
@@ -86,10 +86,10 @@ func TestGranter_groupAccesses(t *testing.T) {
 			},
 			writes: nil,
 			output: HostAccess{
-				"host1:5432/database": []ReadWriteAccess{
+				"host1:5432": []ReadWriteAccess{
 					access("host1:5432", "database", postgres.PrivilegeRead, "I am a developer"),
 				},
-				"host2:5432/database": []ReadWriteAccess{
+				"host2:5432": []ReadWriteAccess{
 					access("host2:5432", "database", postgres.PrivilegeRead, "I really am a developer"),
 				},
 			},
@@ -105,11 +105,11 @@ func TestGranter_groupAccesses(t *testing.T) {
 				accessSpec("host2:5432", "I really am a writing developer"),
 			},
 			output: HostAccess{
-				"host1:5432/database": []ReadWriteAccess{
+				"host1:5432": []ReadWriteAccess{
 					access("host1:5432", "database", postgres.PrivilegeRead, "I am a developer"),
 					access("host1:5432", "database", postgres.PrivilegeWrite, "I'am a writing developer"),
 				},
-				"host2:5432/database": []ReadWriteAccess{
+				"host2:5432": []ReadWriteAccess{
 					access("host2:5432", "database", postgres.PrivilegeRead, "I really am a developer"),
 					access("host2:5432", "database", postgres.PrivilegeWrite, "I really am a writing developer"),
 				},
@@ -149,11 +149,10 @@ func TestGranter_groupAccesses_startStopHandling(t *testing.T) {
 		future2Hours = now.Add(2 * time.Hour)
 
 		// dummy values for access instances
-		host         = "localhost:5432"
-		database     = "database"
-		hostDatabase = fmt.Sprintf("%s/%s", host, database)
-		privilige    = postgres.PrivilegeRead
-		reason       = "A good reason"
+		host      = "localhost:5432"
+		database  = "database"
+		privilige = postgres.PrivilegeRead
+		reason    = "A good reason"
 	)
 
 	accessSpec := func(start, stop time.Time) lunarwayv1alpha1.AccessSpec {
@@ -237,7 +236,7 @@ func TestGranter_groupAccesses_startStopHandling(t *testing.T) {
 			var hostAccess HostAccess
 			if tc.output != nil {
 				hostAccess = HostAccess{
-					hostDatabase: []ReadWriteAccess{
+					host: []ReadWriteAccess{
 						*tc.output,
 					},
 				}
@@ -307,7 +306,7 @@ func TestGranter_groupAccesses_withAllDatabases(t *testing.T) {
 			},
 			writes: nil,
 			output: HostAccess{
-				"host1:5432/database": []ReadWriteAccess{
+				"host1:5432": []ReadWriteAccess{
 					access("host1:5432", "database", postgres.PrivilegeRead, "I am a developer"),
 				},
 			},
@@ -325,12 +324,10 @@ func TestGranter_groupAccesses_withAllDatabases(t *testing.T) {
 				spec("host1:5432", "I am a writing developer"),
 			},
 			output: HostAccess{
-				"host1:5432/database1": []ReadWriteAccess{
+				"host1:5432": []ReadWriteAccess{
 					access("host1:5432", "database1", postgres.PrivilegeRead, "I am a developer"),
-					access("host1:5432", "database1", postgres.PrivilegeWrite, "I am a writing developer"),
-				},
-				"host1:5432/database2": []ReadWriteAccess{
 					access("host1:5432", "database2", postgres.PrivilegeRead, "I am a developer"),
+					access("host1:5432", "database1", postgres.PrivilegeWrite, "I am a writing developer"),
 					access("host1:5432", "database2", postgres.PrivilegeWrite, "I am a writing developer"),
 				},
 			},
@@ -348,10 +345,10 @@ func TestGranter_groupAccesses_withAllDatabases(t *testing.T) {
 				spec("host2:5432", "I am a writing developer"),
 			},
 			output: HostAccess{
-				"host1:5432/database1": []ReadWriteAccess{
+				"host1:5432": []ReadWriteAccess{
 					access("host1:5432", "database1", postgres.PrivilegeRead, "I am a developer"),
 				},
-				"host2:5432/database2": []ReadWriteAccess{
+				"host2:5432": []ReadWriteAccess{
 					access("host2:5432", "database2", postgres.PrivilegeWrite, "I am a writing developer"),
 				},
 			},
@@ -371,16 +368,12 @@ func TestGranter_groupAccesses_withAllDatabases(t *testing.T) {
 				spec("host2:5432", "I am a writing developer"),
 			},
 			output: HostAccess{
-				"host1:5432/database1": []ReadWriteAccess{
+				"host1:5432": []ReadWriteAccess{
 					access("host1:5432", "database1", postgres.PrivilegeRead, "I am a developer"),
-				},
-				"host1:5432/database2": []ReadWriteAccess{
 					access("host1:5432", "database2", postgres.PrivilegeRead, "I am a developer"),
 				},
-				"host2:5432/database3": []ReadWriteAccess{
+				"host2:5432": []ReadWriteAccess{
 					access("host2:5432", "database3", postgres.PrivilegeWrite, "I am a writing developer"),
-				},
-				"host2:5432/database4": []ReadWriteAccess{
 					access("host2:5432", "database4", postgres.PrivilegeWrite, "I am a writing developer"),
 				},
 			},
@@ -396,7 +389,7 @@ func TestGranter_groupAccesses_withAllDatabases(t *testing.T) {
 			},
 			writes: nil,
 			output: HostAccess{
-				"host1:5432/database1": []ReadWriteAccess{
+				"host1:5432": []ReadWriteAccess{
 					access("host1:5432", "database1", postgres.PrivilegeRead, "I am a developer"),
 				},
 			},
@@ -506,7 +499,7 @@ func TestGranter_groupAccesses_allDatabasesFeatureFlags(t *testing.T) {
 			},
 			writes: nil,
 			output: HostAccess{
-				"host1:5432/database": []ReadWriteAccess{
+				"host1:5432": []ReadWriteAccess{
 					access("host1:5432", "database", postgres.PrivilegeRead, "I am a developer"),
 				},
 			},
@@ -614,10 +607,8 @@ func TestGranter_groupAccesses_mixedSpecs(t *testing.T) {
 				singleDatabaseSpec("host1:5432", "database2", "I am a writing developer"),
 			},
 			output: HostAccess{
-				"host1:5432/database1": []ReadWriteAccess{
+				"host1:5432": []ReadWriteAccess{
 					allDatabasesAccess("host1:5432", "database1", postgres.PrivilegeRead, "I am a developer"),
-				},
-				"host1:5432/database2": []ReadWriteAccess{
 					allDatabasesAccess("host1:5432", "database2", postgres.PrivilegeRead, "I am a developer"),
 					singleDatabaseAccess("host1:5432", "database2", postgres.PrivilegeWrite, "I am a writing developer"),
 				},
@@ -711,7 +702,14 @@ func TestGranter_connectToHosts(t *testing.T) {
 				},
 			},
 			hostAccess: HostAccess{
-				"localhost:5432/postgres": []ReadWriteAccess{},
+				"localhost:5432": []ReadWriteAccess{
+					{
+						Host: "localhost:5432",
+						Database: postgres.DatabaseSchema{
+							Name: "postgres",
+						},
+					},
+				},
 			},
 			connectionCount: 1,
 			err:             nil,
@@ -729,8 +727,20 @@ func TestGranter_connectToHosts(t *testing.T) {
 				},
 			},
 			hostAccess: HostAccess{
-				"localhost:5432/postgres": []ReadWriteAccess{},
-				"unknown/postgres":        []ReadWriteAccess{},
+				"localhost:5432": []ReadWriteAccess{
+					{
+						Host: "localhost:5432",
+						Database: postgres.DatabaseSchema{
+							Name: "postgres",
+						},
+					}},
+				"unknown": []ReadWriteAccess{
+					{
+						Host: "unknown",
+						Database: postgres.DatabaseSchema{
+							Name: "postgres",
+						},
+					}},
 			},
 			connectionCount: 1,
 			err:             fmt.Errorf("connect to postgresql://iam_creator:********@unknown/postgres?sslmode=disable: dial tcp:"),
@@ -739,7 +749,14 @@ func TestGranter_connectToHosts(t *testing.T) {
 			name:        "missing credentials",
 			credentials: map[string]postgres.Credentials{},
 			hostAccess: HostAccess{
-				"localhost:5432/postgres": []ReadWriteAccess{},
+				"localhost:5432": []ReadWriteAccess{
+					{
+						Host: "localhost:5432",
+						Database: postgres.DatabaseSchema{
+							Name: "postgres",
+						},
+					},
+				},
 			},
 			connectionCount: 0,
 			err:             fmt.Errorf("no credentials for host 'localhost:5432'"),
@@ -803,7 +820,7 @@ func TestGranter_groupAccesses_partialErrors(t *testing.T) {
 				},
 			},
 			hosts: HostAccess{
-				"host1/database1": []ReadWriteAccess{
+				"host1": []ReadWriteAccess{
 					{
 						Host: "host1",
 						Database: postgres.DatabaseSchema{
@@ -883,7 +900,7 @@ func TestGranter_groupAccesses_noUserSchemaFallback_allDatabases(t *testing.T) {
 		},
 	}
 	expectedHostAccesses := HostAccess{
-		"host1:5432/db1": []ReadWriteAccess{
+		"host1:5432": []ReadWriteAccess{
 			{
 				Host: "host1:5432",
 				Access: lunarwayv1alpha1.AccessSpec{
