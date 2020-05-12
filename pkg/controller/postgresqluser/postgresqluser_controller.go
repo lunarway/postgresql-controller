@@ -46,8 +46,6 @@ func init() {
 
 func parseFlags(c *ReconcilePostgreSQLUser) {
 	var err error
-	c.grantRoles, err = FlagSet.GetStringSlice("user-roles")
-	parseError(err, "user-roles")
 	c.rolePrefix, err = FlagSet.GetString("user-role-prefix")
 	parseError(err, "user-role-prefix")
 	c.awsPolicyName, err = FlagSet.GetString("aws-policy-name")
@@ -74,10 +72,12 @@ func parseFlags(c *ReconcilePostgreSQLUser) {
 	parseError(err, "all-databases-enabled-read")
 	c.granter.AllDatabasesWriteEnabled, err = FlagSet.GetBool("all-databases-enabled-write")
 	parseError(err, "all-databases-enabled-write")
+	c.granter.StaticRoles, err = FlagSet.GetStringSlice("user-roles")
+	parseError(err, "user-roles")
 
 	log.Info("Controller configured",
 		"hosts", hostNames,
-		"roles", c.grantRoles,
+		"roles", c.granter.StaticRoles,
 		"prefix", c.rolePrefix,
 		"awsPolicyName", c.awsPolicyName,
 		"awsRegion", c.awsRegion,
@@ -162,7 +162,6 @@ type ReconcilePostgreSQLUser struct {
 	granter      grants.Granter
 	setAWSPolicy func(log logr.Logger, credentials *credentials.Credentials, policy iam.AWSPolicy, userID, rolePrefix string) error
 
-	grantRoles         []string
 	rolePrefix         string
 	awsPolicyName      string
 	awsRegion          string
