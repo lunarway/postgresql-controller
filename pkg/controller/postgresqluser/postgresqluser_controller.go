@@ -46,8 +46,8 @@ func init() {
 
 func parseFlags(c *ReconcilePostgreSQLUser) {
 	var err error
-	c.grantRoles, err = FlagSet.GetStringSlice("user-roles")
-	parseError(err, "user-roles")
+	// c.grantRoles, err = FlagSet.GetStringSlice("user-roles")
+	// parseError(err, "user-roles")
 	c.rolePrefix, err = FlagSet.GetString("user-role-prefix")
 	parseError(err, "user-role-prefix")
 	c.awsPolicyName, err = FlagSet.GetString("aws-policy-name")
@@ -74,6 +74,8 @@ func parseFlags(c *ReconcilePostgreSQLUser) {
 	parseError(err, "all-databases-enabled-read")
 	c.granter.AllDatabasesWriteEnabled, err = FlagSet.GetBool("all-databases-enabled-write")
 	parseError(err, "all-databases-enabled-write")
+	c.granter.StaticRoles, err = FlagSet.GetStringSlice("user-roles")
+	parseError(err, "user-roles")
 
 	log.Info("Controller configured",
 		"hosts", hostNames,
