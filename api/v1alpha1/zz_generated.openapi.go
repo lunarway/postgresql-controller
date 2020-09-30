@@ -313,7 +313,7 @@ func schema__api_v1alpha1_PostgreSQLUserSpec(ref common.ReferenceCallback) commo
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("./api/v1alpha1.AccessSpec"),
+										Ref: ref("./api/v1alpha1.WriteAccessSpec"),
 									},
 								},
 							},
@@ -324,7 +324,9 @@ func schema__api_v1alpha1_PostgreSQLUserSpec(ref common.ReferenceCallback) commo
 			},
 		},
 		Dependencies: []string{
-			"./api/v1alpha1.AccessSpec"},
+<<<<<<< HEAD:api/v1alpha1/zz_generated.openapi.go
+			"./api/v1alpha1.AccessSpec",
+			"./api/v1alpha1.WriteAccessSpec"},
 	}
 }
 

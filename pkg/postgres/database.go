@@ -69,8 +69,9 @@ func Database(log logr.Logger, db *sql.DB, host string, credentials Credentials)
 		return fmt.Errorf("create service user: %w", err)
 	}
 	var (
-		readRole      = fmt.Sprintf("%s_read", credentials.User)
-		readWriteRole = fmt.Sprintf("%s_readwrite", credentials.User)
+		readRole            = fmt.Sprintf("%s_%s", credentials.User, roleSuffixRead)
+		readWriteRole       = fmt.Sprintf("%s_%s", credentials.User, roleSuffixWrite)
+		readOwningWriteRole = fmt.Sprintf("%s_%s", credentials.User, roleSuffixOwningWrite)
 	)
 
 	// if the database is shared we need to grant the existing database role to
@@ -86,9 +87,9 @@ func Database(log logr.Logger, db *sql.DB, host string, credentials Credentials)
 
 	// Create read and readwrite roles that can be used to grant users access to
 	// the objects in this database.
-	err = createRoles(log, db, readRole, readWriteRole)
+	err = createRoles(log, db, readRole, readWriteRole, readOwningWriteRole)
 	if err != nil {
-		return fmt.Errorf("create service read and readwrite roles: %w", err)
+		return fmt.Errorf("create service read, readwrite and readowningwrite roles: %w", err)
 	}
 
 	// Create the database
@@ -150,6 +151,18 @@ func Database(log logr.Logger, db *sql.DB, host string, credentials Credentials)
 	err = setReadWritePriviledges(serviceConnection, credentials.User, readWriteRole)
 	if err != nil {
 		return fmt.Errorf("set default readwrite priviledges for role %s: %w", readWriteRole, err)
+	}
+
+	// an owning write request makes it possible to do everything a read and
+	// readwrite role can along with being granted the owner role to allow DROP
+	// and ALTER as well
+	err = setReadWritePriviledges(serviceConnection, credentials.User, readOwningWriteRole)
+	if err != nil {
+		return fmt.Errorf("set default readowningwrite priviledges for role %s: %w", readOwningWriteRole, err)
+	}
+	err = execf(serviceConnection, "GRANT %s TO %s", credentials.User, readOwningWriteRole)
+	if err != nil {
+		return fmt.Errorf("grant owner %s to readowningwrite for role %s: %w", credentials.User, readOwningWriteRole, err)
 	}
 
 	// This revokation ensures that the user cannot create any objects in the

@@ -15,6 +15,7 @@ import (
 type Granter struct {
 	AllDatabasesReadEnabled  bool
 	AllDatabasesWriteEnabled bool
+	ExtendedWritesEnabled    bool
 	AllDatabases             func(namespace string) ([]lunarwayv1alpha1.PostgreSQLDatabase, error)
 	AllUsers                 func(namespace string) ([]lunarwayv1alpha1.PostgreSQLUser, error)
 	ResourceResolver         func(resource lunarwayv1alpha1.ResourceVar, namespace string) (string, error)
@@ -34,18 +35,17 @@ type ReadWriteAccess struct {
 	Access   lunarwayv1alpha1.AccessSpec
 }
 
-func (g *Granter) groupAccesses(log logr.Logger, namespace string, reads []lunarwayv1alpha1.AccessSpec, writes []lunarwayv1alpha1.AccessSpec) (HostAccess, error) {
-	if len(reads) == 0 {
+func (g *Granter) groupAccesses(log logr.Logger, namespace string, reads []lunarwayv1alpha1.AccessSpec, writes []lunarwayv1alpha1.WriteAccessSpec) (HostAccess, error) {
+	if len(reads) == 0 && len(writes) == 0 {
 		return nil, nil
 	}
 	hosts := make(HostAccess)
 	var errs error
-
-	err := g.groupByHosts(log, hosts, namespace, reads, postgres.PrivilegeRead, g.AllDatabasesReadEnabled)
+	err := g.groupReadsByHosts(log, hosts, namespace, reads)
 	if err != nil {
 		errs = multierr.Append(errs, err)
 	}
-	err = g.groupByHosts(log, hosts, namespace, writes, postgres.PrivilegeWrite, g.AllDatabasesWriteEnabled)
+	err = g.groupWritesByHosts(log, hosts, namespace, writes)
 	if err != nil {
 		errs = multierr.Append(errs, err)
 	}
@@ -56,9 +56,43 @@ func (g *Granter) groupAccesses(log logr.Logger, namespace string, reads []lunar
 	return hosts, errs
 }
 
-func (g *Granter) groupByHosts(log logr.Logger, hosts HostAccess, namespace string, accesses []lunarwayv1alpha1.AccessSpec, privilege postgres.Privilege, allDatabasesEnabled bool) error {
+// groupReadsByHosts groups accesses by host setting read privilege an all
+// resolved HostAccess instances.
+func (g *Granter) groupReadsByHosts(log logr.Logger, hosts HostAccess, namespace string, accesses []lunarwayv1alpha1.AccessSpec) error {
+	return g.groupByHosts(log, hosts, namespace, accesses, func(_ int) postgres.Privilege { return postgres.PrivilegeRead }, g.AllDatabasesReadEnabled)
+}
+
+// groupWritesByHosts groups accesses by host setting write or owningWrite
+// privilege an all resolved HostAccess instances based on the Extended field of
+// WriteAccessSpec.
+func (g *Granter) groupWritesByHosts(log logr.Logger, hosts HostAccess, namespace string, accesses []lunarwayv1alpha1.WriteAccessSpec) error {
+	privilegeLookup := func(i int) postgres.Privilege {
+		if accesses[i].Extended {
+			if g.ExtendedWritesEnabled {
+				return postgres.PrivilegeOwningWrite
+			}
+			log.WithValues("spec", accesses[i]).Info("Skipping access spec: extended writes not enabled")
+		}
+		return postgres.PrivilegeWrite
+	}
+	return g.groupByHosts(log, hosts, namespace, mapToAccessSpec(accesses), privilegeLookup, g.AllDatabasesWriteEnabled)
+}
+
+func mapToAccessSpec(accesses []lunarwayv1alpha1.WriteAccessSpec) []lunarwayv1alpha1.AccessSpec {
+	var specs []lunarwayv1alpha1.AccessSpec
+	for i := range accesses {
+		specs = append(specs, *accesses[i].AccessSpec.DeepCopy())
+	}
+	return specs
+}
+
+// groupByHosts groups accesses by host setting the ReadWriteAccess privilege
+// according to the result of func privilegeLookup. The index integer i provided
+// in the lookup function is the index of slice accesses being processed.
+func (g *Granter) groupByHosts(log logr.Logger, hosts HostAccess, namespace string, accesses []lunarwayv1alpha1.AccessSpec, privilegeLookup func(i int) postgres.Privilege, allDatabasesEnabled bool) error {
 	var errs error
 	for i, access := range accesses {
+		privilege := privilegeLookup(i)
 		reqLogger := log.WithValues("spec", access, "privilege", privilege)
 		// access it not requested to be granted yet
 		if g.Now().Before(access.Start.Time) {

@@ -44,7 +44,7 @@ func TestGranter_groupAccesses(t *testing.T) {
 	tt := []struct {
 		name   string
 		reads  []lunarwayv1alpha1.AccessSpec
-		writes []lunarwayv1alpha1.AccessSpec
+		writes []lunarwayv1alpha1.WriteAccessSpec
 		output HostAccess
 	}{
 		{
@@ -61,6 +61,36 @@ func TestGranter_groupAccesses(t *testing.T) {
 			output: HostAccess{
 				"localhost:5432": []ReadWriteAccess{
 					access("localhost:5432", "database", postgres.PrivilegeRead, "I am a developer"),
+				},
+			},
+		},
+		{
+			name:  "single write and single host",
+			reads: nil,
+			writes: []lunarwayv1alpha1.WriteAccessSpec{
+				{
+					AccessSpec: accessSpec("localhost:5432", "I am a writing developer"),
+					Extended:   false,
+				},
+			},
+			output: HostAccess{
+				"localhost:5432": []ReadWriteAccess{
+					access("localhost:5432", "database", postgres.PrivilegeWrite, "I am a writing developer"),
+				},
+			},
+		},
+		{
+			name:  "single extended write and single host",
+			reads: nil,
+			writes: []lunarwayv1alpha1.WriteAccessSpec{
+				{
+					AccessSpec: accessSpec("localhost:5432", "I am an extended write developer"),
+					Extended:   true,
+				},
+			},
+			output: HostAccess{
+				"localhost:5432": []ReadWriteAccess{
+					access("localhost:5432", "database", postgres.PrivilegeOwningWrite, "I am an extended write developer"),
 				},
 			},
 		},
@@ -100,9 +130,13 @@ func TestGranter_groupAccesses(t *testing.T) {
 				accessSpec("host1:5432", "I am a developer"),
 				accessSpec("host2:5432", "I really am a developer"),
 			},
-			writes: []lunarwayv1alpha1.AccessSpec{
-				accessSpec("host1:5432", "I'am a writing developer"),
-				accessSpec("host2:5432", "I really am a writing developer"),
+			writes: []lunarwayv1alpha1.WriteAccessSpec{
+				{
+					AccessSpec: accessSpec("host1:5432", "I'am a writing developer"),
+				},
+				{
+					AccessSpec: accessSpec("host2:5432", "I really am a writing developer"),
+				},
 			},
 			output: HostAccess{
 				"host1:5432": []ReadWriteAccess{
@@ -128,6 +162,7 @@ func TestGranter_groupAccesses(t *testing.T) {
 					t.Fatalf("allDatabases was not expected to be used")
 					return nil, nil
 				},
+				ExtendedWritesEnabled: true,
 			}
 
 			output, err := r.groupAccesses(logger, "namespace", tc.reads, tc.writes)
@@ -284,7 +319,7 @@ func TestGranter_groupAccesses_withAllDatabases(t *testing.T) {
 		name      string
 		databases []lunarwayv1alpha1.PostgreSQLDatabase
 		reads     []lunarwayv1alpha1.AccessSpec
-		writes    []lunarwayv1alpha1.AccessSpec
+		writes    []lunarwayv1alpha1.WriteAccessSpec
 		output    HostAccess
 	}{
 		{
@@ -320,8 +355,10 @@ func TestGranter_groupAccesses_withAllDatabases(t *testing.T) {
 			reads: []lunarwayv1alpha1.AccessSpec{
 				spec("host1:5432", "I am a developer"),
 			},
-			writes: []lunarwayv1alpha1.AccessSpec{
-				spec("host1:5432", "I am a writing developer"),
+			writes: []lunarwayv1alpha1.WriteAccessSpec{
+				{
+					AccessSpec: spec("host1:5432", "I am a writing developer"),
+				},
 			},
 			output: HostAccess{
 				"host1:5432": []ReadWriteAccess{
@@ -341,8 +378,10 @@ func TestGranter_groupAccesses_withAllDatabases(t *testing.T) {
 			reads: []lunarwayv1alpha1.AccessSpec{
 				spec("host1:5432", "I am a developer"),
 			},
-			writes: []lunarwayv1alpha1.AccessSpec{
-				spec("host2:5432", "I am a writing developer"),
+			writes: []lunarwayv1alpha1.WriteAccessSpec{
+				{
+					AccessSpec: spec("host2:5432", "I am a writing developer"),
+				},
 			},
 			output: HostAccess{
 				"host1:5432": []ReadWriteAccess{
@@ -364,8 +403,10 @@ func TestGranter_groupAccesses_withAllDatabases(t *testing.T) {
 			reads: []lunarwayv1alpha1.AccessSpec{
 				spec("host1:5432", "I am a developer"),
 			},
-			writes: []lunarwayv1alpha1.AccessSpec{
-				spec("host2:5432", "I am a writing developer"),
+			writes: []lunarwayv1alpha1.WriteAccessSpec{
+				{
+					AccessSpec: spec("host2:5432", "I am a writing developer"),
+				},
 			},
 			output: HostAccess{
 				"host1:5432": []ReadWriteAccess{
@@ -458,7 +499,7 @@ func TestGranter_groupAccesses_allDatabasesFeatureFlags(t *testing.T) {
 		readFeatureEnabled  bool
 		writeFeatureEnabled bool
 		reads               []lunarwayv1alpha1.AccessSpec
-		writes              []lunarwayv1alpha1.AccessSpec
+		writes              []lunarwayv1alpha1.WriteAccessSpec
 		output              HostAccess
 	}{
 		{
@@ -482,8 +523,10 @@ func TestGranter_groupAccesses_allDatabasesFeatureFlags(t *testing.T) {
 			readFeatureEnabled:  true,
 			writeFeatureEnabled: false,
 			reads:               nil,
-			writes: []lunarwayv1alpha1.AccessSpec{
-				spec("host1:5432", "I am a developer"),
+			writes: []lunarwayv1alpha1.WriteAccessSpec{
+				{
+					AccessSpec: spec("host1:5432", "I am a developer"),
+				},
 			},
 			output: nil,
 		},
@@ -591,7 +634,7 @@ func TestGranter_groupAccesses_mixedSpecs(t *testing.T) {
 		name      string
 		databases []lunarwayv1alpha1.PostgreSQLDatabase
 		reads     []lunarwayv1alpha1.AccessSpec
-		writes    []lunarwayv1alpha1.AccessSpec
+		writes    []lunarwayv1alpha1.WriteAccessSpec
 		output    HostAccess
 	}{
 		{
@@ -603,8 +646,10 @@ func TestGranter_groupAccesses_mixedSpecs(t *testing.T) {
 			reads: []lunarwayv1alpha1.AccessSpec{
 				allDatabasesSpec("host1:5432", "I am a developer"),
 			},
-			writes: []lunarwayv1alpha1.AccessSpec{
-				singleDatabaseSpec("host1:5432", "database2", "I am a writing developer"),
+			writes: []lunarwayv1alpha1.WriteAccessSpec{
+				{
+					AccessSpec: singleDatabaseSpec("host1:5432", "database2", "I am a writing developer"),
+				},
 			},
 			output: HostAccess{
 				"host1:5432": []ReadWriteAccess{

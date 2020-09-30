@@ -66,17 +66,18 @@ spec:
 The controller will ensure that a database exists on the host based on its configuration.  
 If a resources is deleted we _might_ delete the database in the future, preferrable behind a flag to avoid loosing data.
 
-There are created three roles for all databases.
+There are created four roles for all databases.
 One with login priviledges according to the custom resource name and password.
-The other two are `read` and `readwrite` roles used when granting users access to the database.
-They are named as the database with a `_read` and `_readwrite` suffix and have the priviledge to `SELECT` and `SELECT, INSERT, UPDATE, DELETE` respectively.
-Default priviledges no the database ensures that each role have access to objects created by the service role.
+The other three are `read`, `readwrite` and `readowningwrite` roles used when granting users access to the database.
+They are named as the database with a `_read`, `_readwrite` and `_readowningwrite` suffix and have the priviledge to `SELECT` and `SELECT, INSERT, UPDATE, DELETE` respectively.
+The owning write role is also granted the owning role to allow using `DROP` and `ALTER`.
+Default priviledges on the database ensures that each role have access to objects created by the service role.
 
 ## Users
 
 The CRD `PostgreSQLUser` contains metadata about the user along with its access rights to databases.
 
-The access rights are devided into read and write and specifies a `host` and `reason` as a minimum.
+The access rights are devided into `read`, `write` and `owningWrite` and specifies a `host` and `reason` as a minimum.
 Either the `database` field or `allDatabases` must be set as well.
 It is possible to set `start` and `stop` timestamps to limit the lifetime of capabilities e.g. automatic revocation after completing a support ticket.
 
