@@ -11,7 +11,7 @@ POSTGRESQL_CONTROLLER_INTEGRATION_HOST=localhost:5432
 
 .PHONY: code/run
 code/run:
-	@operator-sdk run --local --namespace=${NAMESPACE} --operator-flags --zap-devel
+	@operator-sdk run --local --operator-namespace=${NAMESPACE} --watch-namespace='' --operator-flags --zap-devel
 
 .PHONY: code/compile
 code/compile:
@@ -26,9 +26,20 @@ code/fix:
 	@gofmt -w `find . -type f -name '*.go' -not -path "./vendor/*"`
 
 .PHONY: code/generate
-code/generate:
+code/generate: code/generate/openapi
 	operator-sdk generate k8s
-	operator-sdk generate openapi
+	operator-sdk generate crds
+
+.PHONY: code/generate/openapi
+code/generate/openapi:
+	which ./bin/openapi-gen > /dev/null || go build -o ./bin/openapi-gen k8s.io/kube-openapi/cmd/openapi-gen
+	./bin/openapi-gen --logtostderr=true \
+		--input-dirs ./pkg/apis/lunarway/v1alpha1 \
+		--output-base "" \
+		--output-file-base zz_generated.openapi \
+		--output-package ./pkg/apis/lunarway/v1alpha1 \
+		--go-header-file 'hack/openapi-boilerplate.go.txt' \
+		--report-filename "-"
 
 .PHONY: image/build
 image/build: code/compile

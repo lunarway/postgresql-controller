@@ -179,6 +179,7 @@ spec:
                 - reason
                 type: object
               type: array
+              x-kubernetes-list-type: set
             write:
               items:
                 properties:
@@ -320,6 +321,7 @@ spec:
                 - reason
                 type: object
               type: array
+              x-kubernetes-list-type: set
           required:
           - name
           type: object
