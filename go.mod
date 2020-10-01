@@ -8,7 +8,7 @@ require (
 	github.com/go-openapi/spec v0.19.4
 	github.com/google/uuid v1.1.1
 	github.com/lib/pq v1.2.0
-	github.com/operator-framework/operator-sdk v0.15.2
+	github.com/operator-framework/operator-sdk v0.16.0
 	github.com/prometheus/client_golang v1.2.1
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.4.0
