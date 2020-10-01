@@ -11,7 +11,7 @@ POSTGRESQL_CONTROLLER_INTEGRATION_HOST=localhost:5432
 
 .PHONY: code/run
 code/run:
-	@operator-sdk up local --namespace=${NAMESPACE} --operator-flags --zap-devel
+	@operator-sdk run --local --namespace=${NAMESPACE} --operator-flags --zap-devel
 
 .PHONY: code/compile
 code/compile:
