@@ -5,16 +5,15 @@ go 1.13
 require (
 	github.com/aws/aws-sdk-go v1.25.34
 	github.com/go-logr/logr v0.1.0
-	github.com/go-openapi/spec v0.19.2
+	github.com/go-openapi/spec v0.19.4
 	github.com/google/uuid v1.1.1
 	github.com/lib/pq v1.2.0
-	github.com/operator-framework/operator-sdk v0.13.0
-	github.com/prometheus/client_golang v1.1.0
+	github.com/operator-framework/operator-sdk v0.14.1
+	github.com/prometheus/client_golang v1.2.1
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.4.0
 	go.uber.org/multierr v1.1.0
 	golang.org/x/net v0.0.0-20191112182307-2180aed22343 // indirect
-	google.golang.org/appengine v1.6.5 // indirect
 	k8s.io/api v0.0.0
 	k8s.io/apimachinery v0.0.0
 	k8s.io/client-go v12.0.0+incompatible
@@ -46,3 +45,5 @@ replace (
 	k8s.io/metrics => k8s.io/metrics v0.0.0-20191016113814-3b1a734dba6e
 	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.0.0-20191016112829-06bb3c9d77c9
 )
+
+replace github.com/docker/docker => github.com/moby/moby v0.7.3-0.20190826074503-38ab9da00309 // Required by Helm
