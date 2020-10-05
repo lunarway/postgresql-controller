@@ -1,25 +1,8 @@
-apiVersion: apiextensions.k8s.io/v1beta1
+apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   name: postgresqldatabases.lunarway.com
 spec:
-  additionalPrinterColumns:
-  - JSONPath: .spec.name
-    description: Database name
-    name: Database
-    type: string
-  - JSONPath: .status.phase
-    description: Database status
-    name: Status
-    type: string
-  - JSONPath: .status.phaseUpdated
-    description: Timestamp of last status update
-    name: Updated
-    type: date
-  - JSONPath: .status.host
-    description: Database host
-    name: Host
-    type: string
   group: lunarway.com
   names:
     kind: PostgreSQLDatabase
@@ -29,191 +12,208 @@ spec:
     - pgdb
     singular: postgresqldatabase
   scope: Namespaced
-  subresources:
-    status: {}
-  validation:
-    openAPIV3Schema:
-      description: PostgreSQLDatabase is the Schema for the postgresqldatabases API
-      properties:
-        apiVersion:
-          description: 'APIVersion defines the versioned schema of this representation
-            of an object. Servers should convert recognized schemas to the latest
-            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
-          type: string
-        kind:
-          description: 'Kind is a string value representing the REST resource this
-            object represents. Servers may infer this from the endpoint the client
-            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
-          type: string
-        metadata:
-          type: object
-        spec:
-          description: PostgreSQLDatabaseSpec defines the desired state of PostgreSQLDatabase
-          properties:
-            host:
-              description: Host that the database should be created on.
-              properties:
-                value:
-                  description: Defaults to "".
-                  type: string
-                valueFrom:
-                  description: Source to read the value from.
-                  properties:
-                    configMapKeyRef:
-                      description: Selects a key of a config map in the custom resource's
-                        namespace
-                      properties:
-                        key:
-                          description: The key of the secret or config map to select
-                            from.  Must be a valid key.
-                          type: string
-                        name:
-                          description: The name of the secret or config map in the
-                            namespace to select from.
-                          type: string
-                      required:
-                      - key
-                      type: object
-                    secretKeyRef:
-                      description: Selects a key of a secret in the custom resource's
-                        namespace
-                      properties:
-                        key:
-                          description: The key of the secret or config map to select
-                            from.  Must be a valid key.
-                          type: string
-                        name:
-                          description: The name of the secret or config map in the
-                            namespace to select from.
-                          type: string
-                      required:
-                      - key
-                      type: object
-                  type: object
-              type: object
-            isShared:
-              description: "IsShared indicates whether the database is shared between
-                multiple PostgreSQLDatabase objects. The controller will not grant
-                ownership of the database if this is set to true. Further the owning
-                role of the database is granted to this user to allow access to the
-                resources it may have created before this user was enabled. \n This
-                option is here to support legacy applications sharing database instances
-                and should never be used for new databases."
-              type: boolean
-            name:
-              description: Name of the database
-              type: string
-            password:
-              description: Password used with the User name to connect to the database
-              properties:
-                value:
-                  description: Defaults to "".
-                  type: string
-                valueFrom:
-                  description: Source to read the value from.
-                  properties:
-                    configMapKeyRef:
-                      description: Selects a key of a config map in the custom resource's
-                        namespace
-                      properties:
-                        key:
-                          description: The key of the secret or config map to select
-                            from.  Must be a valid key.
-                          type: string
-                        name:
-                          description: The name of the secret or config map in the
-                            namespace to select from.
-                          type: string
-                      required:
-                      - key
-                      type: object
-                    secretKeyRef:
-                      description: Selects a key of a secret in the custom resource's
-                        namespace
-                      properties:
-                        key:
-                          description: The key of the secret or config map to select
-                            from.  Must be a valid key.
-                          type: string
-                        name:
-                          description: The name of the secret or config map in the
-                            namespace to select from.
-                          type: string
-                      required:
-                      - key
-                      type: object
-                  type: object
-              type: object
-            user:
-              description: User name used to connect to the database. If empty Name
-                is used.
-              properties:
-                value:
-                  description: Defaults to "".
-                  type: string
-                valueFrom:
-                  description: Source to read the value from.
-                  properties:
-                    configMapKeyRef:
-                      description: Selects a key of a config map in the custom resource's
-                        namespace
-                      properties:
-                        key:
-                          description: The key of the secret or config map to select
-                            from.  Must be a valid key.
-                          type: string
-                        name:
-                          description: The name of the secret or config map in the
-                            namespace to select from.
-                          type: string
-                      required:
-                      - key
-                      type: object
-                    secretKeyRef:
-                      description: Selects a key of a secret in the custom resource's
-                        namespace
-                      properties:
-                        key:
-                          description: The key of the secret or config map to select
-                            from.  Must be a valid key.
-                          type: string
-                        name:
-                          description: The name of the secret or config map in the
-                            namespace to select from.
-                          type: string
-                      required:
-                      - key
-                      type: object
-                  type: object
-              type: object
-          required:
-          - host
-          - name
-          - password
-          type: object
-        status:
-          description: PostgreSQLDatabaseStatus defines the observed state of PostgreSQLDatabase
-          properties:
-            error:
-              type: string
-            host:
-              type: string
-            phase:
-              description: PostgreSQLDatabasePhase represents the current phase of
-                a PostgreSQL database.
-              type: string
-            phaseUpdated:
-              format: date-time
-              type: string
-            user:
-              type: string
-          required:
-          - phase
-          - phaseUpdated
-          type: object
-      type: object
-  version: v1alpha1
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - description: Database name
+      jsonPath: .spec.name
+      name: Database
+      type: string
+    - description: Database status
+      jsonPath: .status.phase
+      name: Status
+      type: string
+    - description: Timestamp of last status update
+      jsonPath: .status.phaseUpdated
+      name: Updated
+      type: date
+    - description: Database host
+      jsonPath: .status.host
+      name: Host
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: PostgreSQLDatabase is the Schema for the postgresqldatabases
+          API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: PostgreSQLDatabaseSpec defines the desired state of PostgreSQLDatabase
+            properties:
+              host:
+                description: Host that the database should be created on.
+                properties:
+                  value:
+                    description: Defaults to "".
+                    type: string
+                  valueFrom:
+                    description: Source to read the value from.
+                    properties:
+                      configMapKeyRef:
+                        description: Selects a key of a config map in the custom resource's
+                          namespace
+                        properties:
+                          key:
+                            description: The key of the secret or config map to select
+                              from.  Must be a valid key.
+                            type: string
+                          name:
+                            description: The name of the secret or config map in the
+                              namespace to select from.
+                            type: string
+                        required:
+                        - key
+                        type: object
+                      secretKeyRef:
+                        description: Selects a key of a secret in the custom resource's
+                          namespace
+                        properties:
+                          key:
+                            description: The key of the secret or config map to select
+                              from.  Must be a valid key.
+                            type: string
+                          name:
+                            description: The name of the secret or config map in the
+                              namespace to select from.
+                            type: string
+                        required:
+                        - key
+                        type: object
+                    type: object
+                type: object
+              isShared:
+                description: "IsShared indicates whether the database is shared between
+                  multiple PostgreSQLDatabase objects. The controller will not grant
+                  ownership of the database if this is set to true. Further the owning
+                  role of the database is granted to this user to allow access to
+                  the resources it may have created before this user was enabled.
+                  \n This option is here to support legacy applications sharing database
+                  instances and should never be used for new databases."
+                type: boolean
+              name:
+                description: Name of the database
+                type: string
+              password:
+                description: Password used with the User name to connect to the database
+                properties:
+                  value:
+                    description: Defaults to "".
+                    type: string
+                  valueFrom:
+                    description: Source to read the value from.
+                    properties:
+                      configMapKeyRef:
+                        description: Selects a key of a config map in the custom resource's
+                          namespace
+                        properties:
+                          key:
+                            description: The key of the secret or config map to select
+                              from.  Must be a valid key.
+                            type: string
+                          name:
+                            description: The name of the secret or config map in the
+                              namespace to select from.
+                            type: string
+                        required:
+                        - key
+                        type: object
+                      secretKeyRef:
+                        description: Selects a key of a secret in the custom resource's
+                          namespace
+                        properties:
+                          key:
+                            description: The key of the secret or config map to select
+                              from.  Must be a valid key.
+                            type: string
+                          name:
+                            description: The name of the secret or config map in the
+                              namespace to select from.
+                            type: string
+                        required:
+                        - key
+                        type: object
+                    type: object
+                type: object
+              user:
+                description: User name used to connect to the database. If empty Name
+                  is used.
+                properties:
+                  value:
+                    description: Defaults to "".
+                    type: string
+                  valueFrom:
+                    description: Source to read the value from.
+                    properties:
+                      configMapKeyRef:
+                        description: Selects a key of a config map in the custom resource's
+                          namespace
+                        properties:
+                          key:
+                            description: The key of the secret or config map to select
+                              from.  Must be a valid key.
+                            type: string
+                          name:
+                            description: The name of the secret or config map in the
+                              namespace to select from.
+                            type: string
+                        required:
+                        - key
+                        type: object
+                      secretKeyRef:
+                        description: Selects a key of a secret in the custom resource's
+                          namespace
+                        properties:
+                          key:
+                            description: The key of the secret or config map to select
+                              from.  Must be a valid key.
+                            type: string
+                          name:
+                            description: The name of the secret or config map in the
+                              namespace to select from.
+                            type: string
+                        required:
+                        - key
+                        type: object
+                    type: object
+                type: object
+            required:
+            - host
+            - name
+            - password
+            type: object
+          status:
+            description: PostgreSQLDatabaseStatus defines the observed state of PostgreSQLDatabase
+            properties:
+              error:
+                type: string
+              host:
+                type: string
+              phase:
+                description: PostgreSQLDatabasePhase represents the current phase
+                  of a PostgreSQL database.
+                type: string
+              phaseUpdated:
+                format: date-time
+                type: string
+              user:
+                type: string
+            required:
+            - phase
+            - phaseUpdated
+            type: object
+        type: object
     served: true
     storage: true
+    subresources:
+      status: {}
