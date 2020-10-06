@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/pkg/apis/lunarway/v1alpha1"
+	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/api/v1alpha1"
 	ctrerrors "go.lunarway.com/postgresql-controller/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"

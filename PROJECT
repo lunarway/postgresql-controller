@@ -1,0 +1,13 @@
+domain: lunar.tech
+layout: go.kubebuilder.io/v2
+repo: go.lunarway.com/postgresql-controller
+resources:
+- group: postgresql
+  kind: PostgreSQLUser
+  version: v1alpha1
+- group: postgresql
+  kind: PostgreSQLDatabase
+  version: v1alpha1
+version: 3-alpha
+plugins:
+  go.operator-sdk.io/v2-alpha: {}

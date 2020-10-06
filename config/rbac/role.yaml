@@ -1,0 +1,48 @@
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- apiGroups:
+  - postgresql.lunar.tech
+  resources:
+  - postgresqldatabases
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - postgresql.lunar.tech
+  resources:
+  - postgresqldatabases/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - postgresql.lunar.tech
+  resources:
+  - postgresqlusers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - postgresql.lunar.tech
+  resources:
+  - postgresqlusers/status
+  verbs:
+  - get
+  - patch
+  - update
