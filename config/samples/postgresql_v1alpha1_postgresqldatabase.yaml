@@ -1,0 +1,12 @@
+apiVersion: postgresql.lunar.tech/v1alpha1
+kind: PostgreSQLDatabase
+metadata:
+  name: test1db
+spec:
+  name: test1db
+  password:
+    value: "1234"
+  host:
+    value: "postgresql:5432"
+  user:
+    value: "username"

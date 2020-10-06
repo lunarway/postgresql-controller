@@ -1,0 +1,20 @@
+# permissions for end users to view postgresqlusers.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: postgresqluser-viewer-role
+rules:
+- apiGroups:
+  - postgresql.lunar.tech
+  resources:
+  - postgresqlusers
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - postgresql.lunar.tech
+  resources:
+  - postgresqlusers/status
+  verbs:
+  - get

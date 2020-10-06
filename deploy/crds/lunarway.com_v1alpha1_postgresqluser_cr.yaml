@@ -1,6 +1,0 @@
-apiVersion: lunarway.com/v1alpha1
-kind: PostgreSQLUser
-metadata:
-  name: example-postgresqluser-2
-spec:
-  name: kni

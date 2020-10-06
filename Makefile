@@ -1,62 +1,160 @@
 PROJECT=postgresql-controller
-ORG?=lunarway
-REG?=quay.io
-TAG?=latest
-NAMESPACE=default
-SHELL=/bin/bash
-COMPILE_TARGET=./build/_output/bin/$(PROJECT)
-GOOS=darwin
-GOARCH=amd64
-POSTGRESQL_CONTROLLER_INTEGRATION_HOST=localhost:5432
+# Current Operator version
+VERSION ?= 0.0.1
+# Default bundle image tag
+BUNDLE_IMG ?= controller-bundle:$(VERSION)
+# Options for 'bundle-build'
+ifneq ($(origin CHANNELS), undefined)
+BUNDLE_CHANNELS := --channels=$(CHANNELS)
+endif
+ifneq ($(origin DEFAULT_CHANNEL), undefined)
+BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
+endif
+BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
+# Image URL to use all building/pushing image targets
+ORG ?= lunarway
+REG ?= quay.io
+TAG ?= latest
+IMG ?= ${REG}/${ORG}/${PROJECT}:${TAG}
+# Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
+CRD_OPTIONS ?= "crd:trivialVersions=true"
 
-.PHONY: code/run
-code/run:
-	@operator-sdk run --local --operator-namespace=${NAMESPACE} --watch-namespace='' --operator-flags --zap-devel
+# Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
+ifeq (,$(shell go env GOBIN))
+GOBIN=$(shell go env GOPATH)/bin
+else
+GOBIN=$(shell go env GOBIN)
+endif
 
-.PHONY: code/compile
-code/compile:
-	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=0 go build -o=$(COMPILE_TARGET) ./cmd/manager
+all: manager
 
-.PHONY: code/check
-code/check:
+# Build manager binary
+manager: generate fmt vet
+	go build -o bin/manager main.go
+
+# Run against the configured Kubernetes cluster in ~/.kube/config
+run: generate fmt vet manifests
+	go run ./main.go
+
+# Install CRDs into a cluster
+install: manifests kustomize
+	$(KUSTOMIZE) build config/crd | kubectl apply -f -
+
+# Uninstall CRDs from a cluster
+uninstall: manifests kustomize
+	$(KUSTOMIZE) build config/crd | kubectl delete -f -
+
+# Deploy controller in the configured Kubernetes cluster in ~/.kube/config
+deploy: manifests kustomize
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	$(KUSTOMIZE) build config/default | kubectl apply -f -
+
+# Generate manifests e.g. CRD, RBAC etc.
+manifests: controller-gen
+	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+
+# Run go fmt against code
+fmt:
+	go fmt ./...
+
+.PHONY: fmt/check
+# Run gofmt to ensure there is no diff
+fmt/check:
 	@diff -u <(echo -n) <(gofmt -d `find . -type f -name '*.go' -not -path "./vendor/*"`)
 
-.PHONY: code/fix
-code/fix:
-	@gofmt -w `find . -type f -name '*.go' -not -path "./vendor/*"`
+# Run go vet against code
+vet:
+	go vet ./...
 
-.PHONY: code/generate
-code/generate: code/generate/openapi
-	operator-sdk generate k8s
-	operator-sdk generate crds
+# Generate code
+generate: controller-gen openapi-gen
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+	$(OPENAPI_GEN) --input-dirs ./api/v1alpha1  --output-package ./api/v1alpha1
 
-.PHONY: code/generate/openapi
-code/generate/openapi:
-	which ./bin/openapi-gen > /dev/null || go build -o ./bin/openapi-gen k8s.io/kube-openapi/cmd/openapi-gen
-	./bin/openapi-gen --logtostderr=true \
-		--input-dirs ./pkg/apis/lunarway/v1alpha1 \
+# Build the docker image
+docker-build: test
+	docker build . -t ${IMG}
+
+# Push the docker image
+docker-push:
+	docker push ${IMG}
+
+# find or download controller-gen
+# download controller-gen if necessary
+controller-gen:
+ifeq (, $(shell which controller-gen))
+	@{ \
+	set -e ;\
+	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
+	cd $$CONTROLLER_GEN_TMP_DIR ;\
+	go mod init tmp ;\
+	go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.3.0 ;\
+	rm -rf $$CONTROLLER_GEN_TMP_DIR ;\
+	}
+CONTROLLER_GEN=$(GOBIN)/controller-gen
+else
+CONTROLLER_GEN=$(shell which controller-gen)
+endif
+
+openapi-gen::
+ifeq (, $(shell which openapi-gen))
+	@{ \
+	set -e ;\
+	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
+	cd $$CONTROLLER_GEN_TMP_DIR ;\
+	go mod init tmp ;\
+	go get k8s.io/kube-openapi/cmd/openapi-gen ;\
+	rm -rf $$CONTROLLER_GEN_TMP_DIR ;\
+	}
+OPENAPI_GEN_EXEC=$(GOBIN)/openapi-gen
+else
+OPENAPI_GEN_EXEC=$(shell which openapi-gen)
+endif
+# setup common arguments for the openapi-gen executor
+OPENAPI_GEN=${OPENAPI_GEN_EXEC} ./bin/openapi-gen --logtostderr=true \
 		--output-base "" \
 		--output-file-base zz_generated.openapi \
-		--output-package ./pkg/apis/lunarway/v1alpha1 \
-		--go-header-file 'hack/openapi-boilerplate.go.txt' \
+		--go-header-file 'hack/boilerplate.go.txt' \
 		--report-filename "-"
 
-.PHONY: image/build
-image/build: code/compile
-	@operator-sdk build ${REG}/${ORG}/${PROJECT}:${TAG}
+kustomize:
+ifeq (, $(shell which kustomize))
+	@{ \
+	set -e ;\
+	KUSTOMIZE_GEN_TMP_DIR=$$(mktemp -d) ;\
+	cd $$KUSTOMIZE_GEN_TMP_DIR ;\
+	go mod init tmp ;\
+	go get sigs.k8s.io/kustomize/kustomize/v3@v3.5.4 ;\
+	rm -rf $$KUSTOMIZE_GEN_TMP_DIR ;\
+	}
+KUSTOMIZE=$(GOBIN)/kustomize
+else
+KUSTOMIZE=$(shell which kustomize)
+endif
 
-.PHONY: image/push
-image/push:
-	docker push ${REG}/${ORG}/${PROJECT}:${TAG}
+# Generate bundle manifests and metadata, then validate generated files.
+bundle: manifests
+	operator-sdk generate kustomize manifests -q
+	kustomize build config/manifests | operator-sdk generate bundle -q --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS)
+	operator-sdk bundle validate ./bundle
 
-.PHONY: image/build/push
-image/build/push: image/build image/push
+# Build the bundle image.
+bundle-build:
+	docker build -f bundle.Dockerfile -t $(BUNDLE_IMG) .
 
+ENVTEST_ASSETS_DIR=$(shell pwd)/testbin
+
+# Run tests
 .PHONY: test/unit
-test/unit:
-	@echo Running tests:
-	go test -v -race -cover ./pkg/...
+test/unit: generate fmt vet manifests
+	mkdir -p ${ENVTEST_ASSETS_DIR}
+	test -f ${ENVTEST_ASSETS_DIR}/setup-envtest.sh || curl -sSLo ${ENVTEST_ASSETS_DIR}/setup-envtest.sh https://raw.githubusercontent.com/kubernetes-sigs/controller-runtime/master/hack/setup-envtest.sh
+	source ${ENVTEST_ASSETS_DIR}/setup-envtest.sh; \
+	fetch_envtest_tools $(ENVTEST_ASSETS_DIR); \
+	setup_envtest_env $(ENVTEST_ASSETS_DIR); \
+	go test -v -race ./... -coverprofile cover.out
 
+POSTGRESQL_CONTROLLER_INTEGRATION_HOST=localhost:5432
 POSTGRESQL_CONTROLLER_INTEGRATION_HOST_CONTAINER=postgresql-controler-int-test
 
 .PHONY: test/integration/postgresql/run
@@ -80,7 +178,7 @@ test/integration/postgresql/stop:
 .PHONY: test/integration
 test/integration: test/integration/postgresql/run
 	@echo Running integration tests against PostgreSQL instance on ${POSTGRESQL_CONTROLLER_INTEGRATION_HOST}:
-	POSTGRESQL_CONTROLLER_INTEGRATION_HOST=${POSTGRESQL_CONTROLLER_INTEGRATION_HOST} go test -v -race -cover -count=1 ./pkg/...
+	POSTGRESQL_CONTROLLER_INTEGRATION_HOST=${POSTGRESQL_CONTROLLER_INTEGRATION_HOST} make test/unit
 
 .PHONY: test/cluster
 test/cluster:
@@ -98,12 +196,3 @@ test/cluster/resources:
 .PHONY: test/cluster/postgresql
 test/cluster/postgresql:
 	kubectl apply -f test/postgresql.yaml
-
-.PHONY: release
-release:
-	sed -i "" 's|${REG}/${ORG}/${PROJECT}.*|${REG}/${ORG}/${PROJECT}:${TAG}|g' deploy/operator.yaml
-	git add deploy/operator.yaml
-	git commit -m"Release ${TAG}"
-	git tag ${TAG}
-	git push
-	git push --tags

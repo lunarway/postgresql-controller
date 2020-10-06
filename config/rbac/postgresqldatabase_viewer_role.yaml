@@ -1,0 +1,20 @@
+# permissions for end users to view postgresqldatabases.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: postgresqldatabase-viewer-role
+rules:
+- apiGroups:
+  - postgresql.lunar.tech
+  resources:
+  - postgresqldatabases
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - postgresql.lunar.tech
+  resources:
+  - postgresqldatabases/status
+  verbs:
+  - get
