@@ -206,3 +206,12 @@ test/cluster/resources:
 .PHONY: test/cluster/postgresql
 test/cluster/postgresql:
 	kubectl apply -f test/postgresql.yaml
+
+.PHONY: release
+release:
+	sed -i "" 's|^VERSION.*|VERSION ?= ${TAG}|' Makefile
+	git add Makefile
+	git commit -m"Release v${TAG}"
+	git tag v${TAG}
+	git push
+	git push --tags
