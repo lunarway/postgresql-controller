@@ -38,7 +38,6 @@ type PostgreSQLUserSpec struct {
 	Write []WriteAccessSpec `json:"write"`
 }
 
-// +k8s:openapi-gen=true
 type AccessSpec struct {
 	Host ResourceVar `json:"host"`
 	// +optional

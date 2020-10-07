@@ -79,7 +79,8 @@ func main() {
 		Scheme: mgr.GetScheme(),
 
 		Granter: grants.Granter{
-			Now: time.Now,
+			Now:                   time.Now,
+			ExtendedWritesEnabled: config.ExtendedWriteEnabled,
 			AllDatabases: func(namespace string) ([]postgresqlv1alpha1.PostgreSQLDatabase, error) {
 				return kube.PostgreSQLDatabases(mgr.GetClient(), namespace)
 			},
