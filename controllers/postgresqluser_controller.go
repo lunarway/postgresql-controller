@@ -32,7 +32,6 @@ import (
 	postgresqlv1alpha1 "go.lunarway.com/postgresql-controller/api/v1alpha1"
 	"go.lunarway.com/postgresql-controller/pkg/grants"
 	"go.lunarway.com/postgresql-controller/pkg/iam"
-	"go.lunarway.com/postgresql-controller/pkg/postgres"
 )
 
 // PostgreSQLUserReconciler reconciles a PostgreSQLUser object
@@ -41,16 +40,16 @@ type PostgreSQLUserReconciler struct {
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 
-	granter      grants.Granter
-	setAWSPolicy func(log logr.Logger, credentials *credentials.Credentials, policy iam.AWSPolicy, userID, rolePrefix string) error
+	Granter      grants.Granter
+	SetAWSPolicy func(log logr.Logger, credentials *credentials.Credentials, policy iam.AWSPolicy, userID, rolePrefix string) error
 
-	rolePrefix         string
-	awsPolicyName      string
-	awsRegion          string
-	awsAccountID       string
-	awsProfile         string
-	awsAccessKeyID     string
-	awsSecretAccessKey string
+	RolePrefix         string
+	AWSPolicyName      string
+	AWSRegion          string
+	AWSAccountID       string
+	AWSProfile         string
+	AWSAccessKeyID     string
+	AWSSecretAccessKey string
 }
 
 // +kubebuilder:rbac:groups=postgresql.lunar.tech,resources=postgresqlusers,verbs=get;list;watch;create;update;patch;delete
@@ -95,42 +94,27 @@ func (r *PostgreSQLUserReconciler) reconcile(reqLogger logr.Logger, request reco
 	}
 
 	// User instance created or updated
-	reqLogger = reqLogger.WithValues("user", user.Spec.Name, "rolePrefix", r.rolePrefix)
+	reqLogger = reqLogger.WithValues("user", user.Spec.Name, "rolePrefix", r.RolePrefix)
 	reqLogger.Info("Reconciling found PostgreSQLUser resource", "user", user.Spec.Name)
 
 	// Error check in the bottom because we want aws policy to be set no matter what.
-	granterErr := r.granter.SyncUser(reqLogger, request.Namespace, r.rolePrefix, *user)
+	granterErr := r.Granter.SyncUser(reqLogger, request.Namespace, r.RolePrefix, *user)
 
 	var awsCredentials *credentials.Credentials
-	if len(r.awsProfile) != 0 {
-		awsCredentials = credentials.NewSharedCredentials("", r.awsProfile)
+	if len(r.AWSProfile) != 0 {
+		awsCredentials = credentials.NewSharedCredentials("", r.AWSProfile)
 	} else {
-		awsCredentials = credentials.NewStaticCredentials(r.awsAccessKeyID, r.awsSecretAccessKey, "")
+		awsCredentials = credentials.NewStaticCredentials(r.AWSAccessKeyID, r.AWSSecretAccessKey, "")
 	}
-	awsPolicyErr := r.setAWSPolicy(reqLogger, awsCredentials, iam.AWSPolicy{
-		Name:      r.awsPolicyName,
-		Region:    r.awsRegion,
-		AccountID: r.awsAccountID,
-	}, user.Spec.Name, r.rolePrefix)
+	awsPolicyErr := r.SetAWSPolicy(reqLogger, awsCredentials, iam.AWSPolicy{
+		Name:      r.AWSPolicyName,
+		Region:    r.AWSRegion,
+		AccountID: r.AWSAccountID,
+	}, user.Spec.Name, r.RolePrefix)
 
 	if granterErr != nil || awsPolicyErr != nil {
 		return ctrl.Result{}, fmt.Errorf("grantErr: %v, awsPolicyErr: %v", granterErr, awsPolicyErr)
 	}
 
 	return ctrl.Result{}, nil
-}
-
-func parseHostCredentials(hosts map[string]string) (map[string]postgres.Credentials, error) {
-	if len(hosts) == 0 {
-		return nil, nil
-	}
-	hostCredentials := make(map[string]postgres.Credentials)
-	for host, credentials := range hosts {
-		var err error
-		hostCredentials[host], err = postgres.ParseUsernamePassword(credentials)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return hostCredentials, nil
 }

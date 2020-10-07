@@ -1,7 +1,6 @@
 package controllers
 
 import (
-	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -24,71 +23,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
-
-func TestParseHostCredentials(t *testing.T) {
-	tt := []struct {
-		name   string
-		input  map[string]string
-		output map[string]postgres.Credentials
-		err    error
-	}{
-		{
-			name:   "nil map",
-			input:  nil,
-			output: nil,
-		},
-		{
-			name: "single host",
-			input: map[string]string{
-				"host:5432": "user:password",
-			},
-			output: map[string]postgres.Credentials{
-				"host:5432": {
-					Name:     "user",
-					Password: "password",
-				},
-			},
-			err: nil,
-		},
-		{
-			name: "multiple hosts",
-			input: map[string]string{
-				"host1:5432": "user1:password1",
-				"host2:5432": "user2:password2",
-			},
-			output: map[string]postgres.Credentials{
-				"host1:5432": {
-					Name:     "user1",
-					Password: "password1",
-				},
-				"host2:5432": {
-					Name:     "user2",
-					Password: "password2",
-				},
-			},
-			err: nil,
-		},
-		{
-			name: "single host without user or password",
-			input: map[string]string{
-				"host:5432": "",
-			},
-			output: nil,
-			err:    errors.New("username empty"),
-		},
-	}
-	for _, tc := range tt {
-		t.Run(tc.name, func(t *testing.T) {
-			output, err := parseHostCredentials(tc.input)
-			if tc.err != nil {
-				assert.EqualError(t, err, tc.err.Error(), "output error not as expected")
-			} else {
-				assert.NoError(t, err, "unexpected error")
-			}
-			assert.Equal(t, tc.output, output, "output not as expected")
-		})
-	}
-}
 
 // TestReconcile_badConfigmapReference tests that reconcilation is completed
 // successfully even though a an error occours during database resolvement. This
@@ -190,7 +124,7 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 	r := &PostgreSQLUserReconciler{
 		Client: cl,
 		Log:    ctrl.Log.WithName(t.Name()),
-		granter: grants.Granter{
+		Granter: grants.Granter{
 			Now: time.Now,
 			HostCredentials: map[string]postgres.Credentials{
 				host: {
@@ -207,7 +141,7 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 				return kube.ResourceValue(cl, resource, namespace)
 			},
 		},
-		setAWSPolicy: func(log logr.Logger, credentials *credentials.Credentials, policy iam.AWSPolicy, userID, rolePrefix string) error {
+		SetAWSPolicy: func(log logr.Logger, credentials *credentials.Credentials, policy iam.AWSPolicy, userID, rolePrefix string) error {
 			return nil
 		},
 	}
@@ -306,8 +240,8 @@ func TestReconcile_rolePrefix(t *testing.T) {
 	r := &PostgreSQLUserReconciler{
 		Client:     cl,
 		Log:        ctrl.Log.WithName(t.Name()),
-		rolePrefix: rolePrefix,
-		granter: grants.Granter{
+		RolePrefix: rolePrefix,
+		Granter: grants.Granter{
 			Now: time.Now,
 			HostCredentials: map[string]postgres.Credentials{
 				host: {
@@ -324,7 +258,7 @@ func TestReconcile_rolePrefix(t *testing.T) {
 				return kube.ResourceValue(cl, resource, namespace)
 			},
 		},
-		setAWSPolicy: func(log logr.Logger, credentials *credentials.Credentials, policy iam.AWSPolicy, userID, rolePrefix string) error {
+		SetAWSPolicy: func(log logr.Logger, credentials *credentials.Credentials, policy iam.AWSPolicy, userID, rolePrefix string) error {
 			return nil
 		},
 	}
@@ -449,7 +383,7 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 	r := &PostgreSQLUserReconciler{
 		Client: cl,
 		Log:    ctrl.Log.WithName(t.Name()),
-		granter: grants.Granter{
+		Granter: grants.Granter{
 			Now: time.Now,
 			HostCredentials: map[string]postgres.Credentials{
 				host: {
@@ -466,7 +400,7 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 				return kube.ResourceValue(cl, resource, namespace)
 			},
 		},
-		setAWSPolicy: func(log logr.Logger, credentials *credentials.Credentials, policy iam.AWSPolicy, userID, rolePrefix string) error {
+		SetAWSPolicy: func(log logr.Logger, credentials *credentials.Credentials, policy iam.AWSPolicy, userID, rolePrefix string) error {
 			return nil
 		},
 	}
