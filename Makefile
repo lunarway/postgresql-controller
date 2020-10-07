@@ -31,8 +31,8 @@ all: manager
 
 BINARY_ASSETS=bin
 # Build manager binary
-manager: generate fmt vet
-	go build -o ${BINARY_ASSETS}/manager main.go
+manager: fmt vet
+	go build -o ${BINARY_ASSETS}/manager .
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests
@@ -156,7 +156,7 @@ ENVTEST_ASSETS_DIR=$(shell pwd)/testbin
 
 # Run tests
 .PHONY: test/unit
-test/unit: generate fmt vet manifests
+test/unit: fmt vet
 	mkdir -p ${ENVTEST_ASSETS_DIR}
 	test -f ${ENVTEST_ASSETS_DIR}/setup-envtest.sh || curl -sSLo ${ENVTEST_ASSETS_DIR}/setup-envtest.sh https://raw.githubusercontent.com/kubernetes-sigs/controller-runtime/master/hack/setup-envtest.sh
 	source ${ENVTEST_ASSETS_DIR}/setup-envtest.sh; \
