@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/csv"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -120,6 +121,9 @@ func (h *hostCredentials) String() string {
 		}
 		records = append(records, pair)
 	}
+
+	// make sure the output is stable
+	sort.Strings(records)
 
 	var buf bytes.Buffer
 	w := csv.NewWriter(&buf)
