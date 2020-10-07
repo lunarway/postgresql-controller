@@ -42,7 +42,7 @@ type PostgreSQLDatabaseReconciler struct {
 	Scheme *runtime.Scheme
 
 	// contains a map of credentials for hosts
-	hostCredentials map[string]postgres.Credentials
+	HostCredentials map[string]postgres.Credentials
 }
 
 // +kubebuilder:rbac:groups=postgresql.lunar.tech,resources=postgresqldatabases,verbs=get;list;watch;create;update;patch;delete
@@ -196,7 +196,7 @@ func stopRequeueOnInvalid(log logr.Logger, err error) error {
 }
 
 func (r *PostgreSQLDatabaseReconciler) EnsurePostgreSQLDatabase(log logr.Logger, host, name, user, password string, isShared bool) error {
-	credentials, ok := r.hostCredentials[host]
+	credentials, ok := r.HostCredentials[host]
 	if !ok {
 		return &ctlerrors.Invalid{
 			Err: fmt.Errorf("unknown credentials for host"),

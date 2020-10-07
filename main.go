@@ -21,6 +21,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -30,6 +31,9 @@ import (
 
 	postgresqlv1alpha1 "go.lunarway.com/postgresql-controller/api/v1alpha1"
 	"go.lunarway.com/postgresql-controller/controllers"
+	"go.lunarway.com/postgresql-controller/pkg/grants"
+	"go.lunarway.com/postgresql-controller/pkg/iam"
+	"go.lunarway.com/postgresql-controller/pkg/kube"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -46,24 +50,23 @@ func init() {
 }
 
 func main() {
-	var metricsAddr string
-	var enableLeaderElection bool
-	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
-	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
-		"Enable leader election for controller manager. "+
-			"Enabling this will ensure there is only one active controller manager.")
-	resyncDuration := flag.Duration("resync-period", 10*time.Hour, "determines the minimum frequency at which watched resources are reconciled")
-	flag.Parse()
+	flagSet := pflag.NewFlagSet("postgresql-controller", pflag.ExitOnError)
+	config := controllerConfiguration{}
+	config.RegisterFlags(flagSet)
+	flagSet.AddGoFlagSet(flag.CommandLine)
+	flagSet.Parse(os.Args[1:])
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
+	config.Log(setupLog)
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,
-		MetricsBindAddress: metricsAddr,
+		MetricsBindAddress: config.MetricsAddress,
 		Port:               9443,
-		LeaderElection:     enableLeaderElection,
+		LeaderElection:     config.EnableLeaderElection,
 		LeaderElectionID:   "b64d2659.lunar.tech",
-		SyncPeriod:         resyncDuration,
+		SyncPeriod:         &config.ResyncPeriod,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
@@ -72,8 +75,27 @@ func main() {
 
 	if err = (&controllers.PostgreSQLUserReconciler{
 		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("PostgreSQLUser"),
+		Log:    ctrl.Log.WithName("ccontrollers").WithName("PostgreSQLUser"),
 		Scheme: mgr.GetScheme(),
+
+		Granter: grants.Granter{
+			Now: time.Now,
+			AllDatabases: func(namespace string) ([]postgresqlv1alpha1.PostgreSQLDatabase, error) {
+				return kube.PostgreSQLDatabases(mgr.GetClient(), namespace)
+			},
+			ResourceResolver: func(resource postgresqlv1alpha1.ResourceVar, namespace string) (string, error) {
+				return kube.ResourceValue(mgr.GetClient(), resource, namespace)
+			},
+		},
+		SetAWSPolicy: iam.SetAWSPolicy,
+
+		RolePrefix:         config.UserRolePrefix,
+		AWSPolicyName:      config.AWS.PolicyName,
+		AWSRegion:          config.AWS.Region,
+		AWSAccountID:       config.AWS.AccountID,
+		AWSProfile:         config.AWS.Profile,
+		AWSAccessKeyID:     config.AWS.AccessKeyID,
+		AWSSecretAccessKey: config.AWS.SecretAccessKey,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PostgreSQLUser")
 		os.Exit(1)
@@ -82,6 +104,8 @@ func main() {
 		Client: mgr.GetClient(),
 		Log:    ctrl.Log.WithName("controllers").WithName("PostgreSQLDatabase"),
 		Scheme: mgr.GetScheme(),
+
+		HostCredentials: config.HostCredentials,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PostgreSQLDatabase")
 		os.Exit(1)
