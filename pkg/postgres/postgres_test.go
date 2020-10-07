@@ -290,6 +290,124 @@ func TestRole_priviliges_databaseNameAndSchemaDiffers(t *testing.T) {
 	}
 }
 
+// TestRole_owningWritePriviliges tests that Role can grant owner privileges if
+// requested making it possible to DROP and ALTER tables.
+func TestRole_owningWritePriviliges(t *testing.T) {
+	postgresqlHost := test.Integration(t)
+	log := test.SetLogger(t)
+
+	iamCreatorRootDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		User:     "iam_creator",
+		Database: "postgres",
+		Password: "",
+	})
+	if err != nil {
+		t.Fatalf("connect to database failed: %v", err)
+	}
+	defer iamCreatorRootDB.Close()
+
+	var (
+		now           = time.Now().UnixNano()
+		serviceUser1  = fmt.Sprintf("test_svc_1_%d", now)
+		developerUser = fmt.Sprintf("test_user_%d", now)
+		roleRDSIAM    = fmt.Sprintf("rds_iam_%d", now)
+	)
+	log.Info(fmt.Sprintf("Running test with service users %s and developer %s", serviceUser1, developerUser))
+
+	// create service databases and tables for testing access rights
+	createServiceDatabase(t, log, iamCreatorRootDB, postgresqlHost, serviceUser1)
+	createRole(t, iamCreatorRootDB, roleRDSIAM)
+	dbExec(t, iamCreatorRootDB, "GRANT CONNECT ON DATABASE %s TO %s", serviceUser1, roleRDSIAM)
+
+	//
+	// test alter and drop privilege on serviceUser1
+	//
+
+	// reconnect to start a new session with grants from above database creation
+	iamCreatorUserDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		User:     "iam_creator",
+		Database: serviceUser1,
+		Password: "",
+	})
+	if err != nil {
+		t.Fatalf("connect to database failed: %v", err)
+	}
+	defer iamCreatorUserDB.Close()
+	err = postgres.Role(log, iamCreatorUserDB, developerUser, []string{roleRDSIAM}, []postgres.DatabaseSchema{
+		{
+			Name:       serviceUser1,
+			Schema:     serviceUser1,
+			Privileges: postgres.PrivilegeOwningWrite,
+		},
+	})
+	if !assert.NoError(t, err, "unexpected output error") {
+		return
+	}
+
+	userDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		User:     developerUser,
+		Database: serviceUser1,
+		Password: "",
+	})
+	if err != nil {
+		t.Fatalf("could not connect with new user: %v", err)
+	}
+	defer userDB.Close()
+	_, err = userDB.Exec(fmt.Sprintf("ALTER TABLE %s.films ADD description text", serviceUser1))
+	if err != nil {
+		t.Fatalf("could not alter %s.films table: %v", serviceUser1, err)
+	}
+	_, err = userDB.Exec("DROP TABLE public.public_films")
+	if err != nil {
+		t.Fatalf("could not drop %s.films table: %v", serviceUser1, err)
+	}
+
+	// ensure we revoke the privilege again
+
+	iamCreatorUserDB, err = postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		User:     "iam_creator",
+		Database: serviceUser1,
+		Password: "",
+	})
+	if err != nil {
+		t.Fatalf("connect to database failed: %v", err)
+	}
+	defer iamCreatorUserDB.Close()
+	err = postgres.Role(log, iamCreatorUserDB, developerUser, []string{roleRDSIAM}, []postgres.DatabaseSchema{
+		{
+			Name:       serviceUser1,
+			Schema:     serviceUser1,
+			Privileges: postgres.PrivilegeWrite,
+		},
+	})
+	if !assert.NoError(t, err, "unexpected output error") {
+		return
+	}
+
+	userDB, err = postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		User:     developerUser,
+		Database: serviceUser1,
+		Password: "",
+	})
+	if err != nil {
+		t.Fatalf("could not connect with new user: %v", err)
+	}
+	defer userDB.Close()
+	_, err = userDB.Exec(fmt.Sprintf("ALTER TABLE %s.films ADD description text", serviceUser1))
+	if err == nil {
+		t.Fatalf("could still alter %s.films table", serviceUser1)
+	}
+	_, err = userDB.Exec(fmt.Sprintf("DROP TABLE %s.films", serviceUser1))
+	if err == nil {
+		t.Fatalf("could still drop %s.films table", serviceUser1)
+	}
+}
+
 func TestRole_priviliges(t *testing.T) {
 	postgresqlHost := test.Integration(t)
 	log := test.SetLogger(t)

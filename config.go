@@ -23,6 +23,7 @@ type controllerConfiguration struct {
 	HostCredentials          map[string]postgres.Credentials
 	AllDatabasesReadEnabled  bool
 	AllDatabasesWriteEnabled bool
+	ExtendedWriteEnabled     bool
 }
 
 type awsConfig struct {
@@ -52,6 +53,7 @@ func (c *controllerConfiguration) RegisterFlags(flagSet *pflag.FlagSet) {
 	flagSet.StringVar(&c.AWS.Profile, "aws-profile", "", "AWS Profile to use for credentials")
 	flagSet.StringVar(&c.AWS.AccessKeyID, "aws-access-key-id", "", "AWS access key id to use for credentials")
 	flagSet.StringVar(&c.AWS.SecretAccessKey, "aws-secret-access-key", "", "AWS secret access key to use for credentials")
+	flagSet.BoolVar(&c.ExtendedWriteEnabled, "extended-write-enabled", false, "Enable extended write access requests")
 }
 
 func (c *controllerConfiguration) Log(log logr.Logger) {

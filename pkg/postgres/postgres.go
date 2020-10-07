@@ -59,8 +59,15 @@ func Connect(log logr.Logger, connectionString ConnectionString) (*sql.DB, error
 type Privilege int
 
 const (
-	PrivilegeRead  Privilege = iota
-	PrivilegeWrite Privilege = iota
+	PrivilegeRead Privilege = iota
+	PrivilegeWrite
+	PrivilegeOwningWrite
+)
+
+const (
+	roleSuffixRead        = "read"
+	roleSuffixWrite       = "readwrite"
+	roleSuffixOwningWrite = "readowningwrite"
 )
 
 type DatabaseSchema struct {
@@ -75,6 +82,8 @@ func (p Privilege) String() string {
 		return "read"
 	case PrivilegeWrite:
 		return "write"
+	case PrivilegeOwningWrite:
+		return "owningwrite"
 	default:
 		return "unknown"
 	}
@@ -126,9 +135,11 @@ func rolesDiff(log logr.Logger, existingRoles []string, expectedRoles []string, 
 		var schemaPrivileges string
 		switch database.Privileges {
 		case PrivilegeRead:
-			schemaPrivileges = "read"
+			schemaPrivileges = roleSuffixRead
 		case PrivilegeWrite:
-			schemaPrivileges = "readwrite"
+			schemaPrivileges = roleSuffixWrite
+		case PrivilegeOwningWrite:
+			schemaPrivileges = roleSuffixOwningWrite
 		default:
 			log.Error(errors.New("priviledge unknown"), fmt.Sprintf("dropped database '%s.%s' as priviledge '%s' (%[3]d) is invalid", database.Name, database.Schema, database.Privileges), "database", database)
 			continue
@@ -159,7 +170,19 @@ func rolesDiff(log logr.Logger, existingRoles []string, expectedRoles []string, 
 		// only remove roles that look like some we control, ie. suffixed with _read
 		// or _readwrite. This is to make sure we do not change roles granted out of
 		// band to specific users.
-		if !strings.HasSuffix(existingRole, fmt.Sprintf("_%s", PrivilegeRead.String())) && !strings.HasSuffix(existingRole, fmt.Sprintf("_%s", PrivilegeWrite.String())) {
+		suffixes := []string{
+			roleSuffixRead,
+			roleSuffixWrite,
+			roleSuffixOwningWrite,
+		}
+		var hasSuffix bool
+		for _, suffix := range suffixes {
+			if strings.HasSuffix(existingRole, suffix) {
+				hasSuffix = true
+				break
+			}
+		}
+		if !hasSuffix {
 			continue
 		}
 		removeableRoles = append(removeableRoles, existingRole)

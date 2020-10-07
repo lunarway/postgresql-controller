@@ -28,65 +28,12 @@ import (
 
 func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
 	return map[string]common.OpenAPIDefinition{
-		"./api/v1alpha1.AccessSpec":               schema__api_v1alpha1_AccessSpec(ref),
 		"./api/v1alpha1.PostgreSQLDatabase":       schema__api_v1alpha1_PostgreSQLDatabase(ref),
 		"./api/v1alpha1.PostgreSQLDatabaseSpec":   schema__api_v1alpha1_PostgreSQLDatabaseSpec(ref),
 		"./api/v1alpha1.PostgreSQLDatabaseStatus": schema__api_v1alpha1_PostgreSQLDatabaseStatus(ref),
 		"./api/v1alpha1.PostgreSQLUser":           schema__api_v1alpha1_PostgreSQLUser(ref),
 		"./api/v1alpha1.PostgreSQLUserSpec":       schema__api_v1alpha1_PostgreSQLUserSpec(ref),
 		"./api/v1alpha1.PostgreSQLUserStatus":     schema__api_v1alpha1_PostgreSQLUserStatus(ref),
-	}
-}
-
-func schema__api_v1alpha1_AccessSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Type: []string{"object"},
-				Properties: map[string]spec.Schema{
-					"host": {
-						SchemaProps: spec.SchemaProps{
-							Ref: ref("./api/v1alpha1.ResourceVar"),
-						},
-					},
-					"allDatabases": {
-						SchemaProps: spec.SchemaProps{
-							Type:   []string{"boolean"},
-							Format: "",
-						},
-					},
-					"database": {
-						SchemaProps: spec.SchemaProps{
-							Ref: ref("./api/v1alpha1.ResourceVar"),
-						},
-					},
-					"schema": {
-						SchemaProps: spec.SchemaProps{
-							Ref: ref("./api/v1alpha1.ResourceVar"),
-						},
-					},
-					"reason": {
-						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
-						},
-					},
-					"start": {
-						SchemaProps: spec.SchemaProps{
-							Ref: ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
-						},
-					},
-					"stop": {
-						SchemaProps: spec.SchemaProps{
-							Ref: ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
-						},
-					},
-				},
-				Required: []string{"host", "reason"},
-			},
-		},
-		Dependencies: []string{
-			"./api/v1alpha1.ResourceVar", "k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
 	}
 }
 
@@ -313,7 +260,7 @@ func schema__api_v1alpha1_PostgreSQLUserSpec(ref common.ReferenceCallback) commo
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("./api/v1alpha1.AccessSpec"),
+										Ref: ref("./api/v1alpha1.WriteAccessSpec"),
 									},
 								},
 							},
@@ -324,7 +271,7 @@ func schema__api_v1alpha1_PostgreSQLUserSpec(ref common.ReferenceCallback) commo
 			},
 		},
 		Dependencies: []string{
-			"./api/v1alpha1.AccessSpec"},
+			"./api/v1alpha1.AccessSpec", "./api/v1alpha1.WriteAccessSpec"},
 	}
 }
 

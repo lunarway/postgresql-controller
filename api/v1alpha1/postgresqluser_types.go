@@ -35,10 +35,9 @@ type PostgreSQLUserSpec struct {
 	Read []AccessSpec `json:"read"`
 	// +listType=atomic
 	// +optional
-	Write []AccessSpec `json:"write"`
+	Write []WriteAccessSpec `json:"write"`
 }
 
-// +k8s:openapi-gen=true
 type AccessSpec struct {
 	Host ResourceVar `json:"host"`
 	// +optional
@@ -52,6 +51,12 @@ type AccessSpec struct {
 	Start metav1.Time `json:"start"`
 	// +optional
 	Stop metav1.Time `json:"stop"`
+}
+
+type WriteAccessSpec struct {
+	AccessSpec
+	// +optional
+	Extended bool `json:"extended"`
 }
 
 // PostgreSQLUserStatus defines the observed state of PostgreSQLUser
