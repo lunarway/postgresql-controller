@@ -29,9 +29,10 @@ endif
 
 all: manager
 
+BINARY_ASSETS=bin
 # Build manager binary
 manager: generate fmt vet
-	go build -o bin/manager main.go
+	go build -o ${BINARY_ASSETS}/manager main.go
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests
@@ -112,7 +113,7 @@ else
 OPENAPI_GEN_EXEC=$(shell which openapi-gen)
 endif
 # setup common arguments for the openapi-gen executor
-OPENAPI_GEN=${OPENAPI_GEN_EXEC} ./bin/openapi-gen --logtostderr=true \
+OPENAPI_GEN=${OPENAPI_GEN_EXEC} ./${BINARY_ASSETS}/openapi-gen --logtostderr=true \
 		--output-base "" \
 		--output-file-base zz_generated.openapi \
 		--go-header-file 'hack/boilerplate.go.txt' \
@@ -133,12 +134,19 @@ else
 KUSTOMIZE=$(shell which kustomize)
 endif
 
+OPERATOR_SDK_VERSION = v1.0.1
+OPERATOR_SDK ?= ./${BINARY_ASSETS}/operator-sdk-${OPERATOR_SDK_VERSION}
+
+operator-sdk:
+	mkdir -p ${BINARY_ASSETS}
+	test -f ${OPERATOR_SDK} || (curl -o ${OPERATOR_SDK} -LO https://github.com/operator-framework/operator-sdk/releases/download/${OPERATOR_SDK_VERSION}/operator-sdk-${OPERATOR_SDK_VERSION}-x86_64-apple-darwin && chmod +x ${OPERATOR_SDK})
+
 # Generate bundle manifests and metadata, then validate generated files.
-bundle: manifests
-	operator-sdk generate kustomize manifests -q
+bundle: manifests operator-sdk
+	$(OPERATOR_SDK) generate kustomize manifests -q
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
-	kustomize build config/manifests | operator-sdk generate bundle -q --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS)
-	operator-sdk bundle validate ./bundle
+	kustomize build config/manifests | $(OPERATOR_SDK) generate bundle -q --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS)
+	$(OPERATOR_SDK) bundle validate ./bundle
 
 # Build the bundle image.
 bundle-build:
