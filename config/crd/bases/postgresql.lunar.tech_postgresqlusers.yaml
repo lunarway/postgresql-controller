@@ -42,11 +42,13 @@ spec:
               type: string
             read:
               items:
+                description: AccessSpec defines a read access request specification.
                 properties:
                   allDatabases:
                     type: boolean
                   database:
-                    description: PasswordVar represents an
+                    description: ResourceVar represents a value or reference to a
+                      value.
                     properties:
                       value:
                         description: Defaults to "".
@@ -87,7 +89,8 @@ spec:
                         type: object
                     type: object
                   host:
-                    description: PasswordVar represents an
+                    description: ResourceVar represents a value or reference to a
+                      value.
                     properties:
                       value:
                         description: Defaults to "".
@@ -130,7 +133,8 @@ spec:
                   reason:
                     type: string
                   schema:
-                    description: PasswordVar represents an
+                    description: ResourceVar represents a value or reference to a
+                      value.
                     properties:
                       value:
                         description: Defaults to "".
@@ -184,11 +188,13 @@ spec:
               x-kubernetes-list-type: atomic
             write:
               items:
+                description: WriteAccessSpec defines a write access request specification.
                 properties:
                   allDatabases:
                     type: boolean
                   database:
-                    description: PasswordVar represents an
+                    description: ResourceVar represents a value or reference to a
+                      value.
                     properties:
                       value:
                         description: Defaults to "".
@@ -228,8 +234,11 @@ spec:
                             type: object
                         type: object
                     type: object
+                  extended:
+                    type: boolean
                   host:
-                    description: PasswordVar represents an
+                    description: ResourceVar represents a value or reference to a
+                      value.
                     properties:
                       value:
                         description: Defaults to "".
@@ -272,7 +281,8 @@ spec:
                   reason:
                     type: string
                   schema:
-                    description: PasswordVar represents an
+                    description: ResourceVar represents a value or reference to a
+                      value.
                     properties:
                       value:
                         description: Defaults to "".
