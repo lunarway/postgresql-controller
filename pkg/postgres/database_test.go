@@ -14,7 +14,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-func TestParseHostCredentials(t *testing.T) {
+func TestParseUsernamePassword(t *testing.T) {
 	tt := []struct {
 		name   string
 		input  string
@@ -362,7 +362,7 @@ func TestDatabase_mixedOwnershipOnSharedDatabase(t *testing.T) {
 
 	// request access to the new user schema of the shared database
 	err = postgres.Role(log, db, developer, nil, []postgres.DatabaseSchema{
-		postgres.DatabaseSchema{
+		{
 			Name:       sharedDatabaseName,
 			Privileges: postgres.PrivilegeRead,
 			Schema:     newUser,
