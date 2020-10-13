@@ -38,6 +38,7 @@ type PostgreSQLUserSpec struct {
 	Write []WriteAccessSpec `json:"write"`
 }
 
+// AccessSpec defines a read access request specification.
 // +k8s:openapi-gen=true
 type AccessSpec struct {
 	Host ResourceVar `json:"host"`
@@ -54,6 +55,7 @@ type AccessSpec struct {
 	Stop metav1.Time `json:"stop"`
 }
 
+// WriteAccessSpec defines a write access request specification.
 // +k8s:openapi-gen=true
 type WriteAccessSpec struct {
 	AccessSpec `json:",inline"`

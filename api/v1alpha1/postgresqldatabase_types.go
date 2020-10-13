@@ -61,8 +61,15 @@ type PostgreSQLDatabaseSpec struct {
 type PostgreSQLDatabasePhase string
 
 const (
-	PostgreSQLDatabasePhaseFailed  PostgreSQLDatabasePhase = "Failed"
+	// PostgreSQLDatabasePhaseFailed indicates that the controller was unable to
+	// reconcile a database resource. It will be attempted again in the future.
+	PostgreSQLDatabasePhaseFailed PostgreSQLDatabasePhase = "Failed"
+	// PostgreSQLDatabasePhaseInvalid indicates that the controller was unable to
+	// reconcile the database as the specification of it is invalid and should be
+	// fixed. It will not be attempted again before the resource is updated.
 	PostgreSQLDatabasePhaseInvalid PostgreSQLDatabasePhase = "Invalid"
+	// PostgreSQLDatabasePhaseRunning indicates that the controller has reconciled
+	// the database and that it is available.
 	PostgreSQLDatabasePhaseRunning PostgreSQLDatabasePhase = "Running"
 )
 
@@ -110,7 +117,7 @@ func init() {
 	SchemeBuilder.Register(&PostgreSQLDatabase{}, &PostgreSQLDatabaseList{})
 }
 
-// PasswordVar represents an
+// ResourceVar represents a value or reference to a value.
 type ResourceVar struct {
 	// Defaults to "".
 	// +optional

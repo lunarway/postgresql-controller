@@ -43,7 +43,8 @@ func schema__api_v1alpha1_AccessSpec(ref common.ReferenceCallback) common.OpenAP
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Type: []string{"object"},
+				Description: "AccessSpec defines a read access request specification.",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"host": {
 						SchemaProps: spec.SchemaProps{
@@ -344,7 +345,8 @@ func schema__api_v1alpha1_WriteAccessSpec(ref common.ReferenceCallback) common.O
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Type: []string{"object"},
+				Description: "WriteAccessSpec defines a write access request specification.",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"host": {
 						SchemaProps: spec.SchemaProps{
