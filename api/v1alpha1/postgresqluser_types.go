@@ -38,6 +38,7 @@ type PostgreSQLUserSpec struct {
 	Write []WriteAccessSpec `json:"write"`
 }
 
+// +k8s:openapi-gen=true
 type AccessSpec struct {
 	Host ResourceVar `json:"host"`
 	// +optional
@@ -53,8 +54,9 @@ type AccessSpec struct {
 	Stop metav1.Time `json:"stop"`
 }
 
+// +k8s:openapi-gen=true
 type WriteAccessSpec struct {
-	AccessSpec
+	AccessSpec `json:",inline"`
 	// +optional
 	Extended bool `json:"extended"`
 }
