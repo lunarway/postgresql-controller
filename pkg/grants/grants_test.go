@@ -293,6 +293,9 @@ func TestGranter_groupAccesses_withAllDatabases(t *testing.T) {
 					Value: "user",
 				},
 			},
+			Status: lunarwayv1alpha1.PostgreSQLDatabaseStatus{
+				Phase: lunarwayv1alpha1.PostgreSQLDatabasePhaseRunning,
+			},
 		}
 	}
 	spec := func(host, reason string) lunarwayv1alpha1.AccessSpec {
@@ -435,6 +438,30 @@ func TestGranter_groupAccesses_withAllDatabases(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "database in invalid phase",
+			databases: []lunarwayv1alpha1.PostgreSQLDatabase{
+				{
+					Spec: lunarwayv1alpha1.PostgreSQLDatabaseSpec{
+						Name: "invalid",
+						Host: lunarwayv1alpha1.ResourceVar{
+							Value: "host1:5432",
+						},
+						User: lunarwayv1alpha1.ResourceVar{
+							Value: "user",
+						},
+					},
+					Status: lunarwayv1alpha1.PostgreSQLDatabaseStatus{
+						Phase: lunarwayv1alpha1.PostgreSQLDatabasePhaseInvalid,
+					},
+				},
+			},
+			reads: []lunarwayv1alpha1.AccessSpec{
+				spec("host1:5432", "I am a developer"),
+			},
+			writes: nil,
+			output: nil,
+		},
 	}
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
@@ -470,6 +497,9 @@ func TestGranter_groupAccesses_allDatabasesFeatureFlags(t *testing.T) {
 				User: lunarwayv1alpha1.ResourceVar{
 					Value: "user",
 				},
+			},
+			Status: lunarwayv1alpha1.PostgreSQLDatabaseStatus{
+				Phase: lunarwayv1alpha1.PostgreSQLDatabasePhaseRunning,
 			},
 		}
 	}
@@ -582,6 +612,9 @@ func TestGranter_groupAccesses_mixedSpecs(t *testing.T) {
 				User: lunarwayv1alpha1.ResourceVar{
 					Value: "user",
 				},
+			},
+			Status: lunarwayv1alpha1.PostgreSQLDatabaseStatus{
+				Phase: lunarwayv1alpha1.PostgreSQLDatabasePhaseRunning,
 			},
 		}
 	}
@@ -899,6 +932,9 @@ func TestGranter_groupAccesses_partialErrors(t *testing.T) {
 									Value: "host1",
 								},
 							},
+							Status: lunarwayv1alpha1.PostgreSQLDatabaseStatus{
+								Phase: lunarwayv1alpha1.PostgreSQLDatabasePhaseRunning,
+							},
 						},
 						{
 							Spec: lunarwayv1alpha1.PostgreSQLDatabaseSpec{
@@ -908,6 +944,9 @@ func TestGranter_groupAccesses_partialErrors(t *testing.T) {
 									// used in test to indicate that this should not be found
 									ValueFrom: &lunarwayv1alpha1.ResourceVarSource{},
 								},
+							},
+							Status: lunarwayv1alpha1.PostgreSQLDatabaseStatus{
+								Phase: lunarwayv1alpha1.PostgreSQLDatabasePhaseRunning,
 							},
 						},
 					}, nil
@@ -981,6 +1020,9 @@ func TestGranter_groupAccesses_noUserSchemaFallback_allDatabases(t *testing.T) {
 						Host: lunarwayv1alpha1.ResourceVar{
 							Value: "host1:5432",
 						},
+					},
+					Status: lunarwayv1alpha1.PostgreSQLDatabaseStatus{
+						Phase: lunarwayv1alpha1.PostgreSQLDatabasePhaseRunning,
 					},
 				},
 			}, nil
