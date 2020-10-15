@@ -171,6 +171,10 @@ func (g *Granter) groupAllDatabasesByHost(reqLogger logr.Logger, hosts HostAcces
 	var errs error
 	for _, databaseResource := range databases {
 		database := databaseResource.Spec.Name
+		if databaseResource.Status.Phase != lunarwayv1alpha1.PostgreSQLDatabasePhaseRunning {
+			reqLogger.Error(fmt.Errorf("database not in phase running"), fmt.Sprintf("Skipping resource '%s' as it is not in phase running", database))
+			continue
+		}
 		databaseHost, err := g.ResourceResolver(databaseResource.Spec.Host, namespace)
 		if err != nil {
 			errs = multierr.Append(errs, fmt.Errorf("resolve database '%s' host name: %w", databaseResource.Spec.Name, err))

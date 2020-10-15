@@ -218,6 +218,9 @@ func TestReconcile_rolePrefix(t *testing.T) {
 					Value: database1Name,
 				},
 			},
+			Status: lunarwayv1alpha1.PostgreSQLDatabaseStatus{
+				Phase: lunarwayv1alpha1.PostgreSQLDatabasePhaseRunning,
+			},
 		}
 	)
 
@@ -342,6 +345,9 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 					Value: database1Name,
 				},
 			},
+			Status: lunarwayv1alpha1.PostgreSQLDatabaseStatus{
+				Phase: lunarwayv1alpha1.PostgreSQLDatabasePhaseRunning,
+			},
 		}
 		database2Resource = &lunarwayv1alpha1.PostgreSQLDatabase{
 			ObjectMeta: metav1.ObjectMeta{
@@ -359,6 +365,9 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 				User: lunarwayv1alpha1.ResourceVar{
 					Value: database2Name,
 				},
+			},
+			Status: lunarwayv1alpha1.PostgreSQLDatabaseStatus{
+				Phase: lunarwayv1alpha1.PostgreSQLDatabasePhaseRunning,
 			},
 		}
 	)
