@@ -54,10 +54,14 @@ func main() {
 	config := controllerConfiguration{}
 	config.RegisterFlags(flagSet)
 	flagSet.AddGoFlagSet(flag.CommandLine)
+	zapFlagSet := flag.NewFlagSet("zap-flags", flag.ExitOnError)
+	loggerOptions := zap.Options{}
+	loggerOptions.BindFlags(zapFlagSet)
+	flagSet.AddGoFlagSet(zapFlagSet)
+
 	flagSet.Parse(os.Args[1:])
 
-	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
-
+	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&loggerOptions)))
 	config.Log(setupLog)
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
