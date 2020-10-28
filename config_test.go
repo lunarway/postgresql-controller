@@ -65,6 +65,18 @@ func TestHostCredentials_Set(t *testing.T) {
 			err:    errors.New("parse host 'host1:5432=' failed: username empty"),
 			output: map[string]postgres.Credentials{},
 		},
+		{
+			name:  "host with ssl configured",
+			value: "host1:5432=user1:pass1=sslmode=enabled",
+			err:   nil,
+			output: map[string]postgres.Credentials{
+				"host1:5432": {
+					Name:     "user1",
+					Password: "pass1",
+					Params:   "sslmode=enabled",
+				},
+			},
+		},
 	}
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {

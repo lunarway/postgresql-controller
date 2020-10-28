@@ -90,8 +90,8 @@ func (h *hostCredentials) Set(val string) error {
 	}
 	hostCredentials := strings.Split(val, ",")
 	for _, hostCredential := range hostCredentials {
-		parts := strings.Split(hostCredential, "=")
-		if len(parts) != 2 {
+		parts := strings.SplitN(hostCredential, "=", 3)
+		if len(parts) != 2 && len(parts) != 3 {
 			return fmt.Errorf("%s must be formatted as key=value", hostCredential)
 		}
 		host, userPass := parts[0], parts[1]
@@ -101,6 +101,9 @@ func (h *hostCredentials) Set(val string) error {
 		parsedCrendetials, err := postgres.ParseUsernamePassword(userPass)
 		if err != nil {
 			return fmt.Errorf("parse host '%s' failed: %w", hostCredential, err)
+		}
+		if len(parts) == 3 {
+			parsedCrendetials.Params = parts[2]
 		}
 		(*h.value)[host] = parsedCrendetials
 	}
