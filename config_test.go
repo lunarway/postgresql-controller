@@ -67,7 +67,7 @@ func TestHostCredentials_Set(t *testing.T) {
 		},
 		{
 			name:  "host with ssl configured",
-			value: "host1:5432=user1:pass1=params=sslmode=enabled",
+			value: "host1:5432=user1:pass1=sslmode=enabled",
 			err:   nil,
 			output: map[string]postgres.Credentials{
 				"host1:5432": {

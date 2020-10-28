@@ -103,7 +103,7 @@ func (h *hostCredentials) Set(val string) error {
 			return fmt.Errorf("parse host '%s' failed: %w", hostCredential, err)
 		}
 		if len(parts) == 3 {
-			parsedCrendetials.Params = strings.TrimPrefix(parts[2], "params=")
+			parsedCrendetials.Params = parts[2]
 		}
 		(*h.value)[host] = parsedCrendetials
 	}
