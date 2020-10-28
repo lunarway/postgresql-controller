@@ -207,6 +207,7 @@ func (r *PostgreSQLDatabaseReconciler) EnsurePostgreSQLDatabase(log logr.Logger,
 		Database: "postgres", // default database
 		User:     credentials.Name,
 		Password: credentials.Password,
+		Params:   credentials.Params,
 	}
 	db, err := postgres.Connect(log, connectionString)
 	if err != nil {

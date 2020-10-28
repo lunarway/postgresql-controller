@@ -20,6 +20,7 @@ type ConnectionString struct {
 	Database string
 	User     string
 	Password string
+	Params   string
 }
 
 // Raw returns a PostgreSQL connection string.
@@ -28,7 +29,12 @@ func (c ConnectionString) Raw() string {
 	if c.Database != "" {
 		raw += fmt.Sprintf("/%s", c.Database)
 	}
-	raw += "?sslmode=disable"
+	if c.Params != "" {
+		raw += fmt.Sprintf("?%s", c.Params)
+	} else {
+		// backwards compatibility
+		raw += "?sslmode=disable"
+	}
 	return raw
 }
 

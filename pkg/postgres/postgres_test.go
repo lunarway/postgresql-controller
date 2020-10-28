@@ -53,6 +53,17 @@ func TestConnectionString_Raw(t *testing.T) {
 			},
 			raw: "postgresql://user:1234@host:5432/database?sslmode=disable",
 		},
+		{
+			name: "complete with params",
+			connectionString: postgres.ConnectionString{
+				Host:     "host:5432",
+				Database: "database",
+				User:     "user",
+				Password: "1234",
+				Params:   "sslmode=strict",
+			},
+			raw: "postgresql://user:1234@host:5432/database?sslmode=strict",
+		},
 	}
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {

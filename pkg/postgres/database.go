@@ -17,6 +17,7 @@ type Credentials struct {
 	User     string
 	Password string
 	Shared   bool
+	Params   string
 }
 
 func (c Credentials) Validate() error {
