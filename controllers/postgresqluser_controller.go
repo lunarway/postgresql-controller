@@ -20,6 +20,8 @@ import (
 	"context"
 	"fmt"
 
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
@@ -41,7 +43,7 @@ type PostgreSQLUserReconciler struct {
 	Scheme *runtime.Scheme
 
 	Granter      grants.Granter
-	SetAWSPolicy func(log logr.Logger, credentials *credentials.Credentials, policy iam.AWSPolicy, userID, rolePrefix string) error
+	SetAWSPolicy func(log logr.Logger, credentials *credentials.Credentials, policy iam.AddUserConfig, userID string) error
 
 	RolePrefix         string
 	AWSPolicyName      string
@@ -74,6 +76,7 @@ func (r *PostgreSQLUserReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 func (r *PostgreSQLUserReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&postgresqlv1alpha1.PostgreSQLUser{}).
+		WithOptions(controller.Options{MaxConcurrentReconciles: 1}). //explicitly set to 1 (which is also the default) because our reconciliation process is not necessarily concurrency safe.
 		Complete(r)
 }
 
@@ -106,11 +109,15 @@ func (r *PostgreSQLUserReconciler) reconcile(reqLogger logr.Logger, request reco
 	} else {
 		awsCredentials = credentials.NewStaticCredentials(r.AWSAccessKeyID, r.AWSSecretAccessKey, "")
 	}
-	awsPolicyErr := r.SetAWSPolicy(reqLogger, awsCredentials, iam.AWSPolicy{
-		Name:      r.AWSPolicyName,
-		Region:    r.AWSRegion,
-		AccountID: r.AWSAccountID,
-	}, user.Spec.Name, r.RolePrefix)
+
+	awsPolicyErr := r.SetAWSPolicy(reqLogger, awsCredentials, iam.AddUserConfig{
+		PolicyBaseName:    r.AWSPolicyName,
+		Region:            r.AWSRegion,
+		AccountID:         r.AWSAccountID,
+		MaxUsersPerPolicy: 30,
+		IamPrefix:         "/lunar-postgresql-user/",
+		RolePrefix:        r.RolePrefix,
+	}, user.Spec.Name)
 
 	if granterErr != nil || awsPolicyErr != nil {
 		return ctrl.Result{}, fmt.Errorf("grantErr: %v, awsPolicyErr: %v", granterErr, awsPolicyErr)
