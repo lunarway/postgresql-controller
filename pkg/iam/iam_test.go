@@ -1,5 +1,3 @@
-//+build integration
-
 package iam
 
 import (
@@ -11,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/endpoints"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/iam"
+	"go.lunarway.com/postgresql-controller/test"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -26,6 +25,8 @@ func CreateSession() *session.Session {
 }
 
 func Test_AddUser(t *testing.T) {
+
+	test.Integration(t) //ensure that we only run this test during integration testing
 
 	policyBaseName := "basename"
 	accountId := "000000000000"
