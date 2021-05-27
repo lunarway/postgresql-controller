@@ -111,6 +111,7 @@ spec:
       start: 2019-09-16T10:00:00Z
       stop: 2019-09-16T14:00:00Z
 ```
+test
 
 From the configuration the user will be created with a `<name>` user on the host and granted rights to access the required databases.
 The flag `--user-role-prefix` can be used to prefix all created roles.
