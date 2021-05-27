@@ -115,7 +115,7 @@ func (r *PostgreSQLUserReconciler) reconcile(reqLogger logr.Logger, request reco
 		Region:            r.AWSRegion,
 		AccountID:         r.AWSAccountID,
 		MaxUsersPerPolicy: 30,
-		IamPrefix:         "/lunar-postgresql-user/",
+		IamPrefix:         "/lunar-postgresql-users/",
 		RolePrefix:        r.RolePrefix,
 	}, user.Spec.Name)
 

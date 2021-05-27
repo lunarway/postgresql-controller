@@ -35,7 +35,7 @@ func (c *Client) ListPolicies() ([]*Policy, error) {
 
 	iamPolicies, err := c.listPolicies()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to list policies: %w", err)
 	}
 
 	var result []*Policy
@@ -54,10 +54,6 @@ func (c *Client) ListPolicies() ([]*Policy, error) {
 		}
 
 		result = append(result, policy)
-	}
-
-	if err != nil {
-		return nil, err
 	}
 
 	return result, nil
@@ -90,18 +86,20 @@ func (c *Client) getPolicyDocument(policy *iam.Policy) (*PolicyDocument, error) 
 	policyARN := c.policyARN(*policy.PolicyName)
 	currentVersion, err := svc.GetPolicyVersion(&iam.GetPolicyVersionInput{VersionId: policy.DefaultVersionId, PolicyArn: aws.String(policyARN)})
 	if err != nil {
-		return nil, fmt.Errorf("retrieve policy version %s with policy ARN %s: %w", *policy.DefaultVersionId, policyARN, err)
+		return nil, fmt.Errorf("retrieve policy version %s with policy ARN %s failed: %w", *policy.DefaultVersionId, policyARN, err)
 	}
 
 	// URL decode to be able to Unmarshal into objects
 	jsonDocument, err := url.QueryUnescape(*currentVersion.PolicyVersion.Document)
 	if err != nil {
-		return nil, fmt.Errorf("query unescape of: %s: %w", *currentVersion.PolicyVersion.Document, err)
+		c.log.Error(err, "query unescape failed", "document", *currentVersion.PolicyVersion.Document)
+		return nil, fmt.Errorf("unable to query unescape: %s: %w", *policy.PolicyName, err)
 	}
 	document := PolicyDocument{}
 	err = json.Unmarshal([]byte(jsonDocument), &document)
 	if err != nil {
-		return nil, fmt.Errorf("unmarshal document %s: %w", *currentVersion.PolicyVersion.Document, err)
+		c.log.Error(err, "unmarshalling failed", "document", jsonDocument)
+		return nil, fmt.Errorf("unable to unmarshal document %s: %w", *policy.PolicyName, err)
 	}
 
 	return &document, nil
@@ -115,7 +113,8 @@ func (c *Client) UpdatePolicy(policy *Policy) error {
 	// Marshal the updated policy document back to something AWS understands
 	jsonMarshal, err := json.Marshal(policy.Document)
 	if err != nil {
-		return fmt.Errorf("json marshal of: %s: %w", policy.Document, err)
+		c.log.Error(err, "json marshalling failed", "document", policy.Document)
+		return fmt.Errorf("unable to marshal document: %s: %w", policy.Name, err)
 	}
 
 	// Create the new version of the Policy
@@ -139,7 +138,8 @@ func (c *Client) CreatePolicy(policy *Policy) error {
 
 	jsonMarshal, err := json.Marshal(*policy.Document)
 	if err != nil {
-		return fmt.Errorf("json marshal of: %s: %w", policy.Document, err)
+		c.log.Error(err, "json marshalling failed", "document", policy.Document)
+		return fmt.Errorf("unable to marshal document: %s: %w", policy.Name, err)
 	}
 
 	_, err = svc.CreatePolicy(&iam.CreatePolicyInput{
