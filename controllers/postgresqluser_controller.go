@@ -52,6 +52,7 @@ type PostgreSQLUserReconciler struct {
 	AWSProfile         string
 	AWSAccessKeyID     string
 	AWSSecretAccessKey string
+	IAMPolicyPrefix    string
 }
 
 // +kubebuilder:rbac:groups=postgresql.lunar.tech,resources=postgresqlusers,verbs=get;list;watch;create;update;patch;delete
@@ -115,7 +116,7 @@ func (r *PostgreSQLUserReconciler) reconcile(reqLogger logr.Logger, request reco
 		Region:            r.AWSRegion,
 		AccountID:         r.AWSAccountID,
 		MaxUsersPerPolicy: 30,
-		IamPrefix:         "/lunar-postgresql-users/",
+		IamPrefix:         r.IAMPolicyPrefix,
 		RolePrefix:        r.RolePrefix,
 	}, user.Spec.Name)
 

@@ -106,6 +106,7 @@ func main() {
 		AWSProfile:         config.AWS.Profile,
 		AWSAccessKeyID:     config.AWS.AccessKeyID,
 		AWSSecretAccessKey: config.AWS.SecretAccessKey,
+		IAMPolicyPrefix:    config.IAMPolicyPrefix,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PostgreSQLUser")
 		os.Exit(1)
