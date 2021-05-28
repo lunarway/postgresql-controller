@@ -24,6 +24,7 @@ type controllerConfiguration struct {
 	AllDatabasesReadEnabled  bool
 	AllDatabasesWriteEnabled bool
 	ExtendedWriteEnabled     bool
+	IAMPolicyPrefix          string
 }
 
 type awsConfig struct {
@@ -54,6 +55,7 @@ func (c *controllerConfiguration) RegisterFlags(flagSet *pflag.FlagSet) {
 	flagSet.StringVar(&c.AWS.AccessKeyID, "aws-access-key-id", "", "AWS access key id to use for credentials")
 	flagSet.StringVar(&c.AWS.SecretAccessKey, "aws-secret-access-key", "", "AWS secret access key to use for credentials")
 	flagSet.BoolVar(&c.ExtendedWriteEnabled, "extended-write-enabled", false, "Enable extended write access requests")
+	flagSet.StringVar(&c.IAMPolicyPrefix, "iam-policy-prefix", "/", "Path prefix to use when creating IAM policies")
 }
 
 func (c *controllerConfiguration) Log(log logr.Logger) {
@@ -70,6 +72,7 @@ func (c *controllerConfiguration) Log(log logr.Logger) {
 		"awsAccountID", c.AWS.AccountID,
 		"allDatabasesReadEnabled", c.AllDatabasesReadEnabled,
 		"allDatabasesWriteEnabled", c.AllDatabasesWriteEnabled,
+		"iamPolicyPrefix", c.IAMPolicyPrefix,
 	)
 }
 

@@ -1,0 +1,17 @@
+version: '2'
+services:
+  postgres:
+    image: timms/postgres-logging:11.5
+    environment:
+      - POSTGRES_USER=admin
+    volumes:
+      - ./scripts/init-test-db.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+  aws:
+    image: localstack/localstack
+    environment:
+      - SERVICES=iam
+    ports:
+      - 4566:4566
+      - 8080:8080

@@ -1,6 +1,6 @@
 PROJECT=postgresql-controller
 # Current Operator version
-VERSION ?= 0.0.29
+VERSION ?= 0.0.30
 # Default bundle image tag
 BUNDLE_IMG ?= controller-bundle:$(VERSION)
 # Options for 'bundle-build'
@@ -165,28 +165,17 @@ test/unit: fmt vet
 	go test -v -race ./... -coverprofile cover.out
 
 POSTGRESQL_CONTROLLER_INTEGRATION_HOST=localhost:5432
-POSTGRESQL_CONTROLLER_INTEGRATION_HOST_CONTAINER=postgresql-controler-int-test
 
-.PHONY: test/integration/postgresql/run
-test/integration/postgresql/run:
-	@echo Running integration test PostgreSQL instance on localhost:5432:
-	-docker run --rm -p 5432:5432 -e POSTGRES_USER=admin --name ${POSTGRESQL_CONTROLLER_INTEGRATION_HOST_CONTAINER} -d timms/postgres-logging:11.5 && \
-		sleep 5 && \
-		docker exec ${POSTGRESQL_CONTROLLER_INTEGRATION_HOST_CONTAINER} \
-		  psql -Uadmin -c "CREATE USER iam_creator WITH CREATEDB CREATEROLE VALID UNTIL 'infinity';"
-	@echo Database running and iam_creator role created.
-	@echo Attach to instance with 'make test/integration/postgresql/attach'
+.PHONY: test/integration/dependencies/run
+test/integration/dependencies/run:
+	-docker-compose up -d
 
-.PHONY: test/integration/postgresql/attach
-test/integration/postgresql/attach:
-	docker attach ${POSTGRESQL_CONTROLLER_INTEGRATION_HOST_CONTAINER}
-
-.PHONY: test/integration/postgresql/stop
-test/integration/postgresql/stop:
-	-docker kill ${POSTGRESQL_CONTROLLER_INTEGRATION_HOST_CONTAINER}
+.PHONY: test/integration/dependencies/stop
+test/integration/dependencies/stop:
+	-docker-compose down
 
 .PHONY: test/integration
-test/integration: test/integration/postgresql/run
+test/integration: test/integration/dependencies/run
 	@echo Running integration tests against PostgreSQL instance on ${POSTGRESQL_CONTROLLER_INTEGRATION_HOST}:
 	POSTGRESQL_CONTROLLER_INTEGRATION_HOST=${POSTGRESQL_CONTROLLER_INTEGRATION_HOST} make test/unit
 

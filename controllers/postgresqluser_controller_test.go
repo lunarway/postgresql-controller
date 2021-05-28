@@ -141,7 +141,7 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 				return kube.ResourceValue(cl, resource, namespace)
 			},
 		},
-		SetAWSPolicy: func(log logr.Logger, credentials *credentials.Credentials, policy iam.AWSPolicy, userID, rolePrefix string) error {
+		SetAWSPolicy: func(log logr.Logger, credentials *credentials.Credentials, policy iam.AddUserConfig, userID string) error {
 			return nil
 		},
 	}
@@ -261,7 +261,7 @@ func TestReconcile_rolePrefix(t *testing.T) {
 				return kube.ResourceValue(cl, resource, namespace)
 			},
 		},
-		SetAWSPolicy: func(log logr.Logger, credentials *credentials.Credentials, policy iam.AWSPolicy, userID, rolePrefix string) error {
+		SetAWSPolicy: func(log logr.Logger, credentials *credentials.Credentials, policy iam.AddUserConfig, userID string) error {
 			return nil
 		},
 	}
@@ -409,7 +409,7 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 				return kube.ResourceValue(cl, resource, namespace)
 			},
 		},
-		SetAWSPolicy: func(log logr.Logger, credentials *credentials.Credentials, policy iam.AWSPolicy, userID, rolePrefix string) error {
+		SetAWSPolicy: func(log logr.Logger, credentials *credentials.Credentials, policy iam.AddUserConfig, userID string) error {
 			return nil
 		},
 	}
