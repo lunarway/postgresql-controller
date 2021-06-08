@@ -16,6 +16,7 @@ type AddUserConfig struct {
 	IamPrefix         string
 	MaxUsersPerPolicy int
 	RolePrefix        string
+	AWSLoginRole      string
 }
 
 func AddUser(log logr.Logger, session *session.Session, config AddUserConfig, username string) error {
