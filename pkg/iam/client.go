@@ -206,7 +206,7 @@ func (c *Client) AttachPolicy(role *iam.Role, policy *iam.Policy) error {
 	return nil
 }
 
-func (c *Client) lookupAttachedPolicy(policies []*iam.AttachedPolicy, name string) *iam.AttachedPolicy {
+func (c *Client) hasAttachedPolicy(policies []*iam.AttachedPolicy, name string) bool {
 	for _, r := range policies {
 		if *r.PolicyName == name {
 			return r
