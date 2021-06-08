@@ -192,7 +192,7 @@ func (c *Client) AttachPolicy(role *iam.Role, policy *iam.Policy) error {
 		return fmt.Errorf("unable to list attached policies: %w", err)
 	}
 
-	if c.lookupAttachedPolicy(attachedPolicies, *policy.PolicyName) == nil {
+	if c.hasAttachedPolicy(attachedPolicies, *policy.PolicyName) {
 		_, err := svc.AttachRolePolicy(&iam.AttachRolePolicyInput{
 			PolicyArn: policy.Arn,
 			RoleName:  role.RoleName,
@@ -209,10 +209,10 @@ func (c *Client) AttachPolicy(role *iam.Role, policy *iam.Policy) error {
 func (c *Client) hasAttachedPolicy(policies []*iam.AttachedPolicy, name string) bool {
 	for _, r := range policies {
 		if *r.PolicyName == name {
-			return r
+			return true
 		}
 	}
-	return nil
+	return false
 }
 
 func (c *Client) GetRole(roleName string) (*iam.Role, error) {
