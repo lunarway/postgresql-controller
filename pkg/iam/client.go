@@ -132,17 +132,17 @@ func (c *Client) UpdatePolicy(policy *Policy) error {
 	return nil
 }
 
-func (c *Client) CreatePolicy(policy *Policy) error {
+func (c *Client) CreatePolicy(policy *Policy) (*iam.Policy, error) {
 
 	svc := iam.New(c.session)
 
 	jsonMarshal, err := json.Marshal(*policy.Document)
 	if err != nil {
 		c.log.Error(err, "json marshalling failed", "document", policy.Document)
-		return fmt.Errorf("unable to marshal document: %s: %w", policy.Name, err)
+		return nil, fmt.Errorf("unable to marshal document: %s: %w", policy.Name, err)
 	}
 
-	_, err = svc.CreatePolicy(&iam.CreatePolicyInput{
+	response, err := svc.CreatePolicy(&iam.CreatePolicyInput{
 		Description:    aws.String("Created by postgresql controller"),
 		Path:           aws.String(c.iamPrefix),
 		PolicyDocument: aws.String(string(jsonMarshal)),
@@ -150,8 +150,80 @@ func (c *Client) CreatePolicy(policy *Policy) error {
 	})
 
 	if err != nil {
-		return fmt.Errorf("unable to create policy %s: %w", policy.Name, err)
+		return nil, fmt.Errorf("unable to create policy %s: %w", policy.Name, err)
+	}
+
+	return response.Policy, nil
+}
+
+func (c *Client) listAttachedPolicies(role *iam.Role, prefix string) ([]*iam.AttachedPolicy, error) {
+
+	var result []*iam.AttachedPolicy
+	svc := iam.New(c.session)
+	maxItems := int64(500)
+
+	err := svc.ListAttachedRolePoliciesPages(&iam.ListAttachedRolePoliciesInput{
+		MaxItems:   &maxItems,
+		PathPrefix: &prefix,
+		RoleName:   role.RoleName,
+	}, func(page *iam.ListAttachedRolePoliciesOutput, lastPage bool) bool {
+		result = append(result, page.AttachedPolicies...)
+		return true
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("unable to list attached policies for %s: %w", *role.RoleName, err)
+	}
+
+	return result, nil
+}
+
+func (c *Client) ListManagedAttachedPolicies(role *iam.Role) ([]*iam.AttachedPolicy, error) {
+	return c.listAttachedPolicies(role, c.iamPrefix)
+}
+
+func (c *Client) AttachPolicy(role *iam.Role, policy *iam.Policy) error {
+
+	svc := iam.New(c.session)
+
+	attachedPolicies, err := c.ListManagedAttachedPolicies(role)
+
+	if err != nil {
+		return fmt.Errorf("unable to list attached policies: %w", err)
+	}
+
+	if c.lookupAttachedPolicy(attachedPolicies, *policy.PolicyName) == nil {
+		_, err := svc.AttachRolePolicy(&iam.AttachRolePolicyInput{
+			PolicyArn: policy.Arn,
+			RoleName:  role.RoleName,
+		})
+
+		if err != nil {
+			return fmt.Errorf("unable to attach policy %s to role %s: %w", *policy.PolicyName, *role.RoleName, err)
+		}
 	}
 
 	return nil
+}
+
+func (c *Client) lookupAttachedPolicy(policies []*iam.AttachedPolicy, name string) *iam.AttachedPolicy {
+	for _, r := range policies {
+		if *r.PolicyName == name {
+			return r
+		}
+	}
+	return nil
+}
+
+func (c *Client) GetRole(roleName string) (*iam.Role, error) {
+
+	svc := iam.New(c.session)
+
+	role, err := svc.GetRole(&iam.GetRoleInput{RoleName: &roleName})
+
+	if err != nil {
+		return nil, fmt.Errorf("unable to list attached policies: %w", err)
+	}
+
+	return role.Role, nil
 }

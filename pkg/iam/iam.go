@@ -48,7 +48,19 @@ func AddUser(log logr.Logger, session *session.Session, config AddUserConfig, us
 	}
 
 	newPolicy.Document.Add(config.Region, config.AccountID, config.RolePrefix, username)
-	return client.CreatePolicy(newPolicy)
+	newAwsPolicy, err := client.CreatePolicy(newPolicy)
+	if err != nil {
+		return err
+	}
+
+	role, err := client.GetRole(config.AWSLoginRole)
+	if err != nil {
+		return err
+	}
+
+	err = client.AttachPolicy(role, newAwsPolicy)
+
+	return err
 }
 
 func SetAWSPolicy(log logr.Logger, credentials *credentials.Credentials, config AddUserConfig, userID string) error {
