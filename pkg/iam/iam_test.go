@@ -161,7 +161,7 @@ func Test_AddUser(t *testing.T) {
 				PolicyBaseName:    policyBaseName,
 				RolePrefix:        rolePrefix,
 				IamPrefix:         iamPrefix,
-				AWSLoginRole:      awsLoginRole,
+				AWSLoginRoles:     []string{awsLoginRole},
 				MaxUsersPerPolicy: tt.maxUsersPerPolicy,
 			}
 
