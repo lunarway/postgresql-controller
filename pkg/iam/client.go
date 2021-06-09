@@ -192,7 +192,7 @@ func (c *Client) AttachPolicy(role *iam.Role, policy *iam.Policy) error {
 		return fmt.Errorf("unable to list attached policies: %w", err)
 	}
 
-	if c.hasAttachedPolicy(attachedPolicies, *policy.PolicyName) {
+	if !c.hasAttachedPolicy(attachedPolicies, *policy.PolicyName) {
 		_, err := svc.AttachRolePolicy(&iam.AttachRolePolicyInput{
 			PolicyArn: policy.Arn,
 			RoleName:  role.RoleName,
