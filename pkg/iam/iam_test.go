@@ -2,6 +2,7 @@ package iam
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -31,6 +32,26 @@ func Test_AddUser(t *testing.T) {
 	policyBaseName := "basename"
 	accountId := "000000000000"
 	rolePrefix := "iam_developer_"
+
+	assumeRolePolicyDocument := `
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::%s:saml-provider/GoogleApps"
+      },
+      "Action": "sts:AssumeRoleWithSAML",
+      "Condition": {
+        "StringEquals": {
+          "SAML:aud": "https://signin.aws.amazon.com/saml"
+        }
+      }
+    }
+  ]
+}
+`
 
 	tests := []struct {
 		name              string
@@ -79,12 +100,21 @@ func Test_AddUser(t *testing.T) {
 			assert := assert.New(t)
 			logger := NewLogger(t)
 
+			awsLoginRole := GenerateRandomString(10)
+
 			if len(tt.existingUsers) > 1 {
 				t.Fail()
 			}
 
 			iamPrefix := GenerateRandomString(10)
 			session := CreateSession()
+			svc := iam.New(session)
+
+			_, err := svc.CreateRole(&iam.CreateRoleInput{
+				RoleName:                 &awsLoginRole,
+				AssumeRolePolicyDocument: aws.String(strings.TrimSpace(fmt.Sprintf(assumeRolePolicyDocument, accountId))),
+			})
+			assert.NoError(err)
 
 			if len(tt.existingUsers) == 1 {
 
@@ -110,14 +140,18 @@ func Test_AddUser(t *testing.T) {
 			}
 				`
 
-				svc := iam.New(session)
-				_, err := svc.CreatePolicy(&iam.CreatePolicyInput{
+				policyOutput, err := svc.CreatePolicy(&iam.CreatePolicyInput{
 					Description:    aws.String("Created by postgresql controller"),
 					Path:           aws.String(iamPrefix),
 					PolicyDocument: aws.String(fmt.Sprintf(documentTemplate, accountId, rolePrefix, tt.existingUsers[0], tt.existingUsers[0])),
 					PolicyName:     aws.String(fmt.Sprintf("%s_%d", policyBaseName, 0)),
 				})
+				assert.NoError(err)
 
+				_, err = svc.AttachRolePolicy(&iam.AttachRolePolicyInput{
+					PolicyArn: policyOutput.Policy.Arn,
+					RoleName:  &awsLoginRole,
+				})
 				assert.NoError(err)
 			}
 
@@ -127,10 +161,11 @@ func Test_AddUser(t *testing.T) {
 				PolicyBaseName:    policyBaseName,
 				RolePrefix:        rolePrefix,
 				IamPrefix:         iamPrefix,
+				AWSLoginRoles:     []string{awsLoginRole},
 				MaxUsersPerPolicy: tt.maxUsersPerPolicy,
 			}
 
-			err := AddUser(logger, session, config, tt.newUser)
+			err = AddUser(logger, session, config, tt.newUser)
 			assert.NoError(err)
 
 			client := NewClient(session, logger, accountId, iamPrefix)
@@ -146,6 +181,13 @@ func Test_AddUser(t *testing.T) {
 
 			assert.Equal(tt.policyCount, policyCount)
 			assert.Equal(tt.userCount, userCount)
+
+			role, err := client.GetRole(awsLoginRole)
+			assert.NoError(err)
+			attachedPolicies, err := client.ListManagedAttachedPolicies(role)
+			assert.NoError(err)
+
+			assert.Equal(policyCount, len(attachedPolicies))
 		})
 	}
 }
