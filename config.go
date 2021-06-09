@@ -34,7 +34,7 @@ type awsConfig struct {
 	Profile         string
 	AccessKeyID     string
 	SecretAccessKey string
-	LoginRole       string
+	LoginRoles      string
 }
 
 func (c *controllerConfiguration) RegisterFlags(flagSet *pflag.FlagSet) {
@@ -55,7 +55,7 @@ func (c *controllerConfiguration) RegisterFlags(flagSet *pflag.FlagSet) {
 	flagSet.StringVar(&c.AWS.Profile, "aws-profile", "", "AWS Profile to use for credentials")
 	flagSet.StringVar(&c.AWS.AccessKeyID, "aws-access-key-id", "", "AWS access key id to use for credentials")
 	flagSet.StringVar(&c.AWS.SecretAccessKey, "aws-secret-access-key", "", "AWS secret access key to use for credentials")
-	flagSet.StringVar(&c.AWS.LoginRole, "aws-login-role", "", "AWS IAM role to attach the policies to")
+	flagSet.StringVar(&c.AWS.LoginRoles, "aws-login-role", "", "AWS IAM role to attach the policies to")
 	flagSet.BoolVar(&c.ExtendedWriteEnabled, "extended-write-enabled", false, "Enable extended write access requests")
 	flagSet.StringVar(&c.IAMPolicyPrefix, "iam-policy-prefix", "/", "Path prefix to use when creating IAM policies")
 }
@@ -72,7 +72,7 @@ func (c *controllerConfiguration) Log(log logr.Logger) {
 		"awsPolicyName", c.AWS.PolicyName,
 		"awsRegion", c.AWS.Region,
 		"awsAccountID", c.AWS.AccountID,
-		"awsLoginRole", c.AWS.LoginRole,
+		"awsLoginRoles", c.AWS.LoginRoles,
 		"allDatabasesReadEnabled", c.AllDatabasesReadEnabled,
 		"allDatabasesWriteEnabled", c.AllDatabasesWriteEnabled,
 		"iamPolicyPrefix", c.IAMPolicyPrefix,

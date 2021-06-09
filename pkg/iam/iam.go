@@ -16,7 +16,7 @@ type AddUserConfig struct {
 	IamPrefix         string
 	MaxUsersPerPolicy int
 	RolePrefix        string
-	AWSLoginRole      string
+	AWSLoginRoles     []string
 }
 
 func AddUser(log logr.Logger, session *session.Session, config AddUserConfig, username string) error {
@@ -53,12 +53,17 @@ func AddUser(log logr.Logger, session *session.Session, config AddUserConfig, us
 		return err
 	}
 
-	role, err := client.GetRole(config.AWSLoginRole)
-	if err != nil {
-		return err
-	}
+	for _, roleName := range config.AWSLoginRoles {
+		role, err := client.GetRole(roleName)
+		if err != nil {
+			return err
+		}
 
-	err = client.AttachPolicy(role, newAwsPolicy)
+		err = client.AttachPolicy(role, newAwsPolicy)
+		if err != nil {
+			return err
+		}
+	}
 
 	return err
 }

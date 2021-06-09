@@ -19,6 +19,7 @@ package main
 import (
 	"flag"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/pflag"
@@ -107,7 +108,7 @@ func main() {
 		AWSAccessKeyID:     config.AWS.AccessKeyID,
 		AWSSecretAccessKey: config.AWS.SecretAccessKey,
 		IAMPolicyPrefix:    config.IAMPolicyPrefix,
-		AWSLoginRole:       config.AWS.LoginRole,
+		AWSLoginRoles:      strings.Split(config.AWS.LoginRoles, ","),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PostgreSQLUser")
 		os.Exit(1)
