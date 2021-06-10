@@ -35,8 +35,8 @@ manager: fmt vet
 	go build -o ${BINARY_ASSETS}/manager .
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
-run:
-	go run . --host-credentials="localhost=postgres:xxx"
+run: generate fmt vet manifests
+	go run .
 
 # Install CRDs into a cluster
 install: manifests kustomize
