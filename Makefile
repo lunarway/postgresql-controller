@@ -1,6 +1,6 @@
 PROJECT=postgresql-controller
 # Current Operator version
-VERSION ?= 0.0.31-alpha1
+VERSION ?= 0.0.31-alpha2
 # Default bundle image tag
 BUNDLE_IMG ?= controller-bundle:$(VERSION)
 # Options for 'bundle-build'
@@ -35,8 +35,8 @@ manager: fmt vet
 	go build -o ${BINARY_ASSETS}/manager .
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
-run: generate fmt vet manifests
-	go run .
+run:
+	go run . --host-credentials="localhost=postgres:xxx"
 
 # Install CRDs into a cluster
 install: manifests kustomize
