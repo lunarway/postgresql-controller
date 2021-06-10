@@ -13,6 +13,13 @@ type PolicyDocument struct {
 	Statement []StatementEntry `json:"Statement,omitempty"`
 }
 
+func NewPolicyDocument(version string) *PolicyDocument {
+	return &PolicyDocument{
+		Version:   version,
+		Statement: []StatementEntry{},
+	}
+}
+
 type StatementEntry struct {
 	Effect    string     `json:"Effect,omitempty"`
 	Action    []string   `json:"Action,omitempty"`
