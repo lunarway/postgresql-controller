@@ -115,6 +115,10 @@ func (r *PostgreSQLUserReconciler) reconcile(reqLogger logr.Logger, request reco
 		return ctrl.Result{}, err
 	}
 
+	// User instance created or updated
+	reqLogger = reqLogger.WithValues("user", user.Spec.Name, "rolePrefix", r.RolePrefix)
+	reqLogger.Info("Reconciling found PostgreSQLUser resource", "user", user.Spec.Name)
+
 	var awsCredentials *credentials.Credentials
 	if len(r.AWSProfile) != 0 {
 		awsCredentials = credentials.NewSharedCredentials("", r.AWSProfile)
@@ -167,10 +171,6 @@ func (r *PostgreSQLUserReconciler) reconcile(reqLogger logr.Logger, request reco
 			return ctrl.Result{}, err
 		}
 	}
-
-	// User instance created or updated
-	reqLogger = reqLogger.WithValues("user", user.Spec.Name, "rolePrefix", r.RolePrefix)
-	reqLogger.Info("Reconciling found PostgreSQLUser resource", "user", user.Spec.Name)
 
 	// Error check in the bottom because we want aws policy to be set no matter what.
 	granterErr := r.Granter.SyncUser(reqLogger, request.Namespace, r.RolePrefix, *user)
