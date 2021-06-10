@@ -2,26 +2,18 @@ package iam
 
 import (
 	"fmt"
-
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/go-logr/logr"
 )
 
 type AddUserConfig struct {
 	Region            string
 	AccountID         string
 	PolicyBaseName    string
-	IamPrefix         string
 	MaxUsersPerPolicy int
 	RolePrefix        string
 	AWSLoginRoles     []string
 }
 
-func AddUser(log logr.Logger, session *session.Session, config AddUserConfig, username string) error {
-
-	client := NewClient(session, log, config.AccountID, config.IamPrefix)
+func AddUser(client *Client, config AddUserConfig, username string) error {
 
 	policies, err := client.ListPolicies()
 	if err != nil {
@@ -68,18 +60,30 @@ func AddUser(log logr.Logger, session *session.Session, config AddUserConfig, us
 	return err
 }
 
-func SetAWSPolicy(log logr.Logger, credentials *credentials.Credentials, config AddUserConfig, userID string) error {
-	// AWS Config Object to create a session
-	awsConfig := &aws.Config{
-		Region:      aws.String(config.Region),
-		Credentials: credentials,
-	}
+func RemoveUser(client *Client, awsLoginRoles []string, username string) error {
 
-	// Initialize session to AWS
-	sess, err := session.NewSession(awsConfig)
+	policies, err := client.ListPolicies()
 	if err != nil {
-		return fmt.Errorf("session initialization for region %s: %w", config.Region, err)
+		return err
 	}
 
-	return AddUser(log, sess, config, userID)
+	for _, policy := range policies {
+		if policy.Document.Exists(username) {
+			policy.Document.Remove(username)
+
+			if policy.Document.Count() == 0 {
+				err := client.DeleteAndDetachPolicy(policy, awsLoginRoles)
+				if err != nil {
+					return err
+				}
+			} else {
+				err := client.UpdatePolicy(policy)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
 }

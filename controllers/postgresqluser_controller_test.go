@@ -5,8 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/api/v1alpha1"
 	"go.lunarway.com/postgresql-controller/pkg/grants"
@@ -141,7 +139,7 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 				return kube.ResourceValue(cl, resource, namespace)
 			},
 		},
-		SetAWSPolicy: func(log logr.Logger, credentials *credentials.Credentials, policy iam.AddUserConfig, userID string) error {
+		AddUser: func(client *iam.Client, config iam.AddUserConfig, username string) error {
 			return nil
 		},
 	}
@@ -261,7 +259,7 @@ func TestReconcile_rolePrefix(t *testing.T) {
 				return kube.ResourceValue(cl, resource, namespace)
 			},
 		},
-		SetAWSPolicy: func(log logr.Logger, credentials *credentials.Credentials, policy iam.AddUserConfig, userID string) error {
+		AddUser: func(client *iam.Client, config iam.AddUserConfig, username string) error {
 			return nil
 		},
 	}
@@ -409,7 +407,7 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 				return kube.ResourceValue(cl, resource, namespace)
 			},
 		},
-		SetAWSPolicy: func(log logr.Logger, credentials *credentials.Credentials, policy iam.AddUserConfig, userID string) error {
+		AddUser: func(client *iam.Client, config iam.AddUserConfig, username string) error {
 			return nil
 		},
 	}

@@ -20,6 +20,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -42,8 +47,9 @@ type PostgreSQLUserReconciler struct {
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 
-	Granter      grants.Granter
-	SetAWSPolicy func(log logr.Logger, credentials *credentials.Credentials, policy iam.AddUserConfig, userID string) error
+	Granter    grants.Granter
+	AddUser    func(client *iam.Client, config iam.AddUserConfig, username string) error
+	RemoveUser func(client *iam.Client, awsLoginRoles []string, username string) error
 
 	RolePrefix         string
 	AWSPolicyName      string
@@ -55,6 +61,8 @@ type PostgreSQLUserReconciler struct {
 	IAMPolicyPrefix    string
 	AWSLoginRoles      []string
 }
+
+const userFinalizer = "postgresqluser.lunar.tech/finalizer"
 
 // +kubebuilder:rbac:groups=postgresql.lunar.tech,resources=postgresqlusers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=postgresql.lunar.tech,resources=postgresqlusers/status,verbs=get;update;patch
@@ -82,6 +90,15 @@ func (r *PostgreSQLUserReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
+func inList(haystack []string, needle string) bool {
+	for _, item := range haystack {
+		if item == needle {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *PostgreSQLUserReconciler) reconcile(reqLogger logr.Logger, request reconcile.Request) (ctrl.Result, error) {
 	// Fetch the PostgreSQLUser instance
 	user := &postgresqlv1alpha1.PostgreSQLUser{}
@@ -98,13 +115,6 @@ func (r *PostgreSQLUserReconciler) reconcile(reqLogger logr.Logger, request reco
 		return ctrl.Result{}, err
 	}
 
-	// User instance created or updated
-	reqLogger = reqLogger.WithValues("user", user.Spec.Name, "rolePrefix", r.RolePrefix)
-	reqLogger.Info("Reconciling found PostgreSQLUser resource", "user", user.Spec.Name)
-
-	// Error check in the bottom because we want aws policy to be set no matter what.
-	granterErr := r.Granter.SyncUser(reqLogger, request.Namespace, r.RolePrefix, *user)
-
 	var awsCredentials *credentials.Credentials
 	if len(r.AWSProfile) != 0 {
 		awsCredentials = credentials.NewSharedCredentials("", r.AWSProfile)
@@ -112,12 +122,61 @@ func (r *PostgreSQLUserReconciler) reconcile(reqLogger logr.Logger, request reco
 		awsCredentials = credentials.NewStaticCredentials(r.AWSAccessKeyID, r.AWSSecretAccessKey, "")
 	}
 
-	awsPolicyErr := r.SetAWSPolicy(reqLogger, awsCredentials, iam.AddUserConfig{
+	awsConfig := &aws.Config{
+		Region:      aws.String(r.AWSRegion),
+		Credentials: awsCredentials,
+	}
+
+	// Initialize session to AWS
+	session, err := session.NewSession(awsConfig)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("session initialization for region %s: %w", r.AWSRegion, err)
+	}
+
+	client := iam.NewClient(session, reqLogger, r.AWSAccountID, r.IAMPolicyPrefix)
+
+	markedToBeDeleted := user.GetDeletionTimestamp() != nil
+	if markedToBeDeleted {
+		if inList(user.Finalizers, userFinalizer) {
+			// Run finalization logic for userFinalizer. If the
+			// finalization logic fails, don't remove the finalizer so
+			// that we can retry during the next reconciliation.
+			if err := r.finalizeUser(reqLogger, client, user); err != nil {
+				return ctrl.Result{}, err
+			}
+
+			// Remove finalizer. Once all finalizers have been
+			// removed, the object will be deleted.
+			controllerutil.RemoveFinalizer(user, userFinalizer)
+			err := r.Update(context.TODO(), user)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// Add finalizer for this CR
+	if !inList(user.Finalizers, userFinalizer) {
+		controllerutil.AddFinalizer(user, userFinalizer)
+		err = r.Update(context.TODO(), user)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
+	// User instance created or updated
+	reqLogger = reqLogger.WithValues("user", user.Spec.Name, "rolePrefix", r.RolePrefix)
+	reqLogger.Info("Reconciling found PostgreSQLUser resource", "user", user.Spec.Name)
+
+	// Error check in the bottom because we want aws policy to be set no matter what.
+	granterErr := r.Granter.SyncUser(reqLogger, request.Namespace, r.RolePrefix, *user)
+
+	awsPolicyErr := r.AddUser(client, iam.AddUserConfig{
 		PolicyBaseName:    r.AWSPolicyName,
 		Region:            r.AWSRegion,
 		AccountID:         r.AWSAccountID,
 		MaxUsersPerPolicy: 30,
-		IamPrefix:         r.IAMPolicyPrefix,
 		RolePrefix:        r.RolePrefix,
 		AWSLoginRoles:     r.AWSLoginRoles,
 	}, user.Spec.Name)
@@ -127,4 +186,16 @@ func (r *PostgreSQLUserReconciler) reconcile(reqLogger logr.Logger, request reco
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *PostgreSQLUserReconciler) finalizeUser(reqLogger logr.Logger, client *iam.Client, user *postgresqlv1alpha1.PostgreSQLUser) error {
+
+	err := r.RemoveUser(client, r.AWSLoginRoles, user.Spec.Name)
+	if err != nil {
+		return err
+	}
+
+	reqLogger.Info("Successfully finalized PostgreSQLUser")
+
+	return nil
 }

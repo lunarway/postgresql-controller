@@ -28,8 +28,12 @@ type UserID struct {
 	AWSUserID string `json:"aws:userid,omitempty"`
 }
 
+func usernameToUserId(username string) string {
+	return fmt.Sprintf("*:%s@lunar.app", username)
+}
+
 func (p *PolicyDocument) Exists(username string) bool {
-	awsUserID := fmt.Sprintf("*:%s@lunar.app", username)
+	awsUserID := usernameToUserId(username)
 	return any(p.Statement, func(s StatementEntry) bool {
 		return s.Condition.StringLike.AWSUserID == awsUserID
 	})
@@ -40,7 +44,7 @@ func (p *PolicyDocument) Count() int {
 }
 
 func (p *PolicyDocument) Add(region, accountID, rolePrefix, username string) {
-	awsUserID := fmt.Sprintf("*:%s@lunar.app", username)
+	awsUserID := usernameToUserId(username)
 	statementEntry := StatementEntry{
 		Effect:    "Allow",
 		Action:    []string{"rds-db:connect"},
@@ -48,6 +52,20 @@ func (p *PolicyDocument) Add(region, accountID, rolePrefix, username string) {
 		Condition: StringLike{StringLike: UserID{AWSUserID: awsUserID}},
 	}
 	p.Statement = append(p.Statement, statementEntry)
+}
+
+func (p *PolicyDocument) Remove(username string) {
+	awsUserID := usernameToUserId(username)
+
+	newStatements := []StatementEntry{}
+
+	for _, entry := range p.Statement {
+		if entry.Condition.StringLike.AWSUserID != awsUserID {
+			newStatements = append(newStatements, entry)
+		}
+	}
+
+	p.Statement = newStatements
 }
 
 func any(vs []StatementEntry, f func(StatementEntry) bool) bool {
