@@ -32,10 +32,10 @@ type PostgreSQLUserSpec struct {
 	Name string `json:"name"`
 	// +optional
 	// +listType=atomic
-	Read *[]AccessSpec `json:"read,omitempty"`
+	Read []AccessSpec `json:"read,omitempty"`
 	// +listType=atomic
 	// +optional
-	Write *[]WriteAccessSpec `json:"write,omitempty"`
+	Write []WriteAccessSpec `json:"write,omitempty"`
 }
 
 // AccessSpec defines a read access request specification.
@@ -43,16 +43,16 @@ type PostgreSQLUserSpec struct {
 type AccessSpec struct {
 	Host ResourceVar `json:"host"`
 	// +optional
-	AllDatabases *bool `json:"allDatabases,omitempty"`
+	AllDatabases bool `json:"allDatabases,omitempty"`
 	// +optional
 	Database ResourceVar `json:"database"`
 	// +optional
 	Schema ResourceVar `json:"schema"`
 	Reason string      `json:"reason"`
 	// +optional
-	Start *metav1.Time `json:"start,omitempty"`
+	Start metav1.Time `json:"start,omitempty"`
 	// +optional
-	Stop *metav1.Time `json:"stop,omitempty"`
+	Stop metav1.Time `json:"stop,omitempty"`
 }
 
 // WriteAccessSpec defines a write access request specification.
