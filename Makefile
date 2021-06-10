@@ -1,6 +1,6 @@
 PROJECT=postgresql-controller
 # Current Operator version
-VERSION ?= 0.0.30
+VERSION ?= 0.0.31-alpha1
 # Default bundle image tag
 BUNDLE_IMG ?= controller-bundle:$(VERSION)
 # Options for 'bundle-build'
