@@ -20,10 +20,10 @@ import (
 	"context"
 	"fmt"
 
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
-
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
@@ -159,6 +159,7 @@ func (r *PostgreSQLUserReconciler) reconcile(reqLogger logr.Logger, request reco
 	// Add finalizer for this CR
 	if !inList(user.Finalizers, userFinalizer) {
 		controllerutil.AddFinalizer(user, userFinalizer)
+
 		err = r.Update(context.TODO(), user)
 		if err != nil {
 			return ctrl.Result{}, err

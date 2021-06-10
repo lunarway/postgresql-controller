@@ -206,7 +206,7 @@ $ make test/cluster/resources
 $ kubectl port-forward deploy/postgresql 5432
 
 // Start operator connecting to the cluster
-$ make code/run
+$ make run
 ```
 
 # Releasing

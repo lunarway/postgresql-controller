@@ -19,7 +19,15 @@ func (g *Granter) SyncUser(log logr.Logger, namespace, rolePrefix string, user l
 	//   resolve required grants taking expiration into account
 	//   diff against existing
 	//   revoke/grant what is needed
-	accesses, err := g.groupAccesses(log, namespace, user.Spec.Read, user.Spec.Write)
+	read := []lunarwayv1alpha1.AccessSpec{}
+	if user.Spec.Read != nil {
+		read = *user.Spec.Read
+	}
+	write := []lunarwayv1alpha1.WriteAccessSpec{}
+	if user.Spec.Write != nil {
+		write = *user.Spec.Write
+	}
+	accesses, err := g.groupAccesses(log, namespace, read, write)
 	if err != nil {
 		if len(accesses) == 0 {
 			return fmt.Errorf("group accesses: %w", err)

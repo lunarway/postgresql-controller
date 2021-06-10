@@ -22,6 +22,8 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
+var trueValue = true
+
 // TestReconcile_badConfigmapReference tests that reconcilation is completed
 // successfully even though a an error occours during database resolvement. This
 // is to ensure that a single bad PostgreSQLDatabase resource will not block the
@@ -46,12 +48,12 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 			},
 			Spec: lunarwayv1alpha1.PostgreSQLUserSpec{
 				Name: userName,
-				Read: []lunarwayv1alpha1.AccessSpec{
+				Read: &[]lunarwayv1alpha1.AccessSpec{
 					{
 						Host: lunarwayv1alpha1.ResourceVar{
 							Value: host,
 						},
-						AllDatabases: true,
+						AllDatabases: &trueValue,
 					},
 				},
 			},
@@ -187,12 +189,12 @@ func TestReconcile_rolePrefix(t *testing.T) {
 			},
 			Spec: lunarwayv1alpha1.PostgreSQLUserSpec{
 				Name: userName,
-				Read: []lunarwayv1alpha1.AccessSpec{
+				Read: &[]lunarwayv1alpha1.AccessSpec{
 					{
 						Host: lunarwayv1alpha1.ResourceVar{
 							Value: host,
 						},
-						AllDatabases: true,
+						AllDatabases: &trueValue,
 					},
 				},
 			},
@@ -314,12 +316,12 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 			},
 			Spec: lunarwayv1alpha1.PostgreSQLUserSpec{
 				Name: userName,
-				Read: []lunarwayv1alpha1.AccessSpec{
+				Read: &[]lunarwayv1alpha1.AccessSpec{
 					{
 						Host: lunarwayv1alpha1.ResourceVar{
 							Value: host,
 						},
-						AllDatabases: true,
+						AllDatabases: &trueValue,
 					},
 				},
 			},
