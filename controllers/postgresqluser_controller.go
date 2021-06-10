@@ -137,22 +137,24 @@ func (r *PostgreSQLUserReconciler) reconcile(reqLogger logr.Logger, request reco
 
 	markedToBeDeleted := user.GetDeletionTimestamp() != nil
 	if markedToBeDeleted {
-		if inList(user.Finalizers, userFinalizer) {
-			// Run finalization logic for userFinalizer. If the
-			// finalization logic fails, don't remove the finalizer so
-			// that we can retry during the next reconciliation.
-			if err := r.finalizeUser(reqLogger, client, user); err != nil {
-				return ctrl.Result{}, err
-			}
-
-			// Remove finalizer. Once all finalizers have been
-			// removed, the object will be deleted.
-			controllerutil.RemoveFinalizer(user, userFinalizer)
-			err := r.Update(context.TODO(), user)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
+		if !inList(user.Finalizers, userFinalizer) {
+			return ctrl.Result{}, nil
 		}
+		// Run finalization logic for userFinalizer. If the
+		// finalization logic fails, don't remove the finalizer so
+		// that we can retry during the next reconciliation.
+		if err := r.finalizeUser(reqLogger, client, user); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		// Remove finalizer. Once all finalizers have been
+		// removed, the object will be deleted.
+		controllerutil.RemoveFinalizer(user, userFinalizer)
+		err := r.Update(context.TODO(), user)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
 		return ctrl.Result{}, nil
 	}
 
