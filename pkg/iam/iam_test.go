@@ -25,7 +25,12 @@ func CreateSession() *session.Session {
 	}))
 }
 
-func Test_AddUser(t *testing.T) {
+const (
+	AddUserOperation    = "AddUser"
+	RemoveUserOperation = "RemoveUser"
+)
+
+func Test_AddRemoveUser(t *testing.T) {
 
 	test.Integration(t) //ensure that we only run this test during integration testing
 
@@ -55,43 +60,75 @@ func Test_AddUser(t *testing.T) {
 
 	tests := []struct {
 		name              string
+		operation         string
 		existingUsers     []string
-		newUser           string
+		user              string
 		maxUsersPerPolicy int
 		policyCount       int
 		userCount         int
 	}{
 		{
 			name:              "no users already exists",
+			operation:         AddUserOperation,
 			existingUsers:     []string{},
-			newUser:           "jwr",
+			user:              "jwr",
 			maxUsersPerPolicy: 2,
 			policyCount:       1,
 			userCount:         1,
 		},
 		{
 			name:              "user already exists",
+			operation:         AddUserOperation,
 			existingUsers:     []string{"jwr"},
-			newUser:           "jwr",
+			user:              "jwr",
 			maxUsersPerPolicy: 2,
 			policyCount:       1,
 			userCount:         1,
 		},
 		{
 			name:              "another user already exists",
+			operation:         AddUserOperation,
 			existingUsers:     []string{"kni"},
-			newUser:           "jwr",
+			user:              "jwr",
 			maxUsersPerPolicy: 2,
 			policyCount:       1,
 			userCount:         2,
 		},
 		{
 			name:              "policy capacity exceeded",
+			operation:         AddUserOperation,
 			existingUsers:     []string{"kni"},
-			newUser:           "jwr",
+			user:              "jwr",
 			maxUsersPerPolicy: 1,
 			policyCount:       2,
 			userCount:         2,
+		},
+		{
+			name:              "remove user",
+			operation:         RemoveUserOperation,
+			existingUsers:     []string{"kni", "jwr"},
+			user:              "kni",
+			maxUsersPerPolicy: 2,
+			policyCount:       1,
+			userCount:         1,
+		},
+		{
+			name:              "remove unknown user",
+			operation:         RemoveUserOperation,
+			existingUsers:     []string{"kni", "jwr"},
+			user:              "who_dis",
+			maxUsersPerPolicy: 2,
+			policyCount:       1,
+			userCount:         2,
+		},
+		{
+			name:              "remove last user in policy",
+			operation:         RemoveUserOperation,
+			existingUsers:     []string{"kni"},
+			user:              "kni",
+			maxUsersPerPolicy: 2,
+			policyCount:       0,
+			userCount:         0,
 		},
 	}
 	for _, tt := range tests {
@@ -102,13 +139,14 @@ func Test_AddUser(t *testing.T) {
 
 			awsLoginRole := GenerateRandomString(10)
 
-			if len(tt.existingUsers) > 1 {
+			if len(tt.existingUsers) > 2 {
 				t.Fail()
 			}
 
 			iamPrefix := GenerateRandomString(10)
 			session := CreateSession()
 			svc := iam.New(session)
+			client := NewClient(session, logger, accountId, iamPrefix)
 
 			_, err := svc.CreateRole(&iam.CreateRoleInput{
 				RoleName:                 &awsLoginRole,
@@ -116,12 +154,18 @@ func Test_AddUser(t *testing.T) {
 			})
 			assert.NoError(err)
 
-			if len(tt.existingUsers) == 1 {
+			if len(tt.existingUsers) > 0 {
 
 				documentTemplate := `
 					{
 					 "Version": "2012-10-17",
 					 "Statement": [
+						%s
+					 ]
+			}
+				`
+
+				statementTemplate := `
 						{
 							"Effect": "Allow",
 							"Action": [
@@ -136,14 +180,19 @@ func Test_AddUser(t *testing.T) {
 								}
 							}
 						}
-					 ]
-			}
-				`
+`
+				var statements []string
+
+				for _, user := range tt.existingUsers {
+					statements = append(statements, fmt.Sprintf(statementTemplate, accountId, rolePrefix, user, user))
+				}
+
+				document := fmt.Sprintf(documentTemplate, strings.Join(statements, ","))
 
 				policyOutput, err := svc.CreatePolicy(&iam.CreatePolicyInput{
 					Description:    aws.String("Created by postgresql controller"),
 					Path:           aws.String(iamPrefix),
-					PolicyDocument: aws.String(fmt.Sprintf(documentTemplate, accountId, rolePrefix, tt.existingUsers[0], tt.existingUsers[0])),
+					PolicyDocument: aws.String(document),
 					PolicyName:     aws.String(fmt.Sprintf("%s_%d", policyBaseName, 0)),
 				})
 				assert.NoError(err)
@@ -160,15 +209,18 @@ func Test_AddUser(t *testing.T) {
 				AccountID:         accountId,
 				PolicyBaseName:    policyBaseName,
 				RolePrefix:        rolePrefix,
-				IamPrefix:         iamPrefix,
 				AWSLoginRoles:     []string{awsLoginRole},
 				MaxUsersPerPolicy: tt.maxUsersPerPolicy,
 			}
 
-			err = AddUser(logger, session, config, tt.newUser)
-			assert.NoError(err)
+			if tt.operation == AddUserOperation {
+				err = AddUser(client, config, tt.user)
+				assert.NoError(err)
+			} else if tt.operation == RemoveUserOperation {
+				err = RemoveUser(client, []string{awsLoginRole}, tt.user)
+				assert.NoError(err)
+			}
 
-			client := NewClient(session, logger, accountId, iamPrefix)
 			p, err := client.ListPolicies()
 			assert.NoError(err)
 

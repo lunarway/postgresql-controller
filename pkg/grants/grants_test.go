@@ -14,6 +14,8 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+var trueValue = true
+
 func TestGranter_groupAccesses(t *testing.T) {
 	accessSpec := func(host, reason string) lunarwayv1alpha1.AccessSpec {
 		return lunarwayv1alpha1.AccessSpec{
@@ -191,6 +193,8 @@ func TestGranter_groupAccesses_startStopHandling(t *testing.T) {
 	)
 
 	accessSpec := func(start, stop time.Time) lunarwayv1alpha1.AccessSpec {
+		startTime := v1.NewTime(start)
+		stopTime := v1.NewTime(stop)
 		return lunarwayv1alpha1.AccessSpec{
 			Host: lunarwayv1alpha1.ResourceVar{
 				Value: host,
@@ -202,8 +206,8 @@ func TestGranter_groupAccesses_startStopHandling(t *testing.T) {
 				Value: database,
 			},
 			Reason: reason,
-			Start:  v1.NewTime(start),
-			Stop:   v1.NewTime(stop),
+			Start:  &startTime,
+			Stop:   &stopTime,
 		}
 	}
 
@@ -303,7 +307,7 @@ func TestGranter_groupAccesses_withAllDatabases(t *testing.T) {
 			Host: lunarwayv1alpha1.ResourceVar{
 				Value: host,
 			},
-			AllDatabases: true,
+			AllDatabases: &trueValue,
 			Reason:       reason,
 		}
 	}
@@ -508,7 +512,7 @@ func TestGranter_groupAccesses_allDatabasesFeatureFlags(t *testing.T) {
 			Host: lunarwayv1alpha1.ResourceVar{
 				Value: host,
 			},
-			AllDatabases: true,
+			AllDatabases: &trueValue,
 			Reason:       reason,
 		}
 	}
@@ -623,7 +627,7 @@ func TestGranter_groupAccesses_mixedSpecs(t *testing.T) {
 			Host: lunarwayv1alpha1.ResourceVar{
 				Value: host,
 			},
-			AllDatabases: true,
+			AllDatabases: &trueValue,
 			Reason:       reason,
 		}
 	}
@@ -894,7 +898,7 @@ func TestGranter_groupAccesses_partialErrors(t *testing.T) {
 					Host: lunarwayv1alpha1.ResourceVar{
 						Value: "host1",
 					},
-					AllDatabases: true,
+					AllDatabases: &trueValue,
 				},
 			},
 			hosts: HostAccess{
@@ -909,7 +913,7 @@ func TestGranter_groupAccesses_partialErrors(t *testing.T) {
 							Host: lunarwayv1alpha1.ResourceVar{
 								Value: "host1",
 							},
-							AllDatabases: true,
+							AllDatabases: &trueValue,
 						},
 					},
 				},
@@ -979,7 +983,7 @@ func TestGranter_groupAccesses_noUserSchemaFallback_allDatabases(t *testing.T) {
 			Host: lunarwayv1alpha1.ResourceVar{
 				Value: "host1:5432",
 			},
-			AllDatabases: true,
+			AllDatabases: &trueValue,
 			Reason:       "I am a developer",
 		},
 	}
@@ -991,7 +995,7 @@ func TestGranter_groupAccesses_noUserSchemaFallback_allDatabases(t *testing.T) {
 					Host: lunarwayv1alpha1.ResourceVar{
 						Value: "host1:5432",
 					},
-					AllDatabases: true,
+					AllDatabases: &trueValue,
 					Reason:       "I am a developer",
 				},
 				Database: postgres.DatabaseSchema{

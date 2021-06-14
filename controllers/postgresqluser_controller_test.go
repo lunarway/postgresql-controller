@@ -5,8 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/api/v1alpha1"
 	"go.lunarway.com/postgresql-controller/pkg/grants"
@@ -23,6 +21,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
+
+var trueValue = true
 
 // TestReconcile_badConfigmapReference tests that reconcilation is completed
 // successfully even though a an error occours during database resolvement. This
@@ -48,12 +48,12 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 			},
 			Spec: lunarwayv1alpha1.PostgreSQLUserSpec{
 				Name: userName,
-				Read: []lunarwayv1alpha1.AccessSpec{
+				Read: &[]lunarwayv1alpha1.AccessSpec{
 					{
 						Host: lunarwayv1alpha1.ResourceVar{
 							Value: host,
 						},
-						AllDatabases: true,
+						AllDatabases: &trueValue,
 					},
 				},
 			},
@@ -141,7 +141,7 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 				return kube.ResourceValue(cl, resource, namespace)
 			},
 		},
-		SetAWSPolicy: func(log logr.Logger, credentials *credentials.Credentials, policy iam.AddUserConfig, userID string) error {
+		AddUser: func(client *iam.Client, config iam.AddUserConfig, username string) error {
 			return nil
 		},
 	}
@@ -189,12 +189,12 @@ func TestReconcile_rolePrefix(t *testing.T) {
 			},
 			Spec: lunarwayv1alpha1.PostgreSQLUserSpec{
 				Name: userName,
-				Read: []lunarwayv1alpha1.AccessSpec{
+				Read: &[]lunarwayv1alpha1.AccessSpec{
 					{
 						Host: lunarwayv1alpha1.ResourceVar{
 							Value: host,
 						},
-						AllDatabases: true,
+						AllDatabases: &trueValue,
 					},
 				},
 			},
@@ -261,7 +261,7 @@ func TestReconcile_rolePrefix(t *testing.T) {
 				return kube.ResourceValue(cl, resource, namespace)
 			},
 		},
-		SetAWSPolicy: func(log logr.Logger, credentials *credentials.Credentials, policy iam.AddUserConfig, userID string) error {
+		AddUser: func(client *iam.Client, config iam.AddUserConfig, username string) error {
 			return nil
 		},
 	}
@@ -316,12 +316,12 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 			},
 			Spec: lunarwayv1alpha1.PostgreSQLUserSpec{
 				Name: userName,
-				Read: []lunarwayv1alpha1.AccessSpec{
+				Read: &[]lunarwayv1alpha1.AccessSpec{
 					{
 						Host: lunarwayv1alpha1.ResourceVar{
 							Value: host,
 						},
-						AllDatabases: true,
+						AllDatabases: &trueValue,
 					},
 				},
 			},
@@ -409,7 +409,7 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 				return kube.ResourceValue(cl, resource, namespace)
 			},
 		},
-		SetAWSPolicy: func(log logr.Logger, credentials *credentials.Credentials, policy iam.AddUserConfig, userID string) error {
+		AddUser: func(client *iam.Client, config iam.AddUserConfig, username string) error {
 			return nil
 		},
 	}

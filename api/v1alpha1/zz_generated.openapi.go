@@ -48,7 +48,8 @@ func schema__api_v1alpha1_AccessSpec(ref common.ReferenceCallback) common.OpenAP
 				Properties: map[string]spec.Schema{
 					"host": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("./api/v1alpha1.ResourceVar"),
+							Default: map[string]interface{}{},
+							Ref:     ref("./api/v1alpha1.ResourceVar"),
 						},
 					},
 					"allDatabases": {
@@ -59,18 +60,21 @@ func schema__api_v1alpha1_AccessSpec(ref common.ReferenceCallback) common.OpenAP
 					},
 					"database": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("./api/v1alpha1.ResourceVar"),
+							Default: map[string]interface{}{},
+							Ref:     ref("./api/v1alpha1.ResourceVar"),
 						},
 					},
 					"schema": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("./api/v1alpha1.ResourceVar"),
+							Default: map[string]interface{}{},
+							Ref:     ref("./api/v1alpha1.ResourceVar"),
 						},
 					},
 					"reason": {
 						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
 						},
 					},
 					"start": {
@@ -115,17 +119,20 @@ func schema__api_v1alpha1_PostgreSQLDatabase(ref common.ReferenceCallback) commo
 					},
 					"metadata": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
 						},
 					},
 					"spec": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("./api/v1alpha1.PostgreSQLDatabaseSpec"),
+							Default: map[string]interface{}{},
+							Ref:     ref("./api/v1alpha1.PostgreSQLDatabaseSpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("./api/v1alpha1.PostgreSQLDatabaseStatus"),
+							Default: map[string]interface{}{},
+							Ref:     ref("./api/v1alpha1.PostgreSQLDatabaseStatus"),
 						},
 					},
 				},
@@ -146,6 +153,7 @@ func schema__api_v1alpha1_PostgreSQLDatabaseSpec(ref common.ReferenceCallback) c
 					"name": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Name of the database",
+							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -153,18 +161,21 @@ func schema__api_v1alpha1_PostgreSQLDatabaseSpec(ref common.ReferenceCallback) c
 					"user": {
 						SchemaProps: spec.SchemaProps{
 							Description: "User name used to connect to the database. If empty Name is used.",
+							Default:     map[string]interface{}{},
 							Ref:         ref("./api/v1alpha1.ResourceVar"),
 						},
 					},
 					"password": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Password used with the User name to connect to the database",
+							Default:     map[string]interface{}{},
 							Ref:         ref("./api/v1alpha1.ResourceVar"),
 						},
 					},
 					"isShared": {
 						SchemaProps: spec.SchemaProps{
 							Description: "IsShared indicates whether the database is shared between multiple PostgreSQLDatabase objects. The controller will not grant ownership of the database if this is set to true. Further the owning role of the database is granted to this user to allow access to the resources it may have created before this user was enabled.\n\nThis option is here to support legacy applications sharing database instances and should never be used for new databases.",
+							Default:     false,
 							Type:        []string{"boolean"},
 							Format:      "",
 						},
@@ -172,6 +183,7 @@ func schema__api_v1alpha1_PostgreSQLDatabaseSpec(ref common.ReferenceCallback) c
 					"host": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Host that the database should be created on.",
+							Default:     map[string]interface{}{},
 							Ref:         ref("./api/v1alpha1.ResourceVar"),
 						},
 					},
@@ -194,13 +206,15 @@ func schema__api_v1alpha1_PostgreSQLDatabaseStatus(ref common.ReferenceCallback)
 					"phaseUpdated": {
 						SchemaProps: spec.SchemaProps{
 							Description: "INSERT ADDITIONAL STATUS FIELD - define observed state of cluster Important: Run \"make\" to regenerate code after modifying this file",
+							Default:     map[string]interface{}{},
 							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
 						},
 					},
 					"phase": {
 						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
 						},
 					},
 					"host": {
@@ -253,17 +267,20 @@ func schema__api_v1alpha1_PostgreSQLUser(ref common.ReferenceCallback) common.Op
 					},
 					"metadata": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
 						},
 					},
 					"spec": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("./api/v1alpha1.PostgreSQLUserSpec"),
+							Default: map[string]interface{}{},
+							Ref:     ref("./api/v1alpha1.PostgreSQLUserSpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("./api/v1alpha1.PostgreSQLUserStatus"),
+							Default: map[string]interface{}{},
+							Ref:     ref("./api/v1alpha1.PostgreSQLUserStatus"),
 						},
 					},
 				},
@@ -283,8 +300,9 @@ func schema__api_v1alpha1_PostgreSQLUserSpec(ref common.ReferenceCallback) commo
 				Properties: map[string]spec.Schema{
 					"name": {
 						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
 						},
 					},
 					"read": {
@@ -298,7 +316,8 @@ func schema__api_v1alpha1_PostgreSQLUserSpec(ref common.ReferenceCallback) commo
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("./api/v1alpha1.AccessSpec"),
+										Default: map[string]interface{}{},
+										Ref:     ref("./api/v1alpha1.AccessSpec"),
 									},
 								},
 							},
@@ -315,7 +334,8 @@ func schema__api_v1alpha1_PostgreSQLUserSpec(ref common.ReferenceCallback) commo
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("./api/v1alpha1.WriteAccessSpec"),
+										Default: map[string]interface{}{},
+										Ref:     ref("./api/v1alpha1.WriteAccessSpec"),
 									},
 								},
 							},
@@ -350,7 +370,8 @@ func schema__api_v1alpha1_WriteAccessSpec(ref common.ReferenceCallback) common.O
 				Properties: map[string]spec.Schema{
 					"host": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("./api/v1alpha1.ResourceVar"),
+							Default: map[string]interface{}{},
+							Ref:     ref("./api/v1alpha1.ResourceVar"),
 						},
 					},
 					"allDatabases": {
@@ -361,18 +382,21 @@ func schema__api_v1alpha1_WriteAccessSpec(ref common.ReferenceCallback) common.O
 					},
 					"database": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("./api/v1alpha1.ResourceVar"),
+							Default: map[string]interface{}{},
+							Ref:     ref("./api/v1alpha1.ResourceVar"),
 						},
 					},
 					"schema": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("./api/v1alpha1.ResourceVar"),
+							Default: map[string]interface{}{},
+							Ref:     ref("./api/v1alpha1.ResourceVar"),
 						},
 					},
 					"reason": {
 						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
 						},
 					},
 					"start": {
@@ -387,8 +411,9 @@ func schema__api_v1alpha1_WriteAccessSpec(ref common.ReferenceCallback) common.O
 					},
 					"extended": {
 						SchemaProps: spec.SchemaProps{
-							Type:   []string{"boolean"},
-							Format: "",
+							Default: false,
+							Type:    []string{"boolean"},
+							Format:  "",
 						},
 					},
 				},

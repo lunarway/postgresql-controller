@@ -227,3 +227,48 @@ func (c *Client) GetRole(roleName string) (*iam.Role, error) {
 
 	return role.Role, nil
 }
+
+func (c *Client) DeleteAndDetachPolicy(policy *Policy, roleNames []string) error {
+	svc := iam.New(c.session)
+
+	policies, err := c.listPolicies()
+
+	if err != nil {
+		return fmt.Errorf("unable to list policies: %w", err)
+	}
+
+	existing := c.lookupPolicy(policies, policy.Name)
+
+	if existing == nil {
+		return nil
+	}
+
+	for _, name := range roleNames {
+		_, err := svc.DetachRolePolicy(&iam.DetachRolePolicyInput{
+			PolicyArn: existing.Arn,
+			RoleName:  aws.String(name),
+		})
+		if err != nil {
+			return fmt.Errorf("unable to delete policy %s: %w", policy.Name, err)
+		}
+	}
+
+	_, err = svc.DeletePolicy(&iam.DeletePolicyInput{
+		PolicyArn: aws.String(*existing.Arn),
+	})
+
+	if err != nil {
+		return fmt.Errorf("unable to delete policy %s: %w", policy.Name, err)
+	}
+
+	return nil
+}
+
+func (c *Client) lookupPolicy(policies []*iam.Policy, name string) *iam.Policy {
+	for _, r := range policies {
+		if *r.PolicyName == name {
+			return r
+		}
+	}
+	return nil
+}

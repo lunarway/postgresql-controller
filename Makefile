@@ -1,6 +1,6 @@
 PROJECT=postgresql-controller
 # Current Operator version
-VERSION ?= 0.0.30
+VERSION ?= 0.0.31-alpha3
 # Default bundle image tag
 BUNDLE_IMG ?= controller-bundle:$(VERSION)
 # Options for 'bundle-build'
@@ -187,9 +187,9 @@ test/cluster:
 
 .PHONY: test/cluster/resources
 test/cluster/resources:
-	kubectl apply -f deploy/role.yaml -f deploy/role_binding.yaml -f deploy/service_account.yaml
-	kubectl apply -f deploy/crds/lunarway.com_postgresqlusers_crd.yaml
-	kubectl apply -f deploy/crds/lunarway.com_postgresqldatabases_crd.yaml
+	kubectl apply -f config/rbac/role.yaml -f config/rbac/role_binding.yaml
+	kubectl apply -f config/crd/bases/postgresql.lunar.tech_postgresqlusers.yaml
+	kubectl apply -f config/crd/bases/postgresql.lunar.tech_postgresqldatabases.yaml
 	kubectl apply -f test/postgresql.yaml
 
 .PHONY: test/cluster/postgresql

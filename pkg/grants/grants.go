@@ -94,8 +94,9 @@ func (g *Granter) groupByHosts(log logr.Logger, hosts HostAccess, namespace stri
 	for i, access := range accesses {
 		privilege := privilegeLookup(i)
 		reqLogger := log.WithValues("spec", access, "privilege", privilege)
+
 		// access it not requested to be granted yet
-		if g.Now().Before(access.Start.Time) {
+		if !access.Start.IsZero() && g.Now().Before(access.Start.Time) {
 			reqLogger.Info("Skipping access spec: start time is in the future")
 			continue
 		}
@@ -113,7 +114,7 @@ func (g *Granter) groupByHosts(log logr.Logger, hosts HostAccess, namespace stri
 			continue
 		}
 		reqLogger = reqLogger.WithValues("host", host)
-		if access.AllDatabases {
+		if access.AllDatabases != nil && *access.AllDatabases {
 			if !allDatabasesEnabled {
 				reqLogger.Info("Skipping access spec: allDatabases feature not enabled")
 				continue
