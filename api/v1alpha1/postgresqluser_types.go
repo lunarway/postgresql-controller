@@ -1,5 +1,5 @@
 /*
-
+Copyright 2021.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -70,8 +70,8 @@ type PostgreSQLUserStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
 }
 
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
+//+kubebuilder:object:root=true
+//+kubebuilder:subresource:status
 
 // PostgreSQLUser is the Schema for the postgresqlusers API
 // +k8s:openapi-gen=true
@@ -85,7 +85,7 @@ type PostgreSQLUser struct {
 	Status PostgreSQLUserStatus `json:"status,omitempty"`
 }
 
-// +kubebuilder:object:root=true
+//+kubebuilder:object:root=true
 
 // PostgreSQLUserList contains a list of PostgreSQLUser
 type PostgreSQLUserList struct {

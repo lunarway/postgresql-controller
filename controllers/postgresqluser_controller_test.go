@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -18,8 +19,9 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
 var trueValue = true
@@ -30,7 +32,7 @@ var trueValue = true
 // reconciliation of the remaining ones.
 func TestReconcile_badConfigmapReference(t *testing.T) {
 	// Set the logger to development mode for verbose logs.
-	logf.SetLogger(logf.ZapLogger(true))
+	logf.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	host := test.Integration(t)
 	var (
@@ -157,7 +159,7 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 			Namespace: namespace,
 		},
 	}
-	res, err := r.Reconcile(req)
+	res, err := r.Reconcile(context.Background(), req)
 	assert.NoError(t, err, "reconciliation failed")
 	assert.Equal(t, reconcile.Result{
 		Requeue:      false,
@@ -171,7 +173,7 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 // prefixed user name.
 func TestReconcile_rolePrefix(t *testing.T) {
 	// Set the logger to development mode for verbose logs.
-	logf.SetLogger(logf.ZapLogger(true))
+	logf.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	host := test.Integration(t)
 	var (
@@ -277,7 +279,7 @@ func TestReconcile_rolePrefix(t *testing.T) {
 			Namespace: namespace,
 		},
 	}
-	res, err := r.Reconcile(req)
+	res, err := r.Reconcile(context.Background(), req)
 	assert.NoError(t, err, "reconciliation failed")
 	assert.Equal(t, reconcile.Result{
 		Requeue:      false,
@@ -298,7 +300,7 @@ func TestReconcile_rolePrefix(t *testing.T) {
 // role being active at any time.
 func TestReconcile_multipleDatabaseResources(t *testing.T) {
 	// Set the logger to development mode for verbose logs.
-	logf.SetLogger(logf.ZapLogger(true))
+	logf.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	host := test.Integration(t)
 	var (
@@ -426,7 +428,7 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 			Namespace: namespace,
 		},
 	}
-	res, err := r.Reconcile(req)
+	res, err := r.Reconcile(context.Background(), req)
 	assert.NoError(t, err, "reconciliation failed")
 	assert.Equal(t, reconcile.Result{
 		Requeue:      false,

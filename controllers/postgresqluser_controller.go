@@ -1,5 +1,5 @@
 /*
-
+Copyright 2021.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,20 +20,18 @@ import (
 	"context"
 	"fmt"
 
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-
-	"sigs.k8s.io/controller-runtime/pkg/controller"
-
 	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	postgresqlv1alpha1 "go.lunarway.com/postgresql-controller/api/v1alpha1"
@@ -64,11 +62,13 @@ type PostgreSQLUserReconciler struct {
 
 const userFinalizer = "postgresqluser.lunar.tech/finalizer"
 
-// +kubebuilder:rbac:groups=postgresql.lunar.tech,resources=postgresqlusers,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=postgresql.lunar.tech,resources=postgresqlusers/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=postgresql.lunar.tech,resources=postgresqlusers,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=postgresql.lunar.tech,resources=postgresqlusers/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=postgresql.lunar.tech,resources=postgresqlusers/finalizers,verbs=update
 
-func (r *PostgreSQLUserReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	reqLogger := r.Log.WithValues("Request.Namespace", req.Namespace, "Request.Name", req.Name)
+func (r *PostgreSQLUserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	reqLogger := log.FromContext(ctx)
+
 	requestID, err := uuid.NewRandom()
 	if err != nil {
 		reqLogger.Error(err, "Failed to pick a request ID. Continuing without")
@@ -83,6 +83,7 @@ func (r *PostgreSQLUserReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	return result, err
 }
 
+// SetupWithManager sets up the controller with the Manager.
 func (r *PostgreSQLUserReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&postgresqlv1alpha1.PostgreSQLUser{}).

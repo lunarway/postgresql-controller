@@ -98,7 +98,7 @@ func TestConnectionString_logger(t *testing.T) {
 		Password: "1234",
 	}
 	var b bytes.Buffer
-	log.SetLogger(zap.LoggerTo(&b, true))
+	log.SetLogger(zap.New(zap.WriteTo(&b), zap.UseDevMode(true)))
 	log.Log.Info("Connection string", "conn", connectionString)
 	assert.NotContains(t, b.String(), "1234", "password logged")
 }

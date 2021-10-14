@@ -10,12 +10,12 @@ import (
 )
 
 func SetLogger(t *testing.T) *log.DelegatingLogger {
-	log.SetLogger(zap.LoggerTo(&logger{t: t}, true))
+	log.SetLogger(NewLogger(t))
 	return log.Log
 }
 
 func NewLogger(t *testing.T) logr.Logger {
-	return zap.LoggerTo(&logger{t: t}, true)
+	return zap.New(zap.WriteTo(&logger{t: t}), zap.UseDevMode(true))
 }
 
 var _ io.Writer = &logger{}

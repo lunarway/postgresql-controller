@@ -4,17 +4,17 @@ kind: ClusterRole
 metadata:
   name: postgresqluser-viewer-role
 rules:
-- apiGroups:
-  - postgresql.lunar.tech
-  resources:
-  - postgresqlusers
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - postgresql.lunar.tech
-  resources:
-  - postgresqlusers/status
-  verbs:
-  - get
+  - apiGroups:
+      - postgresql.lunar.tech
+    resources:
+      - postgresqlusers
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - postgresql.lunar.tech
+    resources:
+      - postgresqlusers/status
+    verbs:
+      - get

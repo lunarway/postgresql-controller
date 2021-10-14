@@ -1,5 +1,5 @@
 /*
-
+Copyright 2021.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	postgresqlv1alpha1 "go.lunarway.com/postgresql-controller/api/v1alpha1"
@@ -45,11 +46,12 @@ type PostgreSQLDatabaseReconciler struct {
 	HostCredentials map[string]postgres.Credentials
 }
 
-// +kubebuilder:rbac:groups=postgresql.lunar.tech,resources=postgresqldatabases,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=postgresql.lunar.tech,resources=postgresqldatabases/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=postgresql.lunar.tech,resources=postgresqldatabases,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=postgresql.lunar.tech,resources=postgresqldatabases/status,verbs=get;update;patch
 
-func (r *PostgreSQLDatabaseReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	reqLogger := r.Log.WithValues("Request.Namespace", req.Namespace, "Request.Name", req.Name)
+func (r *PostgreSQLDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	reqLogger := log.FromContext(ctx)
+
 	requestID, err := uuid.NewRandom()
 	if err != nil {
 		reqLogger.Error(err, "Failed to pick a request ID. Continuing without")
@@ -64,6 +66,7 @@ func (r *PostgreSQLDatabaseReconciler) Reconcile(req ctrl.Request) (ctrl.Result,
 	return ctrl.Result{}, stopRequeueOnInvalid(reqLogger, err)
 }
 
+// SetupWithManager sets up the controller with the Manager.
 func (r *PostgreSQLDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&postgresqlv1alpha1.PostgreSQLDatabase{}).
