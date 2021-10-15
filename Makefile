@@ -1,6 +1,6 @@
 PROJECT=postgresql-controller
 # Current Operator version
-VERSION ?= v0.0.32
+VERSION ?= 0.0.33
 # Image URL to use all building/pushing image targets
 ORG ?= lunarway
 REG ?= quay.io
