@@ -15,6 +15,7 @@ import (
 
 type controllerConfiguration struct {
 	MetricsAddress           string
+	ProbeAddress             string
 	EnableLeaderElection     bool
 	ResyncPeriod             time.Duration
 	UserRoles                []string
@@ -39,7 +40,8 @@ type awsConfig struct {
 
 func (c *controllerConfiguration) RegisterFlags(flagSet *pflag.FlagSet) {
 	flagSet.StringVar(&c.MetricsAddress, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
-	flagSet.BoolVar(&c.EnableLeaderElection, "enable-leader-election", false,
+	flagSet.StringVar(&c.ProbeAddress, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+	flagSet.BoolVar(&c.EnableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flagSet.DurationVar(&c.ResyncPeriod, "resync-period", 10*time.Hour, "determines the minimum frequency at which watched resources are reconciled")

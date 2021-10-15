@@ -41,6 +41,12 @@ rules:
 - apiGroups:
   - postgresql.lunar.tech
   resources:
+  - postgresqlusers/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - postgresql.lunar.tech
+  resources:
   - postgresqlusers/status
   verbs:
   - get

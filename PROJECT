@@ -1,14 +1,25 @@
-version: 3-alpha
-projectName: postgresql-controller
 domain: lunar.tech
-layout: go.kubebuilder.io/v2
+layout:
+- go.kubebuilder.io/v3
+projectName: postgresql-controller
 repo: go.lunarway.com/postgresql-controller
 resources:
-- group: postgresql
-  kind: PostgreSQLUser
-  version: v1alpha1
-- group: postgresql
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: lunar.tech
+  group: postgresql
   kind: PostgreSQLDatabase
+  path: go.lunarway.com/postgresql-controller/api/v1alpha1
   version: v1alpha1
-plugins:
-  go.sdk.operatorframework.io/v2-alpha: {}
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: lunar.tech
+  group: postgresql
+  kind: PostgreSQLUser
+  path: go.lunarway.com/postgresql-controller/api/v1alpha1
+  version: v1alpha1
+version: "3"
