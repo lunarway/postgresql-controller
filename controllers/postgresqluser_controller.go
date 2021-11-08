@@ -65,6 +65,7 @@ const userFinalizer = "postgresqluser.lunar.tech/finalizer"
 //+kubebuilder:rbac:groups=postgresql.lunar.tech,resources=postgresqlusers,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=postgresql.lunar.tech,resources=postgresqlusers/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=postgresql.lunar.tech,resources=postgresqlusers/finalizers,verbs=update
+//+kubebuilder:rbac:groups="",resources=secrets;configmaps,verbs=get;list
 
 func (r *PostgreSQLUserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	reqLogger := log.FromContext(ctx)
