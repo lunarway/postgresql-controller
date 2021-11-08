@@ -7,6 +7,14 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - secrets
+  verbs:
+  - get
+  - list
+- apiGroups:
   - postgresql.lunar.tech
   resources:
   - postgresqldatabases
