@@ -17,7 +17,7 @@ jobs:
         run: echo "RELEASE_VERSION=${GITHUB_REF:10}" >> $GITHUB_ENV # extracts the tag name from refs/tags/v1.2.3
 
       - name: "Build image"
-        run: make docker-build TAG=$RELEASE_VERSION
+        run: make docker-buildx-build TAG=$RELEASE_VERSION
 
       - name: "Docker login to Quay.io"
         env:
@@ -26,4 +26,4 @@ jobs:
         run: docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD quay.io
 
       - name: "Push image"
-        run: make docker-push TAG=$RELEASE_VERSION
+        run: make docker-buildx-push TAG=$RELEASE_VERSION
