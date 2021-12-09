@@ -32,7 +32,7 @@ func (g *Granter) SyncUser(log logr.Logger, namespace, rolePrefix string, user l
 		if len(accesses) == 0 {
 			return fmt.Errorf("group accesses: %w", err)
 		}
-		log.Error(err, fmt.Sprintf("Some access requests could not be resolved. Continuating with the resolved ones"))
+		log.Error(err, "Some access requests could not be resolved. Continuating with the resolved ones")
 	}
 	log.Info(fmt.Sprintf("Found access requests for %d hosts", len(accesses)))
 
