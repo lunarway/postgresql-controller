@@ -108,7 +108,9 @@ func TestResourceValue(t *testing.T) {
 	}
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			client := fake.NewFakeClient(tc.objs...)
+			client := fake.NewClientBuilder().
+				WithRuntimeObjects(tc.objs...).
+				Build()
 
 			value, err := kube.ResourceValue(client, tc.resource, tc.namespace)
 
@@ -171,7 +173,9 @@ func TestSecretValue(t *testing.T) {
 			}
 
 			// Create a fake client to mock API calls.
-			cl := fake.NewFakeClient(objs...)
+			cl := fake.NewClientBuilder().
+				WithRuntimeObjects(objs...).
+				Build()
 
 			namespacedName := types.NamespacedName{
 				Name:      tc.secretName,
@@ -238,7 +242,9 @@ func TestConfigMapValue(t *testing.T) {
 			}
 
 			// Create a fake client to mock API calls.
-			cl := fake.NewFakeClient(objs...)
+			cl := fake.NewClientBuilder().
+				WithRuntimeObjects(objs...).
+				Build()
 
 			namespacedName := types.NamespacedName{
 				Name:      tc.configMapName,

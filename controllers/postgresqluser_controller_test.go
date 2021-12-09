@@ -119,7 +119,9 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 		database2Resource,
 		userResource,
 	}
-	cl := fake.NewFakeClient(objs...)
+	cl := fake.NewClientBuilder().
+		WithRuntimeObjects(objs...).
+		Build()
 
 	// Create a controller object with the fake client but otherwise "live" setup
 	// with database interaction
@@ -238,7 +240,9 @@ func TestReconcile_rolePrefix(t *testing.T) {
 		database1Resource,
 		userResource,
 	}
-	cl := fake.NewFakeClient(objs...)
+	cl := fake.NewClientBuilder().
+		WithRuntimeObjects(objs...).
+		Build()
 
 	// Create a controller object with the fake client but otherwise "live" setup
 	// with database interaction
@@ -387,7 +391,9 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 		database2Resource,
 		userResource,
 	}
-	cl := fake.NewFakeClient(objs...)
+	cl := fake.NewClientBuilder().
+		WithRuntimeObjects(objs...).
+		Build()
 
 	// Create a controller object with the fake client but otherwise "live" setup
 	// with database interaction
