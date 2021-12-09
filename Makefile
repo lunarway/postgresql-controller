@@ -66,6 +66,12 @@ build: generate fmt vet ## Build manager binary.
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./main.go
 
+docker-buildx-build: test
+	docker buildx build --platform=linux/amd64,linux/arm64 -t ${IMG} .
+
+docker-buildx-push: docker-buildx-build
+	docker buildx build --platform=linux/amd64,linux/arm64 -t ${IMG} --push .
+
 docker-build: test ## Build docker image with the manager.
 	docker build -t ${IMG} .
 
