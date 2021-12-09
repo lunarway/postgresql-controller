@@ -3,13 +3,13 @@ module go.lunarway.com/postgresql-controller
 go 1.17
 
 require (
-	github.com/aws/aws-sdk-go v1.41.2
+	github.com/aws/aws-sdk-go v1.42.21
 	github.com/go-logr/logr v0.3.0
-	github.com/google/uuid v1.1.2
-	github.com/lib/pq v1.10.3
+	github.com/google/uuid v1.3.0
+	github.com/lib/pq v1.10.4
 	github.com/spf13/pflag v1.0.5
-	github.com/stretchr/testify v1.6.1
-	go.uber.org/multierr v1.5.0
+	github.com/stretchr/testify v1.7.0
+	go.uber.org/multierr v1.7.0
 	k8s.io/api v0.20.2
 	k8s.io/apimachinery v0.20.2
 	k8s.io/client-go v0.20.2
@@ -50,7 +50,7 @@ require (
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.10.0 // indirect
 	github.com/prometheus/procfs v0.2.0 // indirect
-	go.uber.org/atomic v1.6.0 // indirect
+	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/zap v1.15.0 // indirect
 	golang.org/x/crypto v0.0.0-20201002170205-7f63de1d35b0 // indirect
 	golang.org/x/net v0.0.0-20210614182718-04defd469f4e // indirect
@@ -63,7 +63,7 @@ require (
 	google.golang.org/protobuf v1.25.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.3.0 // indirect
-	gopkg.in/yaml.v3 v3.0.0-20200615113413-eeeca48fe776 // indirect
+	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 	k8s.io/apiextensions-apiserver v0.20.1 // indirect
 	k8s.io/component-base v0.20.2 // indirect
 	k8s.io/klog/v2 v2.4.0 // indirect
