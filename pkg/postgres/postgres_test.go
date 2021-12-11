@@ -31,7 +31,7 @@ func TestConnectionString_Raw(t *testing.T) {
 				User:     "user",
 				Password: "",
 			},
-			raw: "user=user host=host port=5432 sslmode=disable",
+			raw: "postgresql://user:@host:5432?sslmode=disable",
 		},
 		{
 			name: "no password",
@@ -41,7 +41,7 @@ func TestConnectionString_Raw(t *testing.T) {
 				User:     "user",
 				Password: "",
 			},
-			raw: "user=user host=host port=5432 dbname=database sslmode=disable",
+			raw: "postgresql://user:@host:5432/database?sslmode=disable",
 		},
 		{
 			name: "complete",
@@ -51,7 +51,7 @@ func TestConnectionString_Raw(t *testing.T) {
 				User:     "user",
 				Password: "1234",
 			},
-			raw: "user=user password=1234 host=host port=5432 dbname=database sslmode=disable",
+			raw: "postgresql://user:1234@host:5432/database?sslmode=disable",
 		},
 		{
 			name: "complete with params",
@@ -62,7 +62,17 @@ func TestConnectionString_Raw(t *testing.T) {
 				Password: "1234",
 				Params:   "sslmode=strict",
 			},
-			raw: "user=user password=1234 host=host port=5432 dbname=database sslmode=strict",
+			raw: "postgresql://user:1234@host:5432/database?sslmode=strict",
+		},
+		{
+			name: "special characters in password",
+			connectionString: postgres.ConnectionString{
+				Host:     "host:5432",
+				Database: "database",
+				User:     "user",
+				Password: "12:34",
+			},
+			raw: "postgresql://user:12%3A34@host:5432/database?sslmode=disable",
 		},
 	}
 	for _, tc := range tt {
@@ -80,9 +90,9 @@ func TestConnectionString_String(t *testing.T) {
 		Host:     "host:5432",
 		Database: "database",
 		User:     "user",
-		Password: "1234",
+		Password: "12:34",
 	}
-	expected := "user=user password=******** host=host port=5432 dbname=database sslmode=disable"
+	expected := "postgresql://user:********@host:5432/database?sslmode=disable"
 	assert.Equal(t, fmt.Sprintf("%s", connectionString), expected, "connection string not as expected") //nolint:gosimple
 	assert.Equal(t, fmt.Sprintf("%v", connectionString), expected, "connection string not as expected")
 	assert.Equal(t, expected, connectionString.String(), "connection string not as expected")

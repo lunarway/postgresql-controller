@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -25,39 +26,17 @@ type ConnectionString struct {
 
 // Raw returns a PostgreSQL connection string.
 func (c ConnectionString) Raw() string {
-	params := c.Params
-	if params == "" {
-		params = "sslmode=disable"
-	}
-
-	var host, port string
-	idx := strings.Index(c.Host, ":")
-	if idx >= 0 {
-		host = c.Host[:idx]
-		port = fmt.Sprintf(" port=%s", c.Host[idx+1:])
-	} else {
-		host = c.Host
-	}
-
-	var password string
-	if c.Password != "" {
-		password = fmt.Sprintf(" password=%s", c.Password)
-	}
-
-	var database string
+	raw := fmt.Sprintf("postgresql://%s:%s@%s", c.User, url.QueryEscape(c.Password), c.Host)
 	if c.Database != "" {
-		database = fmt.Sprintf(" dbname=%s", c.Database)
+		raw += fmt.Sprintf("/%s", c.Database)
 	}
-
-	return fmt.Sprintf(
-		"user=%s%s host=%s%s%s %s",
-		c.User,
-		password,
-		host,
-		port,
-		database,
-		params,
-	)
+	if c.Params != "" {
+		raw += fmt.Sprintf("?%s", c.Params)
+	} else {
+		// backwards compatibility
+		raw += "?sslmode=disable"
+	}
+	return raw
 }
 
 var _ fmt.Stringer = ConnectionString{}
@@ -67,7 +46,7 @@ func (c ConnectionString) String() string {
 	if c.Password == "" {
 		return raw
 	}
-	return strings.ReplaceAll(raw, c.Password, "********")
+	return strings.ReplaceAll(raw, url.QueryEscape(c.Password), "********")
 }
 
 func Connect(log logr.Logger, connectionString ConnectionString) (*sql.DB, error) {
