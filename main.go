@@ -35,7 +35,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	postgresqllunartechv1alpha1 "go.lunarway.com/postgresql-controller/api/v1alpha1"
-	postgresqlv1alpha1 "go.lunarway.com/postgresql-controller/api/v1alpha1"
 	"go.lunarway.com/postgresql-controller/controllers"
 	"go.lunarway.com/postgresql-controller/pkg/grants"
 	"go.lunarway.com/postgresql-controller/pkg/iam"
@@ -52,7 +51,6 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(postgresqllunartechv1alpha1.AddToScheme(scheme))
-	utilruntime.Must(postgresqlv1alpha1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 
