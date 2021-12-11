@@ -242,46 +242,30 @@ type EnsureParams struct {
 }
 
 func (r *PostgreSQLDatabaseReconciler) EnsurePostgreSQLDatabase(ctx context.Context, log logr.Logger, params *EnsureParams) error {
-	// fetch the host address and master credentials
-	host, master, err := r.credentials(ctx, params)
+	host, credentials, err := r.credentials(ctx, params)
 	if err != nil {
 		return fmt.Errorf("determining host credentials: %w", err)
 	}
-
-	// build the connection string
 	connectionString := postgres.ConnectionString{
 		Host:     host,
 		Database: "postgres", // default database
-		User:     master.Name,
-		Password: master.Password,
-		Params:   master.Params,
+		User:     credentials.Name,
+		Password: credentials.Password,
+		Params:   credentials.Params,
 	}
-
-	// open a database connection
 	db, err := postgres.Connect(log, connectionString)
 	if err != nil {
-		return fmt.Errorf("connecting to host `%s`: %w", connectionString, err)
+		return fmt.Errorf("connect to host %s: %w", connectionString, err)
 	}
 	defer func() {
-		if err := db.Close(); err != nil {
-			log.Error(
-				err,
-				"failed to close database connection",
-				"host", host,
-				"database", "postgres",
-				"user", master.Name,
-			)
+		err := db.Close()
+		if err != nil {
+			log.Error(err, "failed to close database connection", "host", host, "database", "postgres", "user", credentials.Name)
 		}
 	}()
-
-	// create the database
-	if err := postgres.Database(log, db, host, params.Target); err != nil {
-		return fmt.Errorf(
-			"creating database `%s` on host `%s`: %w",
-			params.Target.Name,
-			connectionString,
-			err,
-		)
+	err = postgres.Database(log, db, host, params.Target)
+	if err != nil {
+		return fmt.Errorf("create database %s on host %s: %w", params.Target.Name, connectionString, err)
 	}
 	return nil
 }
