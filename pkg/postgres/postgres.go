@@ -29,12 +29,33 @@ func (c ConnectionString) Raw() string {
 	if params == "" {
 		params = "sslmode=disable"
 	}
+
+	var host, port string
+	idx := strings.Index(c.Host, ":")
+	if idx >= 0 {
+		host = c.Host[:idx]
+		port = fmt.Sprintf(" port=%s", c.Host[idx+1:])
+	} else {
+		host = c.Host
+	}
+
+	var password string
+	if c.Password != "" {
+		password = fmt.Sprintf(" password=%s", c.Password)
+	}
+
+	var database string
+	if c.Database != "" {
+		database = fmt.Sprintf(" dbname=%s", c.Database)
+	}
+
 	return fmt.Sprintf(
-		"user=%s password=%s host=%s dbname=%s %s",
+		"user=%s%s host=%s%s%s %s",
 		c.User,
-		c.Password,
-		c.Host,
-		c.Database,
+		password,
+		host,
+		port,
+		database,
 		params,
 	)
 }

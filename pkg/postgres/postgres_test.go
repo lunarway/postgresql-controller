@@ -31,7 +31,7 @@ func TestConnectionString_Raw(t *testing.T) {
 				User:     "user",
 				Password: "",
 			},
-			raw: "postgresql://user:@host:5432?sslmode=disable",
+			raw: "user=user host=host port=5432 sslmode=disable",
 		},
 		{
 			name: "no password",
@@ -41,7 +41,7 @@ func TestConnectionString_Raw(t *testing.T) {
 				User:     "user",
 				Password: "",
 			},
-			raw: "postgresql://user:@host:5432/database?sslmode=disable",
+			raw: "user=user host=host port=5432 dbname=database sslmode=disable",
 		},
 		{
 			name: "complete",
@@ -51,7 +51,7 @@ func TestConnectionString_Raw(t *testing.T) {
 				User:     "user",
 				Password: "1234",
 			},
-			raw: "postgresql://user:1234@host:5432/database?sslmode=disable",
+			raw: "user=user password=1234 host=host port=5432 dbname=database sslmode=disable",
 		},
 		{
 			name: "complete with params",
@@ -62,7 +62,7 @@ func TestConnectionString_Raw(t *testing.T) {
 				Password: "1234",
 				Params:   "sslmode=strict",
 			},
-			raw: "postgresql://user:1234@host:5432/database?sslmode=strict",
+			raw: "user=user password=1234 host=host port=5432 dbname=database sslmode=strict",
 		},
 	}
 	for _, tc := range tt {
@@ -82,7 +82,7 @@ func TestConnectionString_String(t *testing.T) {
 		User:     "user",
 		Password: "1234",
 	}
-	expected := "postgresql://user:********@host:5432/database?sslmode=disable"
+	expected := "user=user password=******** host=host port=5432 dbname=database sslmode=disable"
 	assert.Equal(t, fmt.Sprintf("%s", connectionString), expected, "connection string not as expected") //nolint:gosimple
 	assert.Equal(t, fmt.Sprintf("%v", connectionString), expected, "connection string not as expected")
 	assert.Equal(t, expected, connectionString.String(), "connection string not as expected")
