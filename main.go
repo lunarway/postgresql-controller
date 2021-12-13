@@ -122,7 +122,6 @@ func main() {
 	if err = (&controllers.PostgreSQLDatabaseReconciler{
 		Client: mgr.GetClient(),
 		Log:    ctrl.Log.WithName("controllers").WithName("PostgreSQLDatabase"),
-		Scheme: mgr.GetScheme(),
 
 		HostCredentials: config.HostCredentials,
 	}).SetupWithManager(mgr); err != nil {

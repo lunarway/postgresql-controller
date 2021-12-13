@@ -26,7 +26,6 @@ import (
 	ctlerrors "go.lunarway.com/postgresql-controller/pkg/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -41,8 +40,7 @@ import (
 // PostgreSQLDatabaseReconciler reconciles a PostgreSQLDatabase object
 type PostgreSQLDatabaseReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	Log logr.Logger
 
 	// contains a map of credentials for hosts
 	HostCredentials map[string]postgres.Credentials
@@ -103,7 +101,7 @@ func (r *PostgreSQLDatabaseReconciler) reconcile(ctx context.Context, reqLogger 
 		now:      metav1.Now,
 		database: database,
 	}
-	host, adminCredentials, err := r.adminCredentials(ctx, &adminCredentialsParams{
+	host, adminCredentials, err := r.adminCredentials(ctx, reqLogger, &adminCredentialsParams{
 		namespace:       request.NamespacedName.Namespace,
 		host:            database.Spec.Host,
 		hostCredentials: database.Spec.HostCredentials,
@@ -279,7 +277,7 @@ type adminCredentialsParams struct {
 // otherwise it will search the Kubernetes namespace for a
 // `PostgreSQLHostCredentials` with the name specified in
 // `params.HostCredentials`.
-func (r *PostgreSQLDatabaseReconciler) adminCredentials(ctx context.Context, params *adminCredentialsParams) (string, *postgres.Credentials, error) {
+func (r *PostgreSQLDatabaseReconciler) adminCredentials(ctx context.Context, reqLogger logr.Logger, params *adminCredentialsParams) (string, *postgres.Credentials, error) {
 	host, err := kube.ResourceValue(r.Client, params.host, params.namespace)
 	if err != nil {
 		// if the `host` value is missing, we want to keep going because it
@@ -293,12 +291,18 @@ func (r *PostgreSQLDatabaseReconciler) adminCredentials(ctx context.Context, par
 	// empty, then return credentials stored in the corresponding
 	// `PostgreSQLHostCredentials` resource.
 	if host == "" && params.hostCredentials != "" {
-		return r.remoteCredentials(ctx, params)
+		reqLogger.Info(fmt.Sprintf("Using remote host credential from PostgreSQLHostCredentials resource %s/%s", params.namespace, params.hostCredentials))
+		host, credentials, err := r.remoteCredentials(ctx, params.namespace, params.hostCredentials)
+		if err != nil {
+			return "", nil, fmt.Errorf("get remote credentials %s/%s: %w", params.namespace, params.hostCredentials, err)
+		}
+		return host, credentials, nil
 	}
 
 	// If the `Host` field is populated but no the `HostCredentials` field,
 	// then return the credentials from the `r.HostCredentials` map.
 	if params.hostCredentials == "" && host != "" {
+		reqLogger.Info("Using local host credential from controller arguments")
 		cs, ok := r.HostCredentials[host]
 		if !ok {
 			return "", nil, ctlerrors.NewInvalid(fmt.Errorf("unknown credentials for host"))
@@ -311,62 +315,39 @@ func (r *PostgreSQLDatabaseReconciler) adminCredentials(ctx context.Context, par
 	return "", nil, ctlerrors.NewInvalid(fmt.Errorf("must specify exactly one of `host` and `hostCredentials`"))
 }
 
-// remoteCredentials resolves the credentials from a
-// `PostgreSQLHostCredentials` resource.
-func (r *PostgreSQLDatabaseReconciler) remoteCredentials(ctx context.Context, params *adminCredentialsParams) (string, *postgres.Credentials, error) {
+// remoteCredentials resolves the credentials from a `PostgreSQLHostCredentials`
+// resource.
+func (r *PostgreSQLDatabaseReconciler) remoteCredentials(ctx context.Context, namespace, name string) (string, *postgres.Credentials, error) {
 	// Fetch the `PostgreSQLHostCredentials` from the API.
 	var hostCreds postgresqlv1alpha1.PostgreSQLHostCredentials
 	err := r.Client.Get(
 		ctx,
 		types.NamespacedName{
-			Namespace: params.namespace,
-			Name:      params.hostCredentials,
+			Namespace: namespace,
+			Name:      name,
 		},
 		&hostCreds,
 	)
 	if err != nil {
-		if apierrors.IsNotFound(err) {
-			return "", nil, ctlerrors.NewInvalid(fmt.Errorf("unknown credentials for host"))
-		}
-		return "", nil, fmt.Errorf(
-			"looking up PostgreSQLHostCredentials %s/%s: %w",
-			params.namespace,
-			params.hostCredentials,
-			err,
-		)
+		return "", nil, fmt.Errorf("get PostgreSQLHostCredentials resource: %w", err)
 	}
 
 	// Resolve the `user` field.
 	user, err := kube.ResourceValue(r.Client, hostCreds.Spec.User, hostCreds.Namespace)
 	if err != nil {
-		return "", nil, fmt.Errorf(
-			"resolving PostgreSQLHostCredentials `%s/%s`: %w",
-			params.namespace,
-			params.hostCredentials,
-			err,
-		)
+		return "", nil, fmt.Errorf("resolve user resource var: %w", err)
 	}
 
 	// Resolve the `password` field.
 	password, err := kube.ResourceValue(r.Client, hostCreds.Spec.Password, hostCreds.Namespace)
 	if err != nil {
-		return "", nil, fmt.Errorf(
-			"resolving PostgreSQLHostCredentials `%s/%s`: %w",
-			params.namespace,
-			params.hostCredentials,
-			err,
-		)
+		return "", nil, fmt.Errorf("resolve password resource var: %w", err)
 	}
 
 	// Resolve the `host` field.
 	host, err := kube.ResourceValue(r.Client, hostCreds.Spec.Host, hostCreds.Namespace)
 	if err != nil {
-		return "", nil, fmt.Errorf(
-			"resolving PostgreSQLHostCredentials `%s/%s`: %w",
-			params.namespace,
-			params.hostCredentials,
-			err,
-		)
+		return "", nil, fmt.Errorf("resolve host resource var: %w", err)
 	}
 
 	// Return the resulting host and credentials
