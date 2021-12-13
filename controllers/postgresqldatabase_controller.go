@@ -283,14 +283,15 @@ func (r *PostgreSQLDatabaseReconciler) credentials(ctx context.Context, params *
 	if params.Host == "" && params.HostCredentials != "" {
 		// Fetch the `PostgreSQLHostCredentials` from the API.
 		var hostCreds postgresqlv1alpha1.PostgreSQLHostCredentials
-		if err := r.Client.Get(
+		err := r.Client.Get(
 			ctx,
 			types.NamespacedName{
 				Namespace: params.Namespace,
 				Name:      params.HostCredentials,
 			},
 			&hostCreds,
-		); err != nil {
+		)
+		if err != nil {
 			if apierrors.IsNotFound(err) {
 				return "", nil, &ctlerrors.Invalid{
 					Err: fmt.Errorf("unknown credentials for host"),
