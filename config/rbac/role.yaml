@@ -37,6 +37,28 @@ rules:
 - apiGroups:
   - postgresql.lunar.tech
   resources:
+  - postgresqlhostcredentials
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - postgresql.lunar.tech
+  resources:
+  - postgresqlhostcredentials/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - postgresql.lunar.tech
+  resources:
+  - postgresqlhostcredentials/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - postgresql.lunar.tech
+  resources:
   - postgresqlusers
   verbs:
   - create

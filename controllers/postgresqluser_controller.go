@@ -77,7 +77,7 @@ func (r *PostgreSQLUserReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	reqLogger = reqLogger.WithValues("requestId", requestID.String())
 	reqLogger.Info("Reconciling PostgreSQLUSer")
 
-	result, err := r.reconcile(reqLogger, req)
+	result, err := r.reconcile(ctx, reqLogger, req)
 	if err != nil {
 		reqLogger.Error(err, "Failed to reconcile PostgreSQLUser object")
 	}
@@ -101,10 +101,10 @@ func inList(haystack []string, needle string) bool {
 	return false
 }
 
-func (r *PostgreSQLUserReconciler) reconcile(reqLogger logr.Logger, request reconcile.Request) (ctrl.Result, error) {
+func (r *PostgreSQLUserReconciler) reconcile(ctx context.Context, reqLogger logr.Logger, request reconcile.Request) (ctrl.Result, error) {
 	// Fetch the PostgreSQLUser instance
 	user := &postgresqlv1alpha1.PostgreSQLUser{}
-	err := r.Client.Get(context.TODO(), request.NamespacedName, user)
+	err := r.Client.Get(ctx, request.NamespacedName, user)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -156,7 +156,7 @@ func (r *PostgreSQLUserReconciler) reconcile(reqLogger logr.Logger, request reco
 		// Remove finalizer. Once all finalizers have been
 		// removed, the object will be deleted.
 		controllerutil.RemoveFinalizer(user, userFinalizer)
-		err := r.Update(context.TODO(), user)
+		err := r.Update(ctx, user)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -168,7 +168,7 @@ func (r *PostgreSQLUserReconciler) reconcile(reqLogger logr.Logger, request reco
 	if !inList(user.Finalizers, userFinalizer) {
 		controllerutil.AddFinalizer(user, userFinalizer)
 
-		err = r.Update(context.TODO(), user)
+		err = r.Update(ctx, user)
 		if err != nil {
 			return ctrl.Result{}, err
 		}

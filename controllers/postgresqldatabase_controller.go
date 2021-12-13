@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/go-logr/logr"
@@ -26,6 +27,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -58,8 +60,8 @@ func (r *PostgreSQLDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.R
 		reqLogger.Error(err, "Failed to pick a request ID. Continuing without")
 	}
 	reqLogger = reqLogger.WithValues("requestId", requestID.String())
-	status, err := r.reconcile(reqLogger, req)
-	status.Persist(err, r.Log)
+	status, err := r.reconcile(ctx, reqLogger, req)
+	status.Persist(ctx, err, r.Log)
 
 	if err != nil {
 		reqLogger.Error(err, "Failed to reconcile PostgreSQLDatabase object")
@@ -74,11 +76,11 @@ func (r *PostgreSQLDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error 
 		Complete(r)
 }
 
-func (r *PostgreSQLDatabaseReconciler) reconcile(reqLogger logr.Logger, request reconcile.Request) (status, error) {
+func (r *PostgreSQLDatabaseReconciler) reconcile(ctx context.Context, reqLogger logr.Logger, request reconcile.Request) (status, error) {
 	reqLogger.Info("Reconciling PostgreSQLDatabase")
 	// Fetch the PostgreSQLDatabase instance
 	database := &postgresqlv1alpha1.PostgreSQLDatabase{}
-	err := r.Client.Get(context.TODO(), request.NamespacedName, database)
+	err := r.Client.Get(ctx, request.NamespacedName, database)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -101,9 +103,13 @@ func (r *PostgreSQLDatabaseReconciler) reconcile(reqLogger logr.Logger, request 
 		now:      metav1.Now,
 		database: database,
 	}
-	host, err := kube.ResourceValue(r.Client, database.Spec.Host, request.Namespace)
+	host, adminCredentials, err := r.adminCredentials(ctx, &adminCredentialsParams{
+		namespace:       request.NamespacedName.Namespace,
+		host:            database.Spec.Host,
+		hostCredentials: database.Spec.HostCredentials,
+	})
 	if err != nil {
-		return status, fmt.Errorf("resolve host reference: %w", err)
+		return status, fmt.Errorf("determining host credentials: %w", err)
 	}
 	status.host = host
 	reqLogger = reqLogger.WithValues("host", host)
@@ -127,7 +133,20 @@ func (r *PostgreSQLDatabaseReconciler) reconcile(reqLogger logr.Logger, request 
 	reqLogger.Info("Resolved all referenced values for PostgreSQLDatabase resource")
 
 	// Ensure the database is in sync with the object
-	err = r.EnsurePostgreSQLDatabase(reqLogger, host, database.Spec.Name, user, password, isShared)
+	err = r.EnsurePostgreSQLDatabase(
+		ctx,
+		reqLogger,
+		&EnsureParams{
+			Host:  host,
+			Admin: *adminCredentials,
+			Target: postgres.Credentials{
+				Name:     database.Spec.Name,
+				User:     user,
+				Password: password,
+				Shared:   isShared,
+			},
+		},
+	)
 	if err != nil {
 		return status, fmt.Errorf("ensure database: %w", err)
 	}
@@ -146,12 +165,12 @@ type status struct {
 
 // Persist writes the status to a PostgreSQLDatabase instance and persists it on
 // client. Any errors are logged.
-func (s *status) Persist(err error, log logr.Logger) {
+func (s *status) Persist(ctx context.Context, err error, log logr.Logger) {
 	ok := s.update(err)
 	if !ok {
 		return
 	}
-	err = s.client.Status().Update(context.TODO(), s.database)
+	err = s.client.Status().Update(ctx, s.database)
 	if err != nil {
 		log.Error(err, "failed to set status of database", "status", s)
 	}
@@ -199,19 +218,27 @@ func stopRequeueOnInvalid(log logr.Logger, err error) error {
 	return nil
 }
 
-func (r *PostgreSQLDatabaseReconciler) EnsurePostgreSQLDatabase(log logr.Logger, host, name, user, password string, isShared bool) error {
-	credentials, ok := r.HostCredentials[host]
-	if !ok {
-		return &ctlerrors.Invalid{
-			Err: fmt.Errorf("unknown credentials for host"),
-		}
-	}
+// EnsureParams contains the required parameters for
+// `PostgreSQLDatabaseReconciler.EnsurePostgreSQLDatabase()`.
+type EnsureParams struct {
+	// Host is the host name for the database instance.
+	Host string
+
+	// Admin holds the administrator credentials for the database instance.
+	Admin postgres.Credentials
+
+	// Target contains the credentials for the Postgres database that we intend
+	// to create.
+	Target postgres.Credentials
+}
+
+func (r *PostgreSQLDatabaseReconciler) EnsurePostgreSQLDatabase(ctx context.Context, log logr.Logger, params *EnsureParams) error {
 	connectionString := postgres.ConnectionString{
-		Host:     host,
+		Host:     params.Host,
 		Database: "postgres", // default database
-		User:     credentials.Name,
-		Password: credentials.Password,
-		Params:   credentials.Params,
+		User:     params.Admin.Name,
+		Password: params.Admin.Password,
+		Params:   params.Admin.Params,
 	}
 	db, err := postgres.Connect(log, connectionString)
 	if err != nil {
@@ -220,17 +247,133 @@ func (r *PostgreSQLDatabaseReconciler) EnsurePostgreSQLDatabase(log logr.Logger,
 	defer func() {
 		err := db.Close()
 		if err != nil {
-			log.Error(err, "failed to close database connection", "host", host, "database", "postgres", "user", credentials.Name)
+			log.Error(err, "failed to close database connection", "host", params.Host, "database", "postgres", "user", params.Admin.Name)
 		}
 	}()
-	err = postgres.Database(log, db, host, postgres.Credentials{
-		Name:     name,
-		User:     user,
-		Password: password,
-		Shared:   isShared,
-	})
+	err = postgres.Database(log, db, params.Host, params.Target)
 	if err != nil {
-		return fmt.Errorf("create database %s on host %s: %w", name, connectionString, err)
+		return fmt.Errorf("create database %s on host %s: %w", params.Target.Name, connectionString, err)
 	}
 	return nil
+}
+
+type adminCredentialsParams struct {
+	// namespace is the namespace containing the target PostgreSQLDatabase
+	// resource.
+	namespace string
+
+	// host is the host name of the host. If it is provided, its value must be
+	// a key in the `PostgreSQLDatabaseReconciler`'s `HostCredentials` map
+	// field. It must not be provided if `HostCredentials` is provided.
+	host postgresqlv1alpha1.ResourceVar
+
+	// hostCredentials is the name of the `PostgreSQLHostCredentials` resource
+	// in the same namespace. It must not be provided if `Host` is provided.
+	hostCredentials string
+}
+
+// adminCredentials returns the correct `postgres.Credentials` based on the
+// values of `params.Host` and `params.HostCredentials` fields of `params`.
+// Exactly one of these fields must be set, and if `Host` is set, then this
+// method will return the adminCredentials from `r.HostCredentials` map,
+// otherwise it will search the Kubernetes namespace for a
+// `PostgreSQLHostCredentials` with the name specified in
+// `params.HostCredentials`.
+func (r *PostgreSQLDatabaseReconciler) adminCredentials(ctx context.Context, params *adminCredentialsParams) (string, *postgres.Credentials, error) {
+	host, err := kube.ResourceValue(r.Client, params.host, params.namespace)
+	if err != nil {
+		// if the `host` value is missing, we want to keep going because it
+		// should mean that the `hostCredentials` is provided.
+		if !errors.Is(err, kube.ErrNoValue) {
+			return "", nil, fmt.Errorf("resolve host reference: %w", err)
+		}
+	}
+
+	// If the `HostCredentials` field is populated and the `Host` field is
+	// empty, then return credentials stored in the corresponding
+	// `PostgreSQLHostCredentials` resource.
+	if host == "" && params.hostCredentials != "" {
+		return r.remoteCredentials(ctx, params)
+	}
+
+	// If the `Host` field is populated but no the `HostCredentials` field,
+	// then return the credentials from the `r.HostCredentials` map.
+	if params.hostCredentials == "" && host != "" {
+		cs, ok := r.HostCredentials[host]
+		if !ok {
+			return "", nil, ctlerrors.NewInvalid(fmt.Errorf("unknown credentials for host"))
+		}
+		return host, &cs, nil
+	}
+
+	// If we got here, neither or both of the fields are populated. Return an
+	// error.
+	return "", nil, ctlerrors.NewInvalid(fmt.Errorf("must specify exactly one of `host` and `hostCredentials`"))
+}
+
+// remoteCredentials resolves the credentials from a
+// `PostgreSQLHostCredentials` resource.
+func (r *PostgreSQLDatabaseReconciler) remoteCredentials(ctx context.Context, params *adminCredentialsParams) (string, *postgres.Credentials, error) {
+	// Fetch the `PostgreSQLHostCredentials` from the API.
+	var hostCreds postgresqlv1alpha1.PostgreSQLHostCredentials
+	err := r.Client.Get(
+		ctx,
+		types.NamespacedName{
+			Namespace: params.namespace,
+			Name:      params.hostCredentials,
+		},
+		&hostCreds,
+	)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return "", nil, ctlerrors.NewInvalid(fmt.Errorf("unknown credentials for host"))
+		}
+		return "", nil, fmt.Errorf(
+			"looking up PostgreSQLHostCredentials %s/%s: %w",
+			params.namespace,
+			params.hostCredentials,
+			err,
+		)
+	}
+
+	// Resolve the `user` field.
+	user, err := kube.ResourceValue(r.Client, hostCreds.Spec.User, hostCreds.Namespace)
+	if err != nil {
+		return "", nil, fmt.Errorf(
+			"resolving PostgreSQLHostCredentials `%s/%s`: %w",
+			params.namespace,
+			params.hostCredentials,
+			err,
+		)
+	}
+
+	// Resolve the `password` field.
+	password, err := kube.ResourceValue(r.Client, hostCreds.Spec.Password, hostCreds.Namespace)
+	if err != nil {
+		return "", nil, fmt.Errorf(
+			"resolving PostgreSQLHostCredentials `%s/%s`: %w",
+			params.namespace,
+			params.hostCredentials,
+			err,
+		)
+	}
+
+	// Resolve the `host` field.
+	host, err := kube.ResourceValue(r.Client, hostCreds.Spec.Host, hostCreds.Namespace)
+	if err != nil {
+		return "", nil, fmt.Errorf(
+			"resolving PostgreSQLHostCredentials `%s/%s`: %w",
+			params.namespace,
+			params.hostCredentials,
+			err,
+		)
+	}
+
+	// Return the resulting host and credentials
+	return host, &postgres.Credentials{
+		Name:     user,
+		User:     user,
+		Password: password,
+		Params:   hostCreds.Spec.Params,
+	}, nil
 }

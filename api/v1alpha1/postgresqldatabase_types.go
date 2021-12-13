@@ -51,8 +51,15 @@ type PostgreSQLDatabaseSpec struct {
 	// +optional
 	IsShared bool `json:"isShared"`
 
-	// Host that the database should be created on.
+	// Host that the database should be created on. This should be omitted if
+	// HostCredentials is provided.
+	// +optional
 	Host ResourceVar `json:"host"`
+
+	// HostCredentials is the name of a PostgreSQLHostCredentials resource in
+	// the same namespace. This should be omitted if Host is provided.
+	// +optional
+	HostCredentials string `json:"hostCredentials,omitempty"`
 }
 
 // PostgreSQLDatabasePhase represents the current phase of a PostgreSQL
