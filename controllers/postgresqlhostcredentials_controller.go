@@ -38,7 +38,7 @@ type PostgreSQLHostCredentialsReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-//+kubebuilder:rbac:groups=postgresql.lunar.tech,resources=postgresqlhostcredentials,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=postgresql.lunar.tech,resources=postgresqlhostcredentials,verbs=get;list;watch
 //+kubebuilder:rbac:groups=postgresql.lunar.tech,resources=postgresqlhostcredentials/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=postgresql.lunar.tech,resources=postgresqlhostcredentials/finalizers,verbs=update
 
@@ -70,7 +70,8 @@ func (r *PostgreSQLHostCredentialsReconciler) SetupWithManager(mgr ctrl.Manager)
 
 func (r *PostgreSQLHostCredentialsReconciler) reconcile(ctx context.Context, reqLogger logr.Logger, request reconcile.Request) (ctrl.Result, error) {
 	creds := postgresqlv1alpha1.PostgreSQLHostCredentials{}
-	if err := r.Client.Get(ctx, request.NamespacedName, &creds); err != nil {
+	err := r.Client.Get(ctx, request.NamespacedName, &creds)
+	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.

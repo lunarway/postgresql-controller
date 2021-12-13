@@ -39,12 +39,8 @@ rules:
   resources:
   - postgresqlhostcredentials
   verbs:
-  - create
-  - delete
   - get
   - list
-  - patch
-  - update
   - watch
 - apiGroups:
   - postgresql.lunar.tech
