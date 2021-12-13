@@ -219,8 +219,7 @@ func stopRequeueOnInvalid(log logr.Logger, err error) error {
 }
 
 // EnsureParams contains the required parameters for
-// `PostgreSQLDatabaseReconciler.EnsurePostgreSQLDatabase()`. It's exported to
-// match the method for which it's intended.
+// `PostgreSQLDatabaseReconciler.EnsurePostgreSQLDatabase()`.
 type EnsureParams struct {
 	// Host is the host name for the database instance.
 	Host string
