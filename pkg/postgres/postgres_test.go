@@ -64,6 +64,16 @@ func TestConnectionString_Raw(t *testing.T) {
 			},
 			raw: "postgresql://user:1234@host:5432/database?sslmode=strict",
 		},
+		{
+			name: "special characters in password",
+			connectionString: postgres.ConnectionString{
+				Host:     "host:5432",
+				Database: "database",
+				User:     "user",
+				Password: "12:34",
+			},
+			raw: "postgresql://user:12%3A34@host:5432/database?sslmode=disable",
+		},
 	}
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
@@ -80,7 +90,7 @@ func TestConnectionString_String(t *testing.T) {
 		Host:     "host:5432",
 		Database: "database",
 		User:     "user",
-		Password: "1234",
+		Password: "12:34",
 	}
 	expected := "postgresql://user:********@host:5432/database?sslmode=disable"
 	assert.Equal(t, fmt.Sprintf("%s", connectionString), expected, "connection string not as expected") //nolint:gosimple
