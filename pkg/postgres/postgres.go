@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"net/url"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -26,7 +25,7 @@ type ConnectionString struct {
 
 // Raw returns a PostgreSQL connection string.
 func (c ConnectionString) Raw() string {
-	raw := fmt.Sprintf("postgresql://%s:%s@%s", c.User, url.QueryEscape(c.Password), c.Host)
+	raw := fmt.Sprintf("postgresql://%s:%s@%s", c.User, c.Password, c.Host)
 	if c.Database != "" {
 		raw += fmt.Sprintf("/%s", c.Database)
 	}
@@ -46,7 +45,7 @@ func (c ConnectionString) String() string {
 	if c.Password == "" {
 		return raw
 	}
-	return strings.ReplaceAll(raw, url.QueryEscape(c.Password), "********")
+	return strings.ReplaceAll(raw, c.Password, "********")
 }
 
 func Connect(log logr.Logger, connectionString ConnectionString) (*sql.DB, error) {
