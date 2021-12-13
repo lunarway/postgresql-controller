@@ -316,14 +316,15 @@ func (r *PostgreSQLDatabaseReconciler) adminCredentials(ctx context.Context, par
 func (r *PostgreSQLDatabaseReconciler) remoteCredentials(ctx context.Context, params *adminCredentialsParams) (string, *postgres.Credentials, error) {
 	// Fetch the `PostgreSQLHostCredentials` from the API.
 	var hostCreds postgresqlv1alpha1.PostgreSQLHostCredentials
-	if err := r.Client.Get(
+	err := r.Client.Get(
 		ctx,
 		types.NamespacedName{
 			Namespace: params.namespace,
 			Name:      params.hostCredentials,
 		},
 		&hostCreds,
-	); err != nil {
+	)
+	if err != nil {
 		if apierrors.IsNotFound(err) {
 			return "", nil, ctlerrors.NewInvalid(fmt.Errorf("unknown credentials for host"))
 		}
@@ -357,8 +358,19 @@ func (r *PostgreSQLDatabaseReconciler) remoteCredentials(ctx context.Context, pa
 		)
 	}
 
+	// Resolve the `host` field.
+	host, err := kube.ResourceValue(r.Client, hostCreds.Spec.Host, hostCreds.Namespace)
+	if err != nil {
+		return "", nil, fmt.Errorf(
+			"resolving PostgreSQLHostCredentials `%s/%s`: %w",
+			params.namespace,
+			params.hostCredentials,
+			err,
+		)
+	}
+
 	// Return the resulting host and credentials
-	return hostCreds.Spec.Host, &postgres.Credentials{
+	return host, &postgres.Credentials{
 		Name:     user,
 		User:     user,
 		Password: password,

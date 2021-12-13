@@ -25,11 +25,8 @@ import (
 
 // PostgreSQLHostCredentialsSpec defines the desired state of PostgreSQLHostCredentials
 type PostgreSQLHostCredentialsSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
 	// Host is the hostname of the PostgreSQL instance.
-	Host string `json:"host,omitempty"`
+	Host ResourceVar `json:"host,omitempty"`
 
 	// User is the admin user for the PostgreSQL instance. It will be used by
 	// posgresql-controller to manage resources on the host.
@@ -46,8 +43,6 @@ type PostgreSQLHostCredentialsSpec struct {
 
 // PostgreSQLHostCredentialsStatus defines the observed state of PostgreSQLHostCredentials
 type PostgreSQLHostCredentialsStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
 }
 
 //+kubebuilder:object:root=true
