@@ -37,6 +37,15 @@ func TestStatus_update(t *testing.T) {
 		after   *lunarwayv1alpha1.PostgreSQLDatabase
 	}{
 		{
+			name: "empty status",
+			status: status{
+				database: nil,
+			},
+			err:     nil,
+			changes: false,
+			after:   nil,
+		},
+		{
 			name: "new status",
 			status: status{
 				database: &lunarwayv1alpha1.PostgreSQLDatabase{

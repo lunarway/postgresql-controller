@@ -177,6 +177,10 @@ func (s *status) Persist(ctx context.Context, err error, log logr.Logger) {
 // update updates database reference based on its values and returns whether any
 // changes were written.
 func (s *status) update(err error) bool {
+	if s.database == nil {
+		return false
+	}
+
 	var errorMessage string
 	var phase postgresqlv1alpha1.PostgreSQLDatabasePhase
 	switch {
