@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -46,7 +47,7 @@ type PostgreSQLUserReconciler struct {
 	Scheme *runtime.Scheme
 
 	Granter    grants.Granter
-	AddUser    func(client *iam.Client, config iam.AddUserConfig, username string) error
+	AddUser    func(client *iam.Client, config iam.AddUserConfig, username, rolename string) error
 	RemoveUser func(client *iam.Client, awsLoginRoles []string, username string) error
 
 	RolePrefix         string
@@ -174,8 +175,11 @@ func (r *PostgreSQLUserReconciler) reconcile(ctx context.Context, reqLogger logr
 		}
 	}
 
+	// We need to sanitize the user.Spec.Name to be a valid PostgreSQL role name
+	sanitizedUser := sanitizedUser(user)
+
 	// Error check in the bottom because we want aws policy to be set no matter what.
-	granterErr := r.Granter.SyncUser(reqLogger, request.Namespace, r.RolePrefix, *user)
+	granterErr := r.Granter.SyncUser(reqLogger, request.Namespace, r.RolePrefix, *sanitizedUser)
 
 	awsPolicyErr := r.AddUser(client, iam.AddUserConfig{
 		PolicyBaseName:    r.AWSPolicyName,
@@ -184,7 +188,7 @@ func (r *PostgreSQLUserReconciler) reconcile(ctx context.Context, reqLogger logr
 		MaxUsersPerPolicy: 30,
 		RolePrefix:        r.RolePrefix,
 		AWSLoginRoles:     r.AWSLoginRoles,
-	}, user.Spec.Name)
+	}, user.Spec.Name, sanitizedUser.Spec.Name)
 
 	if granterErr != nil || awsPolicyErr != nil {
 		return ctrl.Result{}, fmt.Errorf("grantErr: %v, awsPolicyErr: %v", granterErr, awsPolicyErr)
@@ -203,4 +207,14 @@ func (r *PostgreSQLUserReconciler) finalizeUser(reqLogger logr.Logger, client *i
 	reqLogger.Info("Successfully finalized PostgreSQLUser")
 
 	return nil
+}
+
+// sanitizedUser removes characters that are not valid in PostgreSQL role names.
+func sanitizedUser(raw *postgresqlv1alpha1.PostgreSQLUser) *postgresqlv1alpha1.PostgreSQLUser {
+	sanitizedUser := raw.DeepCopy()
+
+	// remove characters not allowed in PostgreSQL roles
+	sanitizedUser.Spec.Name = strings.ReplaceAll(sanitizedUser.Spec.Name, ".", "_")
+
+	return sanitizedUser
 }

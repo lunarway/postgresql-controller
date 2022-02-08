@@ -214,7 +214,7 @@ func Test_AddRemoveUser(t *testing.T) {
 			}
 
 			if tt.operation == AddUserOperation {
-				err = AddUser(client, config, tt.user)
+				err = AddUser(client, config, tt.user, tt.user)
 				assert.NoError(err)
 			} else if tt.operation == RemoveUserOperation {
 				err = RemoveUser(client, []string{awsLoginRole}, tt.user)
