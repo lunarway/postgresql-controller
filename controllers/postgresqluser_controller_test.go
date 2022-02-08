@@ -145,7 +145,7 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 				return kube.ResourceValue(cl, resource, namespace)
 			},
 		},
-		AddUser: func(client *iam.Client, config iam.AddUserConfig, username string) error {
+		AddUser: func(client *iam.Client, config iam.AddUserConfig, username, rolename string) error {
 			return nil
 		},
 	}
@@ -267,7 +267,7 @@ func TestReconcile_rolePrefix(t *testing.T) {
 				return kube.ResourceValue(cl, resource, namespace)
 			},
 		},
-		AddUser: func(client *iam.Client, config iam.AddUserConfig, username string) error {
+		AddUser: func(client *iam.Client, config iam.AddUserConfig, username, rolename string) error {
 			return nil
 		},
 	}
@@ -292,6 +292,132 @@ func TestReconcile_rolePrefix(t *testing.T) {
 
 	// assert that the user can connect with a prefixed role
 	assertAccess(t, host, database1Name, fmt.Sprintf("%s%s", rolePrefix, userName)) // simulates what users will sign in with through AWS
+}
+
+// TestReconcile_dotInName tests that we can handle PostgeSQLUser resources with
+// a spec.name field that contains a '.' character, eg. my.name. This is needed
+// as the name is used for both the PostgreSQL role and the email in AWS policy.
+func TestReconcile_dotInName(t *testing.T) {
+	// Set the logger to development mode for verbose logs.
+	logf.SetLogger(zap.New(zap.UseDevMode(true)))
+
+	host := test.Integration(t)
+	var (
+		epoch             = time.Now().UnixNano()
+		namespace         = "default"
+		database1Name     = fmt.Sprintf("database1_%d", epoch)
+		userName          = fmt.Sprintf("user.%d", epoch)
+		userNameSanitized = fmt.Sprintf("user_%d", epoch)
+
+		// user requesting access to all databases on host
+		userResource = &lunarwayv1alpha1.PostgreSQLUser{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      userName,
+				Namespace: namespace,
+			},
+			Spec: lunarwayv1alpha1.PostgreSQLUserSpec{
+				Name: userName,
+				Read: &[]lunarwayv1alpha1.AccessSpec{
+					{
+						Host: lunarwayv1alpha1.ResourceVar{
+							Value: host,
+						},
+						AllDatabases: &trueValue,
+					},
+				},
+			},
+		}
+
+		// valid database on host
+		database1Resource = &lunarwayv1alpha1.PostgreSQLDatabase{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      database1Name,
+				Namespace: namespace,
+			},
+			Spec: lunarwayv1alpha1.PostgreSQLDatabaseSpec{
+				Name: database1Name,
+				Host: lunarwayv1alpha1.ResourceVar{
+					Value: host,
+				},
+				Password: lunarwayv1alpha1.ResourceVar{
+					Value: "123456",
+				},
+				User: lunarwayv1alpha1.ResourceVar{
+					Value: database1Name,
+				},
+			},
+			Status: lunarwayv1alpha1.PostgreSQLDatabaseStatus{
+				Phase: lunarwayv1alpha1.PostgreSQLDatabasePhaseRunning,
+			},
+		}
+	)
+
+	// Register operator types with the runtime scheme.
+	s := scheme.Scheme
+	s.AddKnownTypes(lunarwayv1alpha1.GroupVersion, database1Resource)
+	s.AddKnownTypes(lunarwayv1alpha1.GroupVersion, userResource)
+	s.AddKnownTypes(lunarwayv1alpha1.GroupVersion, &lunarwayv1alpha1.PostgreSQLDatabaseList{})
+
+	// Add tracked objects to the fake client simulating their existence in a k8s
+	// cluster
+	objs := []runtime.Object{
+		database1Resource,
+		userResource,
+	}
+	cl := fake.NewClientBuilder().
+		WithRuntimeObjects(objs...).
+		Build()
+
+	// Create a controller object with the fake client but otherwise "live" setup
+	// with database interaction
+	r := &PostgreSQLUserReconciler{
+		Client:     cl,
+		Log:        ctrl.Log.WithName(t.Name()),
+		RolePrefix: "",
+		Granter: grants.Granter{
+			Now: time.Now,
+			HostCredentials: map[string]postgres.Credentials{
+				host: {
+					Name:     "iam_creator",
+					Password: "",
+				},
+			},
+			AllDatabasesReadEnabled:  true,
+			AllDatabasesWriteEnabled: true,
+			AllDatabases: func(namespace string) ([]lunarwayv1alpha1.PostgreSQLDatabase, error) {
+				return kube.PostgreSQLDatabases(cl, namespace)
+			},
+			ResourceResolver: func(resource lunarwayv1alpha1.ResourceVar, namespace string) (string, error) {
+				return kube.ResourceValue(cl, resource, namespace)
+			},
+		},
+		AddUser: func(client *iam.Client, config iam.AddUserConfig, username, rolename string) error {
+			assert.Equal(t, userName, username, "iam username must be the original")
+			assert.Equal(t, rolename, userNameSanitized, "iam rolename must be the sanitized")
+			return nil
+		},
+	}
+
+	// seed database1 into the postgres host
+	seededDatabase(t, host, database1Name)
+
+	// reconcile user requesting access to all databases with a bad database
+	// reference
+	req := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      userName,
+			Namespace: namespace,
+		},
+	}
+	res, err := r.Reconcile(context.Background(), req)
+	assert.NoError(t, err, "reconciliation failed")
+	assert.Equal(t, reconcile.Result{
+		Requeue:      false,
+		RequeueAfter: 0,
+	}, res, "result not as expected")
+
+	// assert that the user can connect with a prefixed role
+	assertAccess(t, host, database1Name, userNameSanitized) // simulates what users will sign in with through AWS
 }
 
 // TestReconcile_multipleDatabaseResources tests that access granted by
@@ -417,7 +543,7 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 				return kube.ResourceValue(cl, resource, namespace)
 			},
 		},
-		AddUser: func(client *iam.Client, config iam.AddUserConfig, username string) error {
+		AddUser: func(client *iam.Client, config iam.AddUserConfig, username, rolename string) error {
 			return nil
 		},
 	}

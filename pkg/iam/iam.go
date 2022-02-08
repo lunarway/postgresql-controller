@@ -13,7 +13,7 @@ type AddUserConfig struct {
 	AWSLoginRoles     []string
 }
 
-func AddUser(client *Client, config AddUserConfig, username string) error {
+func AddUser(client *Client, config AddUserConfig, username, rolename string) error {
 
 	policies, err := client.ListPolicies()
 	if err != nil {
@@ -28,7 +28,7 @@ func AddUser(client *Client, config AddUserConfig, username string) error {
 
 	for _, policy := range policies {
 		if policy.Document.Count() < config.MaxUsersPerPolicy {
-			policy.Document.Add(config.Region, config.AccountID, config.RolePrefix, username)
+			policy.Document.Add(config.Region, config.AccountID, config.RolePrefix, username, rolename)
 			err := client.UpdatePolicy(policy)
 			return err
 		}
@@ -39,7 +39,7 @@ func AddUser(client *Client, config AddUserConfig, username string) error {
 		Document: &PolicyDocument{Version: "2012-10-17"},
 	}
 
-	newPolicy.Document.Add(config.Region, config.AccountID, config.RolePrefix, username)
+	newPolicy.Document.Add(config.Region, config.AccountID, config.RolePrefix, username, rolename)
 	newAwsPolicy, err := client.CreatePolicy(newPolicy)
 	if err != nil {
 		return err

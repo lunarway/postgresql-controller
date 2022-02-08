@@ -63,6 +63,7 @@ func Test_AddRemoveUser(t *testing.T) {
 		operation         string
 		existingUsers     []string
 		user              string
+		role              string
 		maxUsersPerPolicy int
 		policyCount       int
 		userCount         int
@@ -72,6 +73,7 @@ func Test_AddRemoveUser(t *testing.T) {
 			operation:         AddUserOperation,
 			existingUsers:     []string{},
 			user:              "jwr",
+			role:              "jwr",
 			maxUsersPerPolicy: 2,
 			policyCount:       1,
 			userCount:         1,
@@ -81,6 +83,7 @@ func Test_AddRemoveUser(t *testing.T) {
 			operation:         AddUserOperation,
 			existingUsers:     []string{"jwr"},
 			user:              "jwr",
+			role:              "jwr",
 			maxUsersPerPolicy: 2,
 			policyCount:       1,
 			userCount:         1,
@@ -90,6 +93,7 @@ func Test_AddRemoveUser(t *testing.T) {
 			operation:         AddUserOperation,
 			existingUsers:     []string{"kni"},
 			user:              "jwr",
+			role:              "jwr",
 			maxUsersPerPolicy: 2,
 			policyCount:       1,
 			userCount:         2,
@@ -99,6 +103,7 @@ func Test_AddRemoveUser(t *testing.T) {
 			operation:         AddUserOperation,
 			existingUsers:     []string{"kni"},
 			user:              "jwr",
+			role:              "jwr",
 			maxUsersPerPolicy: 1,
 			policyCount:       2,
 			userCount:         2,
@@ -108,6 +113,7 @@ func Test_AddRemoveUser(t *testing.T) {
 			operation:         RemoveUserOperation,
 			existingUsers:     []string{"kni", "jwr"},
 			user:              "kni",
+			role:              "jwr",
 			maxUsersPerPolicy: 2,
 			policyCount:       1,
 			userCount:         1,
@@ -117,6 +123,7 @@ func Test_AddRemoveUser(t *testing.T) {
 			operation:         RemoveUserOperation,
 			existingUsers:     []string{"kni", "jwr"},
 			user:              "who_dis",
+			role:              "jwr",
 			maxUsersPerPolicy: 2,
 			policyCount:       1,
 			userCount:         2,
@@ -126,6 +133,7 @@ func Test_AddRemoveUser(t *testing.T) {
 			operation:         RemoveUserOperation,
 			existingUsers:     []string{"kni"},
 			user:              "kni",
+			role:              "jwr",
 			maxUsersPerPolicy: 2,
 			policyCount:       0,
 			userCount:         0,
@@ -214,7 +222,7 @@ func Test_AddRemoveUser(t *testing.T) {
 			}
 
 			if tt.operation == AddUserOperation {
-				err = AddUser(client, config, tt.user)
+				err = AddUser(client, config, tt.user, tt.role)
 				assert.NoError(err)
 			} else if tt.operation == RemoveUserOperation {
 				err = RemoveUser(client, []string{awsLoginRole}, tt.user)

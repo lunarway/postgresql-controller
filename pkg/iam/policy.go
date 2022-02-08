@@ -50,12 +50,12 @@ func (p *PolicyDocument) Count() int {
 	return len(p.Statement)
 }
 
-func (p *PolicyDocument) Add(region, accountID, rolePrefix, username string) {
+func (p *PolicyDocument) Add(region, accountID, rolePrefix, username, rolename string) {
 	awsUserID := usernameToUserId(username)
 	statementEntry := StatementEntry{
 		Effect:    "Allow",
 		Action:    []string{"rds-db:connect"},
-		Resource:  []string{fmt.Sprintf("arn:aws:rds-db:%s:%s:dbuser:*/%s%s", region, accountID, rolePrefix, username)},
+		Resource:  []string{fmt.Sprintf("arn:aws:rds-db:%s:%s:dbuser:*/%s%s", region, accountID, rolePrefix, rolename)},
 		Condition: StringLike{StringLike: UserID{AWSUserID: awsUserID}},
 	}
 	p.Statement = append(p.Statement, statementEntry)
