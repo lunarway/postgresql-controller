@@ -176,7 +176,6 @@ func (r *PostgreSQLUserReconciler) reconcile(ctx context.Context, reqLogger logr
 	}
 
 	// We need to sanitize the user.Spec.Name to be a valid PostgreSQL role name
-	// to allow emails containing '.' characters.
 	sanitizedUser := sanitizedUser(user)
 
 	// Error check in the bottom because we want aws policy to be set no matter what.
@@ -210,6 +209,7 @@ func (r *PostgreSQLUserReconciler) finalizeUser(reqLogger logr.Logger, client *i
 	return nil
 }
 
+// sanitizedUser removes characters that are not valid in PostgreSQL role names.
 func sanitizedUser(raw *postgresqlv1alpha1.PostgreSQLUser) *postgresqlv1alpha1.PostgreSQLUser {
 	sanitizedUser := raw.DeepCopy()
 
