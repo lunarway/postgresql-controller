@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -20,7 +21,7 @@ func Test_AddUsersToDocument(t *testing.T) {
 	document.Add(region, accountID, rolePrefix, "user1", "role1")
 	document.Add(region, accountID, rolePrefix, "user2", "role2")
 
-	assert.Equal(2, document.Count())
+	require.Equal(t, 2, document.Count())
 	assert.True(document.Exists("user1"))
 	assert.Equal("arn:aws:rds-db:eu-west-1:000000000000:dbuser:*/iam_developer_role1", document.Statement[0].Resource[0])
 	assert.True(document.Exists("user2"))
