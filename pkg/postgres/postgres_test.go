@@ -136,9 +136,7 @@ func TestConnectionString_logger(t *testing.T) {
 // each connection and don't let the sql.DB connection pool keep them open.
 func TestConnect_idleConnections(t *testing.T) {
 	postgresqlHost := test.Integration(t)
-	logger := &test.RawLogger{
-		T: t,
-	}
+	logger := test.NewLogger(t)
 	connectionString := postgres.ConnectionString{
 		Host:     postgresqlHost,
 		User:     "iam_creator",
