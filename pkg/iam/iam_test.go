@@ -135,7 +135,7 @@ func Test_AddRemoveUser(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 
 			assert := assert.New(t)
-			logger := NewLogger(t)
+			logger := test.NewLogger(t)
 
 			awsLoginRole := GenerateRandomString(10)
 

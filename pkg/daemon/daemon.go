@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // Configuration is a configuration struct specifying what and how a Daemon
@@ -27,9 +26,6 @@ type Configuration struct {
 }
 
 func (c *Configuration) setDefaults() {
-	if c.Logger == nil {
-		c.Logger = log.Log.WithName("daemon")
-	}
 	if c.SyncInterval == 0 {
 		c.SyncInterval = 5 * time.Minute
 	}
