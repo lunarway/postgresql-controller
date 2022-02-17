@@ -10,9 +10,9 @@ import (
 	"github.com/aws/aws-sdk-go/aws/endpoints"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/iam"
-	"go.lunarway.com/postgresql-controller/test"
-
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.lunarway.com/postgresql-controller/test"
 )
 
 func CreateSession() *session.Session {
@@ -25,20 +25,8 @@ func CreateSession() *session.Session {
 	}))
 }
 
-const (
-	AddUserOperation    = "AddUser"
-	RemoveUserOperation = "RemoveUser"
-)
-
-func Test_AddRemoveUser(t *testing.T) {
-
-	test.Integration(t) //ensure that we only run this test during integration testing
-
-	policyBaseName := "basename"
-	accountId := "000000000000"
-	rolePrefix := "iam_developer_"
-
-	assumeRolePolicyDocument := `
+func assumeRolePolicyDocument() *string {
+	return aws.String(strings.TrimSpace(fmt.Sprintf(`
 {
   "Version": "2012-10-17",
   "Statement": [
@@ -56,7 +44,101 @@ func Test_AddRemoveUser(t *testing.T) {
     }
   ]
 }
-`
+`, accountID)))
+}
+
+// TestEnsureUser_roleChange tests that EnsureUser will update the role when
+// called multiple times with different roles.
+func TestEnsureUser_roleChange(t *testing.T) {
+	logger := test.NewLogger(t)
+
+	var (
+		policyBaseName = t.Name()
+		iamPrefix      = GenerateRandomString(10)
+		role           = fmt.Sprintf("GoogleDevLogin_%s", GenerateRandomString(5))
+	)
+
+	session := CreateSession()
+	svc := iam.New(session)
+	client := NewClient(session, logger, accountID, iamPrefix)
+
+	createRole(t, svc, accountID, role)
+	addUserConfig := EnsureUserConfig{
+		Region:            "eu-west-1",
+		AccountID:         accountID,
+		PolicyBaseName:    policyBaseName,
+		MaxUsersPerPolicy: 1,
+		RolePrefix:        "iam_developer_",
+		AWSLoginRoles: []string{
+			role,
+		},
+	}
+
+	// add a user
+	err := EnsureUser(client, addUserConfig, "user1", "role1")
+	require.NoError(t, err, "unexpected error when adding the first user")
+
+	// update with a new role
+	err = EnsureUser(client, addUserConfig, "user1", "role2")
+	require.NoError(t, err, "unexpected error when updating the first user")
+
+	expectedPolicies := []*Policy{
+		{
+			Name:             "TestEnsureUser_roleChange_0",
+			CurrentVersionId: "v2",
+			Document: &PolicyDocument{
+				Version: "2012-10-17",
+				Statement: []StatementEntry{
+					{
+						Action: []string{
+							"rds-db:connect",
+						},
+						Effect: "Allow",
+						Condition: StringLike{
+							StringLike: UserID{
+								AWSUserID: "*:user1@lunar.app",
+							},
+						},
+						Resource: []string{
+							"arn:aws:rds-db:eu-west-1:000000000000:dbuser:*/iam_developer_role2",
+						},
+					},
+				},
+			},
+		},
+	}
+	assertPolicies(t, client, expectedPolicies)
+}
+
+// assertPolicies asserts that the stored policies match those of the expected.
+func assertPolicies(t *testing.T, client *Client, expectedPolicies []*Policy) {
+	t.Helper()
+
+	policies, err := client.ListPolicies()
+	require.NoError(t, err, "unexpected error listing policies for validation in test")
+
+	assert.Equal(t, expectedPolicies, policies, "policies does not match with the expected")
+}
+
+func createRole(t *testing.T, svc *iam.IAM, accountID, role string) {
+	_, err := svc.CreateRole(&iam.CreateRoleInput{
+		RoleName:                 &role,
+		AssumeRolePolicyDocument: assumeRolePolicyDocument(),
+	})
+	require.NoError(t, err)
+}
+
+const (
+	EnsureUserOperation = "EnsureUser"
+	RemoveUserOperation = "RemoveUser"
+)
+
+func Test_AddRemoveUser(t *testing.T) {
+
+	test.Integration(t) //ensure that we only run this test during integration testing
+
+	policyBaseName := "basename"
+	rolePrefix := "iam_developer_"
 
 	tests := []struct {
 		name              string
@@ -69,7 +151,7 @@ func Test_AddRemoveUser(t *testing.T) {
 	}{
 		{
 			name:              "no users already exists",
-			operation:         AddUserOperation,
+			operation:         EnsureUserOperation,
 			existingUsers:     []string{},
 			user:              "jwr",
 			maxUsersPerPolicy: 2,
@@ -78,7 +160,7 @@ func Test_AddRemoveUser(t *testing.T) {
 		},
 		{
 			name:              "user already exists",
-			operation:         AddUserOperation,
+			operation:         EnsureUserOperation,
 			existingUsers:     []string{"jwr"},
 			user:              "jwr",
 			maxUsersPerPolicy: 2,
@@ -87,7 +169,7 @@ func Test_AddRemoveUser(t *testing.T) {
 		},
 		{
 			name:              "another user already exists",
-			operation:         AddUserOperation,
+			operation:         EnsureUserOperation,
 			existingUsers:     []string{"kni"},
 			user:              "jwr",
 			maxUsersPerPolicy: 2,
@@ -96,7 +178,7 @@ func Test_AddRemoveUser(t *testing.T) {
 		},
 		{
 			name:              "policy capacity exceeded",
-			operation:         AddUserOperation,
+			operation:         EnsureUserOperation,
 			existingUsers:     []string{"kni"},
 			user:              "jwr",
 			maxUsersPerPolicy: 1,
@@ -146,11 +228,11 @@ func Test_AddRemoveUser(t *testing.T) {
 			iamPrefix := GenerateRandomString(10)
 			session := CreateSession()
 			svc := iam.New(session)
-			client := NewClient(session, logger, accountId, iamPrefix)
+			client := NewClient(session, logger, accountID, iamPrefix)
 
 			_, err := svc.CreateRole(&iam.CreateRoleInput{
 				RoleName:                 &awsLoginRole,
-				AssumeRolePolicyDocument: aws.String(strings.TrimSpace(fmt.Sprintf(assumeRolePolicyDocument, accountId))),
+				AssumeRolePolicyDocument: assumeRolePolicyDocument(),
 			})
 			assert.NoError(err)
 
@@ -184,7 +266,7 @@ func Test_AddRemoveUser(t *testing.T) {
 				var statements []string
 
 				for _, user := range tt.existingUsers {
-					statements = append(statements, fmt.Sprintf(statementTemplate, accountId, rolePrefix, user, user))
+					statements = append(statements, fmt.Sprintf(statementTemplate, accountID, rolePrefix, user, user))
 				}
 
 				document := fmt.Sprintf(documentTemplate, strings.Join(statements, ","))
@@ -204,17 +286,17 @@ func Test_AddRemoveUser(t *testing.T) {
 				assert.NoError(err)
 			}
 
-			config := AddUserConfig{
+			config := EnsureUserConfig{
 				Region:            "eu-west-1",
-				AccountID:         accountId,
+				AccountID:         accountID,
 				PolicyBaseName:    policyBaseName,
 				RolePrefix:        rolePrefix,
 				AWSLoginRoles:     []string{awsLoginRole},
 				MaxUsersPerPolicy: tt.maxUsersPerPolicy,
 			}
 
-			if tt.operation == AddUserOperation {
-				err = AddUser(client, config, tt.user, tt.user)
+			if tt.operation == EnsureUserOperation {
+				err = EnsureUser(client, config, tt.user, tt.user)
 				assert.NoError(err)
 			} else if tt.operation == RemoveUserOperation {
 				err = RemoveUser(client, []string{awsLoginRole}, tt.user)
