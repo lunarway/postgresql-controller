@@ -80,7 +80,7 @@ func TestEnsureUser_roleChange(t *testing.T) {
 
 	// update with a new role
 	err = EnsureUser(client, addUserConfig, "user1", "role2")
-	require.NoError(t, err, "unexpected error when adding the first user")
+	require.NoError(t, err, "unexpected error when updating the first user")
 
 	expectedPolicies := []*Policy{
 		{
