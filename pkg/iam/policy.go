@@ -52,13 +52,37 @@ func (p *PolicyDocument) Count() int {
 
 func (p *PolicyDocument) Add(region, accountID, rolePrefix, username, rolename string) {
 	awsUserID := usernameToUserId(username)
-	statementEntry := StatementEntry{
+	p.Statement = append(p.Statement, newStatementEntry(region, accountID, rolePrefix, username, rolename, awsUserID))
+}
+
+// Update updates the policy document statements for the provided username. If
+// the username is not found this is a noop and false is returned.
+func (p *PolicyDocument) Update(region, accountID, rolePrefix, username, rolename string) bool {
+	awsUserID := usernameToUserId(username)
+
+	var updated bool
+	var statements []StatementEntry
+	for i := range p.Statement {
+		if p.Statement[i].Condition.StringLike.AWSUserID == awsUserID {
+			statements = append(statements, newStatementEntry(region, accountID, rolePrefix, username, rolename, awsUserID))
+			updated = true
+			continue
+		}
+
+		statements = append(statements, p.Statement[i])
+	}
+
+	p.Statement = statements
+	return updated
+}
+
+func newStatementEntry(region, accountID, rolePrefix, username, rolename, awsUserID string) StatementEntry {
+	return StatementEntry{
 		Effect:    "Allow",
 		Action:    []string{"rds-db:connect"},
 		Resource:  []string{fmt.Sprintf("arn:aws:rds-db:%s:%s:dbuser:*/%s%s", region, accountID, rolePrefix, rolename)},
 		Condition: StringLike{StringLike: UserID{AWSUserID: awsUserID}},
 	}
-	p.Statement = append(p.Statement, statementEntry)
 }
 
 func (p *PolicyDocument) Remove(username string) {

@@ -46,9 +46,9 @@ type PostgreSQLUserReconciler struct {
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 
-	Granter    grants.Granter
-	AddUser    func(client *iam.Client, config iam.AddUserConfig, username, rolename string) error
-	RemoveUser func(client *iam.Client, awsLoginRoles []string, username string) error
+	Granter       grants.Granter
+	EnsureIAMUser func(client *iam.Client, config iam.EnsureUserConfig, username, rolename string) error
+	RemoveIAMUser func(client *iam.Client, awsLoginRoles []string, username string) error
 
 	RolePrefix         string
 	AWSPolicyName      string
@@ -181,7 +181,7 @@ func (r *PostgreSQLUserReconciler) reconcile(ctx context.Context, reqLogger logr
 	// Error check in the bottom because we want aws policy to be set no matter what.
 	granterErr := r.Granter.SyncUser(reqLogger, request.Namespace, r.RolePrefix, *sanitizedUser)
 
-	awsPolicyErr := r.AddUser(client, iam.AddUserConfig{
+	awsPolicyErr := r.EnsureIAMUser(client, iam.EnsureUserConfig{
 		PolicyBaseName:    r.AWSPolicyName,
 		Region:            r.AWSRegion,
 		AccountID:         r.AWSAccountID,
@@ -199,7 +199,7 @@ func (r *PostgreSQLUserReconciler) reconcile(ctx context.Context, reqLogger logr
 
 func (r *PostgreSQLUserReconciler) finalizeUser(reqLogger logr.Logger, client *iam.Client, user *postgresqlv1alpha1.PostgreSQLUser) error {
 
-	err := r.RemoveUser(client, r.AWSLoginRoles, user.Spec.Name)
+	err := r.RemoveIAMUser(client, r.AWSLoginRoles, user.Spec.Name)
 	if err != nil {
 		return err
 	}

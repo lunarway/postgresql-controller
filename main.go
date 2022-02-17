@@ -103,8 +103,8 @@ func main() {
 				return kube.ResourceValue(mgr.GetClient(), resource, namespace)
 			},
 		},
-		AddUser:    iam.AddUser,
-		RemoveUser: iam.RemoveUser,
+		EnsureIAMUser: iam.EnsureUser,
+		RemoveIAMUser: iam.RemoveUser,
 
 		RolePrefix:         config.UserRolePrefix,
 		AWSPolicyName:      config.AWS.PolicyName,

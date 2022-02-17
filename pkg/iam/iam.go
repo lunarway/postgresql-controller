@@ -2,9 +2,11 @@ package iam
 
 import (
 	"fmt"
+
+	"go.uber.org/multierr"
 )
 
-type AddUserConfig struct {
+type EnsureUserConfig struct {
 	Region            string
 	AccountID         string
 	PolicyBaseName    string
@@ -13,7 +15,7 @@ type AddUserConfig struct {
 	AWSLoginRoles     []string
 }
 
-func AddUser(client *Client, config AddUserConfig, username, rolename string) error {
+func EnsureUser(client *Client, config EnsureUserConfig, username, rolename string) error {
 
 	policies, err := client.ListPolicies()
 	if err != nil {
@@ -21,16 +23,15 @@ func AddUser(client *Client, config AddUserConfig, username, rolename string) er
 	}
 
 	for _, policy := range policies {
-		if policy.Document.Exists(username) {
-			return nil
+		// try to update to see if the policy is managing the user already
+		updated := policy.Document.Update(config.Region, config.AccountID, config.RolePrefix, username, rolename)
+		if updated {
+			return updatePolicies(client, policies)
 		}
-	}
 
-	for _, policy := range policies {
 		if policy.Document.Count() < config.MaxUsersPerPolicy {
 			policy.Document.Add(config.Region, config.AccountID, config.RolePrefix, username, rolename)
-			err := client.UpdatePolicy(policy)
-			return err
+			return updatePolicies(client, policies)
 		}
 	}
 
@@ -58,6 +59,22 @@ func AddUser(client *Client, config AddUserConfig, username, rolename string) er
 	}
 
 	return err
+}
+
+func updatePolicies(client *Client, policies []*Policy) error {
+	var errs error
+	for _, policy := range policies {
+		err := client.UpdatePolicy(policy)
+		if err != nil {
+			errs = multierr.Append(errs, fmt.Errorf("policy '%s': %w", policy.Name, err))
+		}
+	}
+
+	if errs != nil {
+		return errs
+	}
+
+	return nil
 }
 
 func RemoveUser(client *Client, awsLoginRoles []string, username string) error {
