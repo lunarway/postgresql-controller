@@ -1,12 +1,13 @@
 name: "Release"
 on:
-  push:
-    tags:
-      - "v*"
+  release:
+    types: [published]
 
 jobs:
   docker:
     runs-on: ubuntu-latest
+    # only allow tags on the master branch
+    if: github.event.release.target_commitish == 'master'
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v3
@@ -30,8 +31,8 @@ jobs:
 
       - name: "Docker login to Quay.io"
         env:
-          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
+          DOCKER_USERNAME: ${{ secrets.QUAY_USERNAME }}
         run: docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD quay.io
 
       - name: "Push image"
