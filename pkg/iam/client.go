@@ -6,6 +6,7 @@ import (
 	"net/url"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/iam"
 	"github.com/go-logr/logr"
@@ -121,18 +122,23 @@ func (c *Client) UpdatePolicy(policy *Policy) error {
 		return fmt.Errorf("unable to marshal document: %s: %w", policy.Name, err)
 	}
 
-	// Check if we have hit the policy version limit
-	err = c.deleteOldPolicyVersions(policy, svc)
-	if err != nil {
-		return fmt.Errorf("delete old policy versions: %s: %w", policy.Name, err)
-	}
-
 	// Create the new version of the Policy
 	setAsDefault := true
 	_, err = svc.CreatePolicyVersion(&iam.CreatePolicyVersionInput{PolicyArn: aws.String(policyARN), PolicyDocument: aws.String(string(jsonMarshal)), SetAsDefault: &setAsDefault})
 	if err != nil {
+		if awsErr, ok := err.(awserr.Error); ok && awsErr.Code() == iam.ErrCodeLimitExceededException {
+			// Check if we have hit the policy version limit
+			err = c.deleteOldPolicyVersions(policy, svc)
+			if err != nil {
+				return fmt.Errorf("delete old policy versions: %s: %w", policy.Name, err)
+			}
+		}
+
 		return fmt.Errorf("create policy version with arn %s: %w", policyARN, err)
 	}
+
+	// Delete the policy version to ensure that we don't succeed the maxium of 5 versions
+	_, err = svc.DeletePolicyVersion(&iam.DeletePolicyVersionInput{PolicyArn: aws.String(policyARN), VersionId: aws.String(policy.CurrentVersionId)})
 
 	return nil
 }
