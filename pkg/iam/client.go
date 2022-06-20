@@ -27,6 +27,10 @@ func NewClient(session *session.Session, log logr.Logger, awsAccountID, iamPrefi
 	}
 }
 
+func (c *Client) strPtr(value string) *string {
+	return &value
+}
+
 func (c *Client) policyARN(policyName string) string {
 	return fmt.Sprintf("arn:aws:iam::%s:policy%s%s", c.awsAccountID, c.iamPrefix, policyName)
 }
@@ -117,6 +121,12 @@ func (c *Client) UpdatePolicy(policy *Policy) error {
 		return fmt.Errorf("unable to marshal document: %s: %w", policy.Name, err)
 	}
 
+	// Check if we have hit the policy version limit
+	err = c.deleteOldPolicyVersions(policy, svc)
+	if err != nil {
+		return fmt.Errorf("delete old policy versions: %s: %w", policy.Name, err)
+	}
+
 	// Create the new version of the Policy
 	setAsDefault := true
 	_, err = svc.CreatePolicyVersion(&iam.CreatePolicyVersionInput{PolicyArn: aws.String(policyARN), PolicyDocument: aws.String(string(jsonMarshal)), SetAsDefault: &setAsDefault})
@@ -124,11 +134,32 @@ func (c *Client) UpdatePolicy(policy *Policy) error {
 		return fmt.Errorf("create policy version with arn %s: %w", policyARN, err)
 	}
 
-	// Delete the policy version to ensure that we don't succeed the maxium of 5 versions
-	_, err = svc.DeletePolicyVersion(&iam.DeletePolicyVersionInput{PolicyArn: aws.String(policyARN), VersionId: aws.String(policy.CurrentVersionId)})
+	return nil
+}
+
+func (c *Client) deleteOldPolicyVersions(policy *Policy, svc *iam.IAM) error {
+	policyARN := c.strPtr(c.policyARN(policy.Name))
+
+	policyVersionOutput, err := svc.ListPolicyVersions(&iam.ListPolicyVersionsInput{
+		PolicyArn: policyARN,
+	})
 	if err != nil {
-		return fmt.Errorf("delete policy version %s with arn %s: %w", policy.CurrentVersionId, policyARN, err)
+		return fmt.Errorf("list policy versions: %s: %w", policy.Name, err)
 	}
+	for _, version := range policyVersionOutput.Versions {
+		if version.IsDefaultVersion == nil || *version.IsDefaultVersion {
+			continue
+		}
+
+		_, err := svc.DeletePolicyVersion(&iam.DeletePolicyVersionInput{
+			PolicyArn: policyARN,
+			VersionId: version.VersionId,
+		})
+		if err != nil {
+			return fmt.Errorf("delete policy version: %s: %w", policy.Name, err)
+		}
+	}
+
 	return nil
 }
 
