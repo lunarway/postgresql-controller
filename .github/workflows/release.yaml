@@ -6,8 +6,6 @@ on:
 jobs:
   docker:
     runs-on: ubuntu-latest
-    # only allow tags on the master branch
-    if: github.event.release.target_commitish == 'master'
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v3
