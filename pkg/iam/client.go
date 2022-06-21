@@ -6,6 +6,7 @@ import (
 	"net/url"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/iam"
 	"github.com/go-logr/logr"
@@ -25,6 +26,10 @@ func NewClient(session *session.Session, log logr.Logger, awsAccountID, iamPrefi
 		awsAccountID: awsAccountID,
 		iamPrefix:    iamPrefix,
 	}
+}
+
+func (c *Client) strPtr(value string) *string {
+	return &value
 }
 
 func (c *Client) policyARN(policyName string) string {
@@ -108,27 +113,42 @@ func (c *Client) getPolicyDocument(policy *iam.Policy) (*PolicyDocument, error) 
 func (c *Client) UpdatePolicy(policy *Policy) error {
 	svc := iam.New(c.session)
 
-	policyARN := c.policyARN(policy.Name)
-
-	// Marshal the updated policy document back to something AWS understands
-	jsonMarshal, err := json.Marshal(policy.Document)
-	if err != nil {
-		c.log.Error(err, "json marshalling failed", "document", policy.Document)
-		return fmt.Errorf("unable to marshal document: %s: %w", policy.Name, err)
-	}
-
 	// Create the new version of the Policy
-	setAsDefault := true
-	_, err = svc.CreatePolicyVersion(&iam.CreatePolicyVersionInput{PolicyArn: aws.String(policyARN), PolicyDocument: aws.String(string(jsonMarshal)), SetAsDefault: &setAsDefault})
+	err := c.createPolicyVersion(policy, svc)
 	if err != nil {
-		return fmt.Errorf("create policy version with arn %s: %w", policyARN, err)
+		return fmt.Errorf("create policy version: %s: %w", policy.Name, err)
 	}
 
 	// Delete the policy version to ensure that we don't succeed the maxium of 5 versions
+	policyARN := c.policyARN(policy.Name)
 	_, err = svc.DeletePolicyVersion(&iam.DeletePolicyVersionInput{PolicyArn: aws.String(policyARN), VersionId: aws.String(policy.CurrentVersionId)})
+
+	return nil
+}
+
+func (c *Client) deleteOldPolicyVersions(policy *Policy, svc *iam.IAM) error {
+	policyARN := c.strPtr(c.policyARN(policy.Name))
+
+	policyVersionOutput, err := svc.ListPolicyVersions(&iam.ListPolicyVersionsInput{
+		PolicyArn: policyARN,
+	})
 	if err != nil {
-		return fmt.Errorf("delete policy version %s with arn %s: %w", policy.CurrentVersionId, policyARN, err)
+		return fmt.Errorf("list policy versions: %s: %w", policy.Name, err)
 	}
+	for _, version := range policyVersionOutput.Versions {
+		if version.IsDefaultVersion == nil || *version.IsDefaultVersion {
+			continue
+		}
+
+		_, err := svc.DeletePolicyVersion(&iam.DeletePolicyVersionInput{
+			PolicyArn: policyARN,
+			VersionId: version.VersionId,
+		})
+		if err != nil {
+			return fmt.Errorf("delete policy version: %s: %w", policy.Name, err)
+		}
+	}
+
 	return nil
 }
 
@@ -270,5 +290,36 @@ func (c *Client) lookupPolicy(policies []*iam.Policy, name string) *iam.Policy {
 			return r
 		}
 	}
+	return nil
+}
+
+func (c *Client) createPolicyVersion(policy *Policy, svc *iam.IAM) error {
+	// Marshal the updated policy document back to something AWS understands
+	jsonMarshal, err := json.Marshal(policy.Document)
+	if err != nil {
+		c.log.Error(err, "json marshalling failed", "document", policy.Document)
+		return fmt.Errorf("unable to marshal document: %s: %w", policy.Name, err)
+	}
+
+	arn := c.policyARN(policy.Name)
+	setAsDefault := true
+	_, err = svc.CreatePolicyVersion(&iam.CreatePolicyVersionInput{PolicyArn: aws.String(arn), PolicyDocument: aws.String(string(jsonMarshal)), SetAsDefault: &setAsDefault})
+	if err != nil {
+		if awsErr, ok := err.(awserr.Error); ok && awsErr.Code() == iam.ErrCodeLimitExceededException {
+			// Check if we have hit the policy version limit
+			err = c.deleteOldPolicyVersions(policy, svc)
+			if err != nil {
+				return fmt.Errorf("delete old policy versions: %s: %w", policy.Name, err)
+			}
+
+			_, err = svc.CreatePolicyVersion(&iam.CreatePolicyVersionInput{PolicyArn: aws.String(arn), PolicyDocument: aws.String(string(jsonMarshal)), SetAsDefault: &setAsDefault})
+			if err != nil {
+				return fmt.Errorf("create policy version: %s: %w", policy.Name, err)
+			}
+		}
+
+		return fmt.Errorf("create policy version with arn %s: %w", arn, err)
+	}
+
 	return nil
 }
