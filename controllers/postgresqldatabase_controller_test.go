@@ -261,7 +261,7 @@ func TestPostgreSQLDatabase_Reconcile_hostCredentialsResourceReference(t *testin
 
 // TestPostgreSQLDatabase_Reconcile_unknownHostCredentialsResourceReference
 // tests that references to an unknown host credentials resource will results in
-// a reconciliation error.
+// a requeued reconciliation.
 func TestPostgreSQLDatabase_Reconcile_unknownHostCredentialsResourceReference(t *testing.T) {
 	logf.SetLogger(zap.New(zap.UseDevMode(true)))
 
@@ -322,9 +322,9 @@ func TestPostgreSQLDatabase_Reconcile_unknownHostCredentialsResourceReference(t 
 		},
 	}
 	res, err := r.Reconcile(context.Background(), req)
-	assert.Error(t, err, "reconciliation failed")
+	assert.NoError(t, err)
 	assert.Equal(t, reconcile.Result{
 		Requeue:      false,
-		RequeueAfter: 0,
+		RequeueAfter: 10 * time.Second,
 	}, res, "result not as expected")
 }
