@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
@@ -61,10 +62,7 @@ func (r *PostgreSQLDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.R
 	status, err := r.reconcile(ctx, reqLogger, req)
 	status.Persist(ctx, err, r.Log)
 
-	if err != nil {
-		reqLogger.Error(err, "Failed to reconcile PostgreSQLDatabase object")
-	}
-	return ctrl.Result{}, stopRequeueOnInvalid(reqLogger, err)
+	return requeueStrategy(reqLogger, err)
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -208,16 +206,35 @@ func (s *status) update(err error) bool {
 	return true
 }
 
-// stopRequeueOnInvalid detects if err should stop requeing of a request.
-func stopRequeueOnInvalid(log logr.Logger, err error) error {
-	if !ctlerrors.IsInvalid(err) {
-		return err
+// requeueStrategy returns the right strategy for handling any errors from the
+// reconciliation loop.
+func requeueStrategy(log logr.Logger, err error) (ctrl.Result, error) {
+	if err == nil {
+		return ctrl.Result{}, nil
 	}
+
+	// if resource is invalid there is nothing we can do about it and we rely on
+	// the client to update the resource before we touch it again
+	if ctlerrors.IsInvalid(err) {
+		log.Info("Dropping resources from queue as it is invalid", "error", err)
+		return reconcile.Result{}, nil
+	}
+
+	// if it is a temporary error, eg. secret not found, we try again shortly as
+	// the secret might have appeared
 	if ctlerrors.IsTemporary(err) {
-		return err
+		log.Info("Failed to reconcile PostgreSQLDatabase object, attempting again shortly", "error", err)
+		return ctrl.Result{
+			RequeueAfter: 10 * time.Second,
+		}, nil
 	}
-	log.Error(err, "Dropping resources from queue as it is invalid")
-	return nil
+
+	// if it is an unknown error we try again later as it might be an unidentified
+	// temporary issue, eg. no access to Kubernetes API.
+	log.Info("Failed to reconcile PostgreSQLDatabase object due unknown error", "error", err)
+	return ctrl.Result{
+		RequeueAfter: 10 * time.Second,
+	}, nil
 }
 
 // EnsureParams contains the required parameters for
