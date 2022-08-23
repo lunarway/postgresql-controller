@@ -144,15 +144,9 @@ $(ENVTEST): $(LOCALBIN)
 
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.24
-ENVTEST_ASSETS_DIR=$(shell pwd)/testbin
 
 .PHONY: test/unit
-test/unit: fmt vet ## Run tests.
-	mkdir -p ${ENVTEST_ASSETS_DIR}
-	test -f ${ENVTEST_ASSETS_DIR}/setup-envtest.sh || curl -sSLo ${ENVTEST_ASSETS_DIR}/setup-envtest.sh https://raw.githubusercontent.com/kubernetes-sigs/controller-runtime/v0.8.3/hack/setup-envtest.sh
-	source ${ENVTEST_ASSETS_DIR}/setup-envtest.sh; \
-	fetch_envtest_tools $(ENVTEST_ASSETS_DIR); \
-	setup_envtest_env $(ENVTEST_ASSETS_DIR); \
+test/unit: fmt vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test -v -race ./... -coverprofile cover.out
 
 POSTGRESQL_CONTROLLER_INTEGRATION_HOST=localhost:5432
