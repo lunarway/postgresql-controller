@@ -1,7 +1,7 @@
 version: '2'
 services:
   postgres:
-    image: timms/postgres-logging:11.5
+    image: timms/postgres-logging:14.4
     environment:
       - POSTGRES_USER=admin
     volumes:
