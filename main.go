@@ -64,7 +64,11 @@ func main() {
 	loggerOptions.BindFlags(zapFlagSet)
 	flagSet.AddGoFlagSet(zapFlagSet)
 
-	flagSet.Parse(os.Args[1:])
+	err := flagSet.Parse(os.Args[1:])
+	if err != nil {
+		setupLog.Error(err, "parse flags")
+		os.Exit(1)
+	}
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&loggerOptions)))
 	config.Log(setupLog)
