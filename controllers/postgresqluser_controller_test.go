@@ -161,12 +161,7 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 			Namespace: namespace,
 		},
 	}
-	res, err := r.Reconcile(context.Background(), req)
-	assert.NoError(t, err, "reconciliation failed")
-	assert.Equal(t, reconcile.Result{
-		Requeue:      false,
-		RequeueAfter: 0,
-	}, res, "result not as expected")
+	doReconcile(t, r, req)
 }
 
 // TestReconcile_rolePrefix tests that reconciliations respect the rolePrefix
@@ -283,12 +278,7 @@ func TestReconcile_rolePrefix(t *testing.T) {
 			Namespace: namespace,
 		},
 	}
-	res, err := r.Reconcile(context.Background(), req)
-	assert.NoError(t, err, "reconciliation failed")
-	assert.Equal(t, reconcile.Result{
-		Requeue:      false,
-		RequeueAfter: 0,
-	}, res, "result not as expected")
+	doReconcile(t, r, req)
 
 	// assert that the user can connect with a prefixed role
 	assertAccess(t, host, database1Name, fmt.Sprintf("%s%s", rolePrefix, userName)) // simulates what users will sign in with through AWS
@@ -409,12 +399,8 @@ func TestReconcile_dotInName(t *testing.T) {
 			Namespace: namespace,
 		},
 	}
-	res, err := r.Reconcile(context.Background(), req)
-	assert.NoError(t, err, "reconciliation failed")
-	assert.Equal(t, reconcile.Result{
-		Requeue:      false,
-		RequeueAfter: 0,
-	}, res, "result not as expected")
+
+	doReconcile(t, r, req)
 
 	// assert that the user can connect with a prefixed role
 	assertAccess(t, host, database1Name, userNameSanitized) // simulates what users will sign in with through AWS
@@ -560,12 +546,7 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 			Namespace: namespace,
 		},
 	}
-	res, err := r.Reconcile(context.Background(), req)
-	assert.NoError(t, err, "reconciliation failed")
-	assert.Equal(t, reconcile.Result{
-		Requeue:      false,
-		RequeueAfter: 0,
-	}, res, "result not as expected")
+	doReconcile(t, r, req)
 
 	// assert that the user can connect to both databases
 	assertAccess(t, host, database1Name, userName)
@@ -622,4 +603,19 @@ func assertAccess(t *testing.T, host, databaseName, userName string) {
 	defer userConn.Close()
 	_, err = userConn.Query(fmt.Sprintf("SELECT * from %s.movies", databaseName))
 	assert.NoErrorf(t, err, "failed to query table in database '%s'", databaseName)
+}
+
+func doReconcile(t *testing.T, sut *PostgreSQLUserReconciler, req reconcile.Request) {
+	const reconcileLimit = 10
+
+	for i := 0; i < reconcileLimit; i++ {
+		res, err := sut.Reconcile(context.Background(), req)
+		assert.NoError(t, err, "reconciliation failed")
+
+		if !res.Requeue {
+			return
+		}
+	}
+
+	t.Errorf("Did not reconcile after %d tries.", reconcileLimit)
 }
