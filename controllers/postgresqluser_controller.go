@@ -122,16 +122,9 @@ func (r *PostgreSQLUserReconciler) reconcile(ctx context.Context, reqLogger logr
 	reqLogger = reqLogger.WithValues("user", user.Spec.Name, "rolePrefix", r.RolePrefix)
 	reqLogger.Info("Reconciling found PostgreSQLUser resource", "user", user.Spec.Name)
 
-	var awsCredentials *credentials.Credentials
-	if len(r.AWSProfile) != 0 {
-		awsCredentials = credentials.NewSharedCredentials("", r.AWSProfile)
-	} else {
-		awsCredentials = credentials.NewStaticCredentials(r.AWSAccessKeyID, r.AWSSecretAccessKey, "")
-	}
-
 	awsConfig := &aws.Config{
 		Region:      aws.String(r.AWSRegion),
-		Credentials: awsCredentials,
+		Credentials: r.getCredentials(),
 	}
 
 	// Initialize session to AWS
@@ -162,7 +155,7 @@ func (r *PostgreSQLUserReconciler) reconcile(ctx context.Context, reqLogger logr
 			return ctrl.Result{}, err
 		}
 
-		return ctrl.Result{}, nil
+		return requeueResult(), nil
 	}
 
 	// Add finalizer for this CR
@@ -173,6 +166,8 @@ func (r *PostgreSQLUserReconciler) reconcile(ctx context.Context, reqLogger logr
 		if err != nil {
 			return ctrl.Result{}, err
 		}
+
+		return requeueResult(), nil
 	}
 
 	// We need to sanitize the user.Spec.Name to be a valid PostgreSQL role name
@@ -197,6 +192,16 @@ func (r *PostgreSQLUserReconciler) reconcile(ctx context.Context, reqLogger logr
 	return ctrl.Result{}, nil
 }
 
+func (r *PostgreSQLUserReconciler) getCredentials() *credentials.Credentials {
+	var awsCredentials *credentials.Credentials
+	if len(r.AWSProfile) != 0 {
+		awsCredentials = credentials.NewSharedCredentials("", r.AWSProfile)
+	} else {
+		awsCredentials = credentials.NewStaticCredentials(r.AWSAccessKeyID, r.AWSSecretAccessKey, "")
+	}
+	return awsCredentials
+}
+
 func (r *PostgreSQLUserReconciler) finalizeUser(reqLogger logr.Logger, client *iam.Client, user *postgresqlv1alpha1.PostgreSQLUser) error {
 
 	err := r.RemoveIAMUser(client, r.AWSLoginRoles, user.Spec.Name)
@@ -217,4 +222,8 @@ func sanitizedUser(raw *postgresqlv1alpha1.PostgreSQLUser) *postgresqlv1alpha1.P
 	sanitizedUser.Spec.Name = strings.ReplaceAll(sanitizedUser.Spec.Name, ".", "_")
 
 	return sanitizedUser
+}
+
+func requeueResult() ctrl.Result {
+	return ctrl.Result{Requeue: true}
 }
