@@ -140,6 +140,8 @@ func TestEnsureUser_AWSLoginRole_Added(t *testing.T) {
 	err := EnsureUser(client, existingUserConfig, "user1", "role1")
 	require.NoError(t, err, "unexpected error when adding the first user")
 
+	assertPolicyOnAWSLoginRole(t, client, existingRole)
+
 	// Ensure same user but with a newly aded AWSLoginRole
 	createRole(t, svc, accountID, newRole)
 
@@ -156,7 +158,7 @@ func TestEnsureUser_AWSLoginRole_Added(t *testing.T) {
 	}
 
 	err = EnsureUser(client, newUserConfig, "user1", "role1")
-	require.NoError(t, err, "unexpected error when adding the first user")
+	require.NoError(t, err, "unexpected error when adding the user to the new AWSLoginRole")
 
 	assertPolicyOnAWSLoginRole(t, client, newRole)
 }
