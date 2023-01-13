@@ -3,6 +3,7 @@ package iam
 import (
 	"fmt"
 
+	"github.com/aws/aws-sdk-go/service/iam"
 	"go.uber.org/multierr"
 )
 
@@ -16,49 +17,80 @@ type EnsureUserConfig struct {
 }
 
 func EnsureUser(client *Client, config EnsureUserConfig, username, rolename string) error {
-
 	policies, err := client.ListPolicies()
 	if err != nil {
 		return err
 	}
 
+	userIsInPolicy := false
 	for _, policy := range policies {
 		// try to update to see if the policy is managing the user already
 		updated := policy.Document.Update(config.Region, config.AccountID, config.RolePrefix, username, rolename)
 		if updated {
-			return updatePolicies(client, policies)
-		}
+			err = updatePolicies(client, policies)
+			if err != nil {
+				return err
+			}
 
-		if policy.Document.Count() < config.MaxUsersPerPolicy {
+			userIsInPolicy = true
+		} else if policy.Document.Count() < config.MaxUsersPerPolicy {
 			policy.Document.Add(config.Region, config.AccountID, config.RolePrefix, username, rolename)
-			return updatePolicies(client, policies)
+			err = updatePolicies(client, policies)
+			if err != nil {
+				return err
+			}
+
+			userIsInPolicy = true
 		}
 	}
 
-	newPolicy := &Policy{
-		Name:     fmt.Sprintf("%s_%d", config.PolicyBaseName, len(policies)),
-		Document: &PolicyDocument{Version: "2012-10-17"},
+	if !userIsInPolicy {
+		newPolicy := &Policy{
+			Name:     fmt.Sprintf("%s_%d", config.PolicyBaseName, len(policies)),
+			Document: &PolicyDocument{Version: "2012-10-17"},
+		}
+
+		newPolicy.Document.Add(config.Region, config.AccountID, config.RolePrefix, username, rolename)
+		newAwsPolicy, err := client.CreatePolicy(newPolicy)
+		if err != nil {
+			return err
+		}
+
+		err = attachPolicyToAwsLoginRoles(client, config, newAwsPolicy)
+		if err != nil {
+			return err
+		}
 	}
 
-	newPolicy.Document.Add(config.Region, config.AccountID, config.RolePrefix, username, rolename)
-	newAwsPolicy, err := client.CreatePolicy(newPolicy)
+	iamPolicies, err := client.listIAMPolicies()
 	if err != nil {
 		return err
 	}
 
+	err = attachPolicyToAwsLoginRoles(client, config, iamPolicies...)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func attachPolicyToAwsLoginRoles(client *Client, config EnsureUserConfig, policies ...*iam.Policy) error {
 	for _, roleName := range config.AWSLoginRoles {
 		role, err := client.GetRole(roleName)
 		if err != nil {
 			return err
 		}
 
-		err = client.AttachPolicy(role, newAwsPolicy)
-		if err != nil {
-			return err
+		for _, policy := range policies {
+			err = client.AttachPolicy(role, policy)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
-	return err
+	return nil
 }
 
 func updatePolicies(client *Client, policies []*Policy) error {

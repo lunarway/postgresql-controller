@@ -36,6 +36,10 @@ func (c *Client) policyARN(policyName string) string {
 	return fmt.Sprintf("arn:aws:iam::%s:policy%s%s", c.awsAccountID, c.iamPrefix, policyName)
 }
 
+func (c *Client) listIAMPolicies() ([]*iam.Policy, error) {
+	return c.listPolicies()
+}
+
 func (c *Client) ListPolicies() ([]*Policy, error) {
 
 	iamPolicies, err := c.listPolicies()

@@ -110,6 +110,59 @@ func TestEnsureUser_roleChange(t *testing.T) {
 	assertPolicies(t, client, expectedPolicies)
 }
 
+func TestEnsureUser_AWSLoginRole_Added(t *testing.T) {
+	logger := test.NewLogger(t)
+
+	var (
+		policyBaseName = t.Name()
+		iamPrefix      = GenerateRandomString(10)
+		existingRole   = fmt.Sprintf("GoogleDevLogin_Existing_%s", GenerateRandomString(5))
+		newRole        = fmt.Sprintf("GoogleDevLogin_New_%s", GenerateRandomString(5))
+	)
+
+	session := CreateSession()
+	svc := iam.New(session)
+	client := NewClient(session, logger, accountID, iamPrefix)
+
+	createRole(t, svc, accountID, existingRole)
+	existingUserConfig := EnsureUserConfig{
+		Region:            "eu-west-1",
+		AccountID:         accountID,
+		PolicyBaseName:    policyBaseName,
+		MaxUsersPerPolicy: 1,
+		RolePrefix:        "iam_developer_",
+		AWSLoginRoles: []string{
+			existingRole,
+		},
+	}
+
+	// add a user
+	err := EnsureUser(client, existingUserConfig, "user1", "role1")
+	require.NoError(t, err, "unexpected error when adding the first user")
+
+	assertPolicyOnAWSLoginRole(t, client, existingRole)
+
+	// Ensure same user but with a newly aded AWSLoginRole
+	createRole(t, svc, accountID, newRole)
+
+	newUserConfig := EnsureUserConfig{
+		Region:            "eu-west-1",
+		AccountID:         accountID,
+		PolicyBaseName:    policyBaseName,
+		MaxUsersPerPolicy: 1,
+		RolePrefix:        "iam_developer_",
+		AWSLoginRoles: []string{
+			existingRole,
+			newRole,
+		},
+	}
+
+	err = EnsureUser(client, newUserConfig, "user1", "role1")
+	require.NoError(t, err, "unexpected error when adding the user to the new AWSLoginRole")
+
+	assertPolicyOnAWSLoginRole(t, client, newRole)
+}
+
 // assertPolicies asserts that the stored policies match those of the expected.
 func assertPolicies(t *testing.T, client *Client, expectedPolicies []*Policy) {
 	t.Helper()
@@ -118,6 +171,19 @@ func assertPolicies(t *testing.T, client *Client, expectedPolicies []*Policy) {
 	require.NoError(t, err, "unexpected error listing policies for validation in test")
 
 	assert.Equal(t, expectedPolicies, policies, "policies does not match with the expected")
+}
+
+// assertPolicyOnAWSLoginRole asserts that the stored policies exists on a AWSLoginRolematch
+func assertPolicyOnAWSLoginRole(t *testing.T, client *Client, awsLoginRole string) {
+	t.Helper()
+
+	role, err := client.GetRole(awsLoginRole)
+	require.NoError(t, err)
+
+	policies, err := client.ListManagedAttachedPolicies(role)
+	require.NoError(t, err)
+
+	assert.NotEmpty(t, policies)
 }
 
 func createRole(t *testing.T, svc *iam.IAM, accountID, role string) {
