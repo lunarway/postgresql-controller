@@ -3,7 +3,7 @@ module go.lunarway.com/postgresql-controller
 go 1.18
 
 require (
-	github.com/aws/aws-sdk-go v1.44.192
+	github.com/aws/aws-sdk-go v1.44.194
 	github.com/go-logr/logr v1.2.3
 	github.com/google/uuid v1.3.0
 	github.com/lib/pq v1.10.7
@@ -13,7 +13,7 @@ require (
 	k8s.io/api v0.26.1
 	k8s.io/apimachinery v0.26.1
 	k8s.io/client-go v0.26.1
-	sigs.k8s.io/controller-runtime v0.14.2
+	sigs.k8s.io/controller-runtime v0.14.4
 )
 
 require (
