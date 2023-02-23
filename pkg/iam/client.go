@@ -321,9 +321,9 @@ func (c *Client) updatePolicy(policy *Policy, svc *iam.IAM) error {
 			if err != nil {
 				return fmt.Errorf("create policy version: %s: %w", policy.Name, err)
 			}
+		} else {
+			return fmt.Errorf("create policy version with arn: %s: %w", arn, err)
 		}
-
-		return fmt.Errorf("create policy version with arn %s: %w", arn, err)
 	}
 
 	return nil
