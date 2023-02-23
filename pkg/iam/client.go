@@ -2,6 +2,7 @@ package iam
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 
@@ -118,7 +119,7 @@ func (c *Client) UpdatePolicy(policy *Policy) error {
 	svc := iam.New(c.session)
 
 	// Create the new version of the Policy
-	err := c.createPolicyVersion(policy, svc)
+	err := c.updatePolicy(policy, svc)
 	if err != nil {
 		return fmt.Errorf("create policy version: %s: %w", policy.Name, err)
 	}
@@ -127,7 +128,11 @@ func (c *Client) UpdatePolicy(policy *Policy) error {
 	policyARN := c.policyARN(policy.Name)
 	_, err = svc.DeletePolicyVersion(&iam.DeletePolicyVersionInput{PolicyArn: aws.String(policyARN), VersionId: aws.String(policy.CurrentVersionId)})
 	if err != nil {
-		return fmt.Errorf("delete policy version: %s: %w", policy.Name, err)
+		if errors.Is(err, errors.New(iam.ErrCodeNoSuchEntityException)) {
+			// Ignore entities that does not exist
+		} else {
+			return fmt.Errorf("delete policy version: %s: %w", policy.Name, err)
+		}
 	}
 
 	return nil
@@ -152,7 +157,11 @@ func (c *Client) deleteOldPolicyVersions(policy *Policy, svc *iam.IAM) error {
 			VersionId: version.VersionId,
 		})
 		if err != nil {
-			return fmt.Errorf("delete policy version: %s: %w", policy.Name, err)
+			if errors.Is(err, errors.New(iam.ErrCodeNoSuchEntityException)) {
+				// Ignore entities that does not exist
+			} else {
+				return fmt.Errorf("delete policy version: %s: %w", policy.Name, err)
+			}
 		}
 	}
 
@@ -300,7 +309,7 @@ func (c *Client) lookupPolicy(policies []*iam.Policy, name string) *iam.Policy {
 	return nil
 }
 
-func (c *Client) createPolicyVersion(policy *Policy, svc *iam.IAM) error {
+func (c *Client) updatePolicy(policy *Policy, svc *iam.IAM) error {
 	// Marshal the updated policy document back to something AWS understands
 	jsonMarshal, err := json.Marshal(policy.Document)
 	if err != nil {
