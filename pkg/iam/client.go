@@ -124,17 +124,6 @@ func (c *Client) UpdatePolicy(policy *Policy) error {
 		return fmt.Errorf("create policy version: %s: %w", policy.Name, err)
 	}
 
-	// Delete the policy version to ensure that we don't succeed the maxium of 5 versions
-	policyARN := c.policyARN(policy.Name)
-	_, err = svc.DeletePolicyVersion(&iam.DeletePolicyVersionInput{PolicyArn: aws.String(policyARN), VersionId: aws.String(policy.CurrentVersionId)})
-	if err != nil {
-		if errors.Is(err, errors.New(iam.ErrCodeNoSuchEntityException)) {
-			// Ignore entities that does not exist
-		} else {
-			return fmt.Errorf("delete policy version: %s: %w", policy.Name, err)
-		}
-	}
-
 	return nil
 }
 
