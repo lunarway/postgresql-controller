@@ -7,7 +7,6 @@ import (
 	"net/url"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/iam"
 	"github.com/go-logr/logr"
@@ -121,7 +120,7 @@ func (c *Client) UpdatePolicy(policy *Policy) error {
 	// Create the new version of the Policy
 	err := c.updatePolicy(policy, svc)
 	if err != nil {
-		return fmt.Errorf("create policy version: %s: %w", policy.Name, err)
+		return fmt.Errorf("update policy: %s: %w", policy.Name, err)
 	}
 
 	return nil
@@ -310,7 +309,7 @@ func (c *Client) updatePolicy(policy *Policy, svc *iam.IAM) error {
 	setAsDefault := true
 	_, err = svc.CreatePolicyVersion(&iam.CreatePolicyVersionInput{PolicyArn: aws.String(arn), PolicyDocument: aws.String(string(jsonMarshal)), SetAsDefault: &setAsDefault})
 	if err != nil {
-		if awsErr, ok := err.(awserr.Error); ok && awsErr.Code() == iam.ErrCodeLimitExceededException {
+		if errors.Is(err, errors.New(iam.ErrCodeLimitExceededException)) {
 			// Check if we have hit the policy version limit
 			err = c.deleteOldPolicyVersions(policy, svc)
 			if err != nil {
@@ -321,9 +320,11 @@ func (c *Client) updatePolicy(policy *Policy, svc *iam.IAM) error {
 			if err != nil {
 				return fmt.Errorf("create policy version: %s: %w", policy.Name, err)
 			}
-		} else {
-			return fmt.Errorf("create policy version with arn: %s: %w", arn, err)
+
+			return nil
 		}
+
+		return fmt.Errorf("update policy version with arn: %s: %w", arn, err)
 	}
 
 	return nil
