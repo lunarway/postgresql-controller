@@ -2,7 +2,6 @@ package iam
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/url"
 
@@ -121,7 +120,7 @@ func (c *Client) UpdatePolicy(policy *Policy) error {
 	// Create the new version of the Policy
 	err := c.updatePolicy(policy, svc)
 	if err != nil {
-		return fmt.Errorf("create policy version: %s: %w", policy.Name, err)
+		return fmt.Errorf("update policy: %s: %w", policy.Name, err)
 	}
 
 	return nil
@@ -146,8 +145,14 @@ func (c *Client) deleteOldPolicyVersions(policy *Policy, svc *iam.IAM) error {
 			VersionId: version.VersionId,
 		})
 		if err != nil {
-			if errors.Is(err, errors.New(iam.ErrCodeNoSuchEntityException)) {
-				// Ignore entities that does not exist
+			if awsErr, ok := err.(awserr.Error); ok {
+				// process SDK error
+				switch awsErr.Code() {
+				case iam.ErrCodeNoSuchEntityException:
+					// Ignore entities that does not exist
+
+					break
+				}
 			} else {
 				return fmt.Errorf("delete policy version: %s: %w", policy.Name, err)
 			}
@@ -310,20 +315,26 @@ func (c *Client) updatePolicy(policy *Policy, svc *iam.IAM) error {
 	setAsDefault := true
 	_, err = svc.CreatePolicyVersion(&iam.CreatePolicyVersionInput{PolicyArn: aws.String(arn), PolicyDocument: aws.String(string(jsonMarshal)), SetAsDefault: &setAsDefault})
 	if err != nil {
-		if awsErr, ok := err.(awserr.Error); ok && awsErr.Code() == iam.ErrCodeLimitExceededException {
-			// Check if we have hit the policy version limit
-			err = c.deleteOldPolicyVersions(policy, svc)
-			if err != nil {
-				return fmt.Errorf("delete old policy versions: %s: %w", policy.Name, err)
-			}
+		if awsErr, ok := err.(awserr.Error); ok {
+			// process SDK error
+			switch awsErr.Code() {
+			case iam.ErrCodeLimitExceededException:
+				// Check if we have hit the policy version limit
+				err = c.deleteOldPolicyVersions(policy, svc)
+				if err != nil {
+					return fmt.Errorf("delete old policy versions: %s: %w", policy.Name, err)
+				}
 
-			_, err = svc.CreatePolicyVersion(&iam.CreatePolicyVersionInput{PolicyArn: aws.String(arn), PolicyDocument: aws.String(string(jsonMarshal)), SetAsDefault: &setAsDefault})
-			if err != nil {
-				return fmt.Errorf("create policy version: %s: %w", policy.Name, err)
+				_, err = svc.CreatePolicyVersion(&iam.CreatePolicyVersionInput{PolicyArn: aws.String(arn), PolicyDocument: aws.String(string(jsonMarshal)), SetAsDefault: &setAsDefault})
+				if err != nil {
+					return fmt.Errorf("create policy version: %s: %w", policy.Name, err)
+				}
+
+				return nil
 			}
-		} else {
-			return fmt.Errorf("create policy version with arn: %s: %w", arn, err)
 		}
+
+		return fmt.Errorf("update policy version with arn: %s: %w", arn, err)
 	}
 
 	return nil
