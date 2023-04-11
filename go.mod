@@ -3,17 +3,17 @@ module go.lunarway.com/postgresql-controller
 go 1.18
 
 require (
-	github.com/aws/aws-sdk-go v1.44.209
-	github.com/go-logr/logr v1.2.3
+	github.com/aws/aws-sdk-go v1.44.240
+	github.com/go-logr/logr v1.2.4
 	github.com/google/uuid v1.3.0
 	github.com/lib/pq v1.10.7
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.8.2
-	go.uber.org/multierr v1.9.0
-	k8s.io/api v0.26.1
-	k8s.io/apimachinery v0.26.1
-	k8s.io/client-go v0.26.1
-	sigs.k8s.io/controller-runtime v0.14.4
+	go.uber.org/multierr v1.11.0
+	k8s.io/api v0.26.3
+	k8s.io/apimachinery v0.26.3
+	k8s.io/client-go v0.26.3
+	sigs.k8s.io/controller-runtime v0.14.6
 )
 
 require (
@@ -51,11 +51,11 @@ require (
 	github.com/prometheus/procfs v0.8.0 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/zap v1.24.0 // indirect
-	golang.org/x/net v0.3.1-0.20221206200815-1e63c2f08a10 // indirect
+	golang.org/x/net v0.7.0 // indirect
 	golang.org/x/oauth2 v0.0.0-20220223155221-ee480838109b // indirect
-	golang.org/x/sys v0.3.0 // indirect
-	golang.org/x/term v0.3.0 // indirect
-	golang.org/x/text v0.5.0 // indirect
+	golang.org/x/sys v0.5.0 // indirect
+	golang.org/x/term v0.5.0 // indirect
+	golang.org/x/text v0.7.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.2.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
