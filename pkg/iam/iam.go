@@ -65,7 +65,7 @@ func EnsureUser(client *Client, config EnsureUserConfig, userName, rolename stri
 		}
 	}
 
-	// User could not be added to an existing policy so we create a new one instead.
+	// User could not be handled in an existing policy so we create a new one instead.
 	if !userHandled {
 		fmt.Print("Creating new policy\n")
 		// TODO : There is a bug where where the new name might exist. This could for instance be the case where a policy i is deleted but i+1 exists. Then len(policies) = i+1 and there is a clash.
