@@ -27,8 +27,6 @@ func EnsureUser(client *Client, config EnsureUserConfig, userName, rolename stri
 		usersInPolicy := policy.Document.ListUsers()
 		for _, user := range usersInPolicy {
 			users[user] = struct{}{}
-			fmt.Printf("Found user: %s\n", user)
-			fmt.Printf("current user: %s\n", userName)
 		}
 	}
 
