@@ -1,6 +1,9 @@
 package iam
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 type Policy struct {
 	Name             string
@@ -39,6 +42,22 @@ func usernameToUserId(username string) string {
 	return fmt.Sprintf("*:%s@lunar.app", username)
 }
 
+func userIdToUsername(userID string) string {
+	return strings.TrimSuffix(
+		strings.TrimPrefix(userID, "*:"),
+		"@lunar.app")
+}
+
+func (p *PolicyDocument) ListUsers() []string {
+	var users []string
+	for _, statement := range p.Statement {
+		userName := userIdToUsername(statement.Condition.StringLike.AWSUserID)
+		users = append(users, userName)
+	}
+
+	return users
+}
+
 func (p *PolicyDocument) Exists(username string) bool {
 	awsUserID := usernameToUserId(username)
 	return any(p.Statement, func(s StatementEntry) bool {
@@ -52,7 +71,7 @@ func (p *PolicyDocument) Count() int {
 
 func (p *PolicyDocument) Add(region, accountID, rolePrefix, username, rolename string) {
 	awsUserID := usernameToUserId(username)
-	p.Statement = append(p.Statement, newStatementEntry(region, accountID, rolePrefix, username, rolename, awsUserID))
+	p.Statement = append(p.Statement, newStatementEntry(region, accountID, rolePrefix, rolename, awsUserID))
 }
 
 // Update updates the policy document statements for the provided username. If
@@ -64,7 +83,7 @@ func (p *PolicyDocument) Update(region, accountID, rolePrefix, username, rolenam
 	var statements []StatementEntry
 	for i := range p.Statement {
 		if p.Statement[i].Condition.StringLike.AWSUserID == awsUserID {
-			statements = append(statements, newStatementEntry(region, accountID, rolePrefix, username, rolename, awsUserID))
+			statements = append(statements, newStatementEntry(region, accountID, rolePrefix, rolename, awsUserID))
 			updated = true
 			continue
 		}
@@ -76,7 +95,7 @@ func (p *PolicyDocument) Update(region, accountID, rolePrefix, username, rolenam
 	return updated
 }
 
-func newStatementEntry(region, accountID, rolePrefix, username, rolename, awsUserID string) StatementEntry {
+func newStatementEntry(region, accountID, rolePrefix, rolename, awsUserID string) StatementEntry {
 	return StatementEntry{
 		Effect:    "Allow",
 		Action:    []string{"rds-db:connect"},
