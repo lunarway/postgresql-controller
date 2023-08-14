@@ -81,8 +81,16 @@ func (p *PolicyDocument) Update(region, accountID, rolePrefix, username, rolenam
 
 	var updated bool
 	var statements []StatementEntry
+statement_loop:
 	for i := range p.Statement {
 		if p.Statement[i].Condition.StringLike.AWSUserID == awsUserID {
+			for _, resource := range p.Statement[i].Resource {
+				if resource == formatStatementResource(region, accountID, rolePrefix, rolename, awsUserID) {
+					statements = append(statements, p.Statement[i])
+					continue statement_loop
+				}
+			}
+
 			statements = append(statements, newStatementEntry(region, accountID, rolePrefix, rolename, awsUserID))
 			updated = true
 			continue
@@ -99,9 +107,13 @@ func newStatementEntry(region, accountID, rolePrefix, rolename, awsUserID string
 	return StatementEntry{
 		Effect:    "Allow",
 		Action:    []string{"rds-db:connect"},
-		Resource:  []string{fmt.Sprintf("arn:aws:rds-db:%s:%s:dbuser:*/%s%s", region, accountID, rolePrefix, rolename)},
+		Resource:  []string{formatStatementResource(region, accountID, rolePrefix, rolename, awsUserID)},
 		Condition: StringLike{StringLike: UserID{AWSUserID: awsUserID}},
 	}
+}
+
+func formatStatementResource(region, accountID, rolePrefix, rolename, awsUserID string) string {
+	return fmt.Sprintf("arn:aws:rds-db:%s:%s:dbuser:*/%s%s", region, accountID, rolePrefix, rolename)
 }
 
 func (p *PolicyDocument) Remove(username string) {
