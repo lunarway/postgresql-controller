@@ -81,12 +81,13 @@ func (p *PolicyDocument) Update(region, accountID, rolePrefix, username, rolenam
 
 	var updated bool
 	var statements []StatementEntry
+statement_loop:
 	for i := range p.Statement {
 		if p.Statement[i].Condition.StringLike.AWSUserID == awsUserID {
 			for _, resource := range p.Statement[i].Resource {
 				if resource == formatStatementResource(region, accountID, rolePrefix, rolename, awsUserID) {
 					statements = append(statements, p.Statement[i])
-					continue
+					continue statement_loop
 				}
 			}
 
