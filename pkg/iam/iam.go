@@ -17,7 +17,7 @@ type EnsureUserConfig struct {
 	AWSLoginRoles     []string
 }
 
-func EnsureUser(client *Client, log *logr.Logger, config EnsureUserConfig, userName, rolename string) error {
+func EnsureUser(client *Client, log logr.Logger, config EnsureUserConfig, userName, rolename string) error {
 	users := make(map[string]struct{})
 	log.Info("listing iam policies")
 	policies, err := client.ListPolicies()
