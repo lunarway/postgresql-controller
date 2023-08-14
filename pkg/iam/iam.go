@@ -34,7 +34,7 @@ func EnsureUser(client *Client, config EnsureUserConfig, userName, rolename stri
 	if _, ok := users[userName]; ok {
 		for _, policy := range policies {
 			if !policy.Document.Exists(userName) {
-				break
+				continue
 			}
 
 			// Try to update the document where the user is present to ensure correct roleName.
