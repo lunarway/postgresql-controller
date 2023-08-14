@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/api/v1alpha1"
 	"go.lunarway.com/postgresql-controller/pkg/grants"
@@ -145,7 +146,7 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 				return kube.ResourceValue(cl, resource, namespace)
 			},
 		},
-		EnsureIAMUser: func(client *iam.Client, config iam.EnsureUserConfig, username, rolename string) error {
+		EnsureIAMUser: func(client *iam.Client, logger logr.Logger, config iam.EnsureUserConfig, username, rolename string) error {
 			return nil
 		},
 	}
@@ -262,7 +263,7 @@ func TestReconcile_rolePrefix(t *testing.T) {
 				return kube.ResourceValue(cl, resource, namespace)
 			},
 		},
-		EnsureIAMUser: func(client *iam.Client, config iam.EnsureUserConfig, username, rolename string) error {
+		EnsureIAMUser: func(client *iam.Client, logger logr.Logger, config iam.EnsureUserConfig, username, rolename string) error {
 			return nil
 		},
 	}
@@ -381,7 +382,7 @@ func TestReconcile_dotInName(t *testing.T) {
 				return kube.ResourceValue(cl, resource, namespace)
 			},
 		},
-		EnsureIAMUser: func(client *iam.Client, config iam.EnsureUserConfig, username, rolename string) error {
+		EnsureIAMUser: func(client *iam.Client, logger logr.Logger, config iam.EnsureUserConfig, username, rolename string) error {
 			assert.Equal(t, userName, username, "iam username must be the original")
 			assert.Equal(t, rolename, userNameSanitized, "iam rolename must be the sanitized")
 			return nil
@@ -529,7 +530,7 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 				return kube.ResourceValue(cl, resource, namespace)
 			},
 		},
-		EnsureIAMUser: func(client *iam.Client, config iam.EnsureUserConfig, username, rolename string) error {
+		EnsureIAMUser: func(client *iam.Client, logger logr.Logger, config iam.EnsureUserConfig, username, rolename string) error {
 			return nil
 		},
 	}

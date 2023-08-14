@@ -75,11 +75,11 @@ func TestEnsureUser_roleChange(t *testing.T) {
 	}
 
 	// add a user
-	err := EnsureUser(client, addUserConfig, "user1", "role1")
+	err := EnsureUser(client, logger, addUserConfig, "user1", "role1")
 	require.NoError(t, err, "unexpected error when adding the first user")
 
 	// update with a new role
-	err = EnsureUser(client, addUserConfig, "user1", "role2")
+	err = EnsureUser(client, logger, addUserConfig, "user1", "role2")
 	require.NoError(t, err, "unexpected error when updating the first user")
 
 	expectedPolicies := []*Policy{
@@ -137,7 +137,7 @@ func TestEnsureUser_AWSLoginRole_Added(t *testing.T) {
 	}
 
 	// add a user
-	err := EnsureUser(client, existingUserConfig, "user1", "role1")
+	err := EnsureUser(client, logger, existingUserConfig, "user1", "role1")
 	require.NoError(t, err, "unexpected error when adding the first user")
 
 	assertPolicyOnAWSLoginRole(t, client, existingRole)
@@ -157,7 +157,7 @@ func TestEnsureUser_AWSLoginRole_Added(t *testing.T) {
 		},
 	}
 
-	err = EnsureUser(client, newUserConfig, "user1", "role1")
+	err = EnsureUser(client, logger, newUserConfig, "user1", "role1")
 	require.NoError(t, err, "unexpected error when adding the user to the new AWSLoginRole")
 
 	assertPolicyOnAWSLoginRole(t, client, newRole)
@@ -362,7 +362,7 @@ func Test_AddRemoveUser(t *testing.T) {
 			}
 
 			if tt.operation == EnsureUserOperation {
-				err = EnsureUser(client, config, tt.user, tt.user)
+				err = EnsureUser(client, logger, config, tt.user, tt.user)
 				assert.NoError(err)
 			} else if tt.operation == RemoveUserOperation {
 				err = RemoveUser(client, []string{awsLoginRole}, tt.user)
