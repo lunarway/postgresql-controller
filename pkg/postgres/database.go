@@ -108,10 +108,6 @@ func Database(log logr.Logger, db *sql.DB, host string, credentials Credentials)
 		if err != nil {
 			return fmt.Errorf("grant new role '%s' to creator role: %w", credentials.User, err)
 		}
-		err = execf(db, "GRANT %s TO %s", credentials.User, readOwningWriteRole)
-		if err != nil {
-			return fmt.Errorf("alter owner of database %s to %s: %w", credentials.Name, credentials.User, err)
-		}
 		err = execf(db, "ALTER DATABASE %s OWNER TO %s", credentials.Name, credentials.User)
 		if err != nil {
 			return fmt.Errorf("alter owner of database %s to %s: %w", credentials.Name, credentials.User, err)
