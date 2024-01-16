@@ -780,7 +780,7 @@ func TestGranter_connectToHosts(t *testing.T) {
 			credentials: map[string]postgres.Credentials{
 				"localhost:5432": {
 					Name:     "iam_creator",
-					Password: "",
+					Password: "iam_creator",
 				},
 			},
 			hostAccess: HostAccess{
@@ -801,7 +801,7 @@ func TestGranter_connectToHosts(t *testing.T) {
 			credentials: map[string]postgres.Credentials{
 				"localhost:5432": {
 					Name:     "iam_creator",
-					Password: "",
+					Password: "iam_creator",
 				},
 				"unknown": {
 					Name:     "iam_creator",

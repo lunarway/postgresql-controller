@@ -141,7 +141,7 @@ func TestConnect_idleConnections(t *testing.T) {
 		Host:     postgresqlHost,
 		User:     "iam_creator",
 		Database: "postgres",
-		Password: "",
+		Password: "iam_creator",
 	}
 
 	// connect 100 times without closing the connections before completing the
@@ -164,7 +164,7 @@ func TestRole_staticRoles(t *testing.T) {
 		Host:     postgresqlHost,
 		User:     "iam_creator",
 		Database: "postgres",
-		Password: "",
+		Password: "iam_creator",
 	})
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
@@ -268,7 +268,7 @@ func TestRole_priviliges_databaseNameAndSchemaDiffers(t *testing.T) {
 		Host:     postgresqlHost,
 		User:     "iam_creator",
 		Database: "postgres",
-		Password: "",
+		Password: "iam_creator",
 	})
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
@@ -293,7 +293,7 @@ func TestRole_priviliges_databaseNameAndSchemaDiffers(t *testing.T) {
 		Host:     postgresqlHost,
 		User:     "iam_creator",
 		Database: serviceUser1,
-		Password: "",
+		Password: "iam_creator",
 	})
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
@@ -338,7 +338,7 @@ func TestRole_owningWritePriviliges(t *testing.T) {
 		Host:     postgresqlHost,
 		User:     "iam_creator",
 		Database: "postgres",
-		Password: "",
+		Password: "iam_creator",
 	})
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
@@ -367,7 +367,7 @@ func TestRole_owningWritePriviliges(t *testing.T) {
 		Host:     postgresqlHost,
 		User:     "iam_creator",
 		Database: serviceUser1,
-		Password: "",
+		Password: "iam_creator",
 	})
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
@@ -409,7 +409,7 @@ func TestRole_owningWritePriviliges(t *testing.T) {
 		Host:     postgresqlHost,
 		User:     "iam_creator",
 		Database: serviceUser1,
-		Password: "",
+		Password: "iam_creator",
 	})
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
@@ -454,7 +454,7 @@ func TestRole_priviliges(t *testing.T) {
 		Host:     postgresqlHost,
 		User:     "iam_creator",
 		Database: "postgres",
-		Password: "",
+		Password: "iam_creator",
 	})
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
@@ -486,7 +486,7 @@ func TestRole_priviliges(t *testing.T) {
 		Host:     postgresqlHost,
 		User:     "iam_creator",
 		Database: serviceUser1,
-		Password: "",
+		Password: "iam_creator",
 	})
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
@@ -532,7 +532,7 @@ func TestRole_priviliges(t *testing.T) {
 		Host:     postgresqlHost,
 		User:     "iam_creator",
 		Database: serviceUser2,
-		Password: "",
+		Password: "iam_creator",
 	})
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)

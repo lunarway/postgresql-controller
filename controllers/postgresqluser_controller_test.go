@@ -134,7 +134,7 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 			HostCredentials: map[string]postgres.Credentials{
 				host: {
 					Name:     "iam_creator",
-					Password: "",
+					Password: "iam_creator",
 				},
 			},
 			AllDatabasesReadEnabled:  true,
@@ -251,7 +251,7 @@ func TestReconcile_rolePrefix(t *testing.T) {
 			HostCredentials: map[string]postgres.Credentials{
 				host: {
 					Name:     "iam_creator",
-					Password: "",
+					Password: "iam_creator",
 				},
 			},
 			AllDatabasesReadEnabled:  true,
@@ -370,7 +370,7 @@ func TestReconcile_dotInName(t *testing.T) {
 			HostCredentials: map[string]postgres.Credentials{
 				host: {
 					Name:     "iam_creator",
-					Password: "",
+					Password: "iam_creator",
 				},
 			},
 			AllDatabasesReadEnabled:  true,
@@ -518,7 +518,7 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 			HostCredentials: map[string]postgres.Credentials{
 				host: {
 					Name:     "iam_creator",
-					Password: "",
+					Password: "iam_creator",
 				},
 			},
 			AllDatabasesReadEnabled:  true,
@@ -562,7 +562,7 @@ func seededDatabase(t *testing.T, host, name string) {
 	dbConn, err := postgres.Connect(logf.Log, postgres.ConnectionString{
 		Database: "postgres",
 		Host:     host,
-		Password: "",
+		Password: "iam_creator",
 		User:     "iam_creator",
 	})
 	if !assert.NoErrorf(t, err, "failed to connect to database host to seed database '%s'", name) {
@@ -595,7 +595,7 @@ func assertAccess(t *testing.T, host, databaseName, userName string) {
 	userConn, err := postgres.Connect(logf.Log, postgres.ConnectionString{
 		Database: databaseName,
 		Host:     host,
-		Password: "",
+		Password: "123456",
 		User:     userName,
 	})
 	if !assert.NoErrorf(t, err, "failed to connect to database '%s' with user '%s'", databaseName, userName) {
