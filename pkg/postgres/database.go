@@ -80,7 +80,7 @@ func Database(log logr.Logger, db *sql.DB, host string, credentials Credentials)
 	// support services using a shared database with mixed owners of the resources.
 	if credentials.Shared {
 		// ensures access to existing schemas and tables
-		err = execf(db, fmt.Sprintf("GRANT %s TO %s WITH ADMIN OPTION", credentials.Name, credentials.User))
+		err = execf(db, fmt.Sprintf("GRANT %s TO %s", credentials.Name, credentials.User))
 		if err != nil {
 			return fmt.Errorf("grant %s to service user %s: %w", credentials.Name, credentials.User, err)
 		}
@@ -104,11 +104,11 @@ func Database(log logr.Logger, db *sql.DB, host string, credentials Credentials)
 	if !credentials.Shared {
 		// Alter ownership of the database to the database user. The current user
 		// needs to belong to the new role before owner ship can be changed.
-		err = execf(db, "GRANT %s TO CURRENT_USER WITH ADMIN OPTION", credentials.User)
+		err = execf(db, "GRANT %s TO CURRENT_USER", credentials.User)
 		if err != nil {
 			return fmt.Errorf("grant new role '%s' to creator role: %w", credentials.User, err)
 		}
-		err = execf(db, "GRANT %s TO %s WITH ADMIN OPTION", credentials.User, readOwningWriteRole)
+		err = execf(db, "GRANT %s TO %s", credentials.User, readOwningWriteRole)
 		if err != nil {
 			return fmt.Errorf("alter owner of database %s to %s: %w", credentials.Name, credentials.User, err)
 		}
@@ -165,7 +165,7 @@ func Database(log logr.Logger, db *sql.DB, host string, credentials Credentials)
 	if err != nil {
 		return fmt.Errorf("set default readowningwrite priviledges for role %s: %w", readOwningWriteRole, err)
 	}
-	err = execf(db, "GRANT %s TO %s WITH ADMIN OPTION", credentials.User, readOwningWriteRole)
+	err = execf(db, "GRANT %s TO %s", credentials.User, readOwningWriteRole)
 	if err != nil {
 		return fmt.Errorf("grant owner %s to readowningwrite for role %s: %w", credentials.User, readOwningWriteRole, err)
 	}
