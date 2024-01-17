@@ -81,7 +81,7 @@ func TestDatabase_sunshine(t *testing.T) {
 		Host:     postgresqlHost,
 		Database: "postgres",
 		User:     "iam_creator",
-		Password: "",
+		Password: "iam_creator",
 	})
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
@@ -138,7 +138,7 @@ func TestDatabase_existingResourcePrivilegesForReadWriteRoles(t *testing.T) {
 		Host:     postgresqlHost,
 		Database: "postgres",
 		User:     "iam_creator",
-		Password: "",
+		Password: "iam_creator",
 	})
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
@@ -203,7 +203,7 @@ func TestDatabase_existingResourcePrivilegesForReadWriteRoles(t *testing.T) {
 		Host:     postgresqlHost,
 		Database: name,
 		User:     developerName,
-		Password: "",
+		Password: password,
 	})
 	if err != nil {
 		t.Fatalf("Connect as developer user failed: %v", err)
@@ -226,7 +226,7 @@ func TestDatabase_defaultDatabaseName(t *testing.T) {
 		Host:     postgresqlHost,
 		Database: "postgres",
 		User:     "iam_creator",
-		Password: "",
+		Password: "iam_creator",
 	})
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
@@ -272,7 +272,7 @@ func TestDatabase_mixedOwnershipOnSharedDatabase(t *testing.T) {
 		Host:     postgresqlHost,
 		Database: "postgres",
 		User:     "iam_creator",
-		Password: "",
+		Password: "iam_creator",
 	})
 	if err != nil {
 		t.Fatalf("connect to default database failed: %v", err)
@@ -299,7 +299,7 @@ func TestDatabase_mixedOwnershipOnSharedDatabase(t *testing.T) {
 		Host:     postgresqlHost,
 		Database: sharedDatabaseName,
 		User:     sharedDatabaseName,
-		Password: "",
+		Password: sharedDatabaseName,
 	})
 	if err != nil {
 		t.Fatalf("connect to sahred database failed: %v", err)
@@ -377,7 +377,7 @@ func TestDatabase_mixedOwnershipOnSharedDatabase(t *testing.T) {
 		Host:     postgresqlHost,
 		Database: sharedDatabaseName,
 		User:     developer,
-		Password: "",
+		Password: developer,
 	})
 	if err != nil {
 		t.Fatalf("connect to newUser with developer failed: %v", err)
@@ -400,7 +400,7 @@ func TestDatabase_idempotency(t *testing.T) {
 		Host:     postgresqlHost,
 		Database: "postgres",
 		User:     "iam_creator",
-		Password: "",
+		Password: "iam_creator",
 	})
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)

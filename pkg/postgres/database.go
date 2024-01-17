@@ -161,7 +161,7 @@ func Database(log logr.Logger, db *sql.DB, host string, credentials Credentials)
 	if err != nil {
 		return fmt.Errorf("set default readowningwrite priviledges for role %s: %w", readOwningWriteRole, err)
 	}
-	err = execf(serviceConnection, "GRANT %s TO %s", credentials.User, readOwningWriteRole)
+	err = execf(db, "GRANT %s TO %s", credentials.User, readOwningWriteRole)
 	if err != nil {
 		return fmt.Errorf("grant owner %s to readowningwrite for role %s: %w", credentials.User, readOwningWriteRole, err)
 	}
@@ -195,7 +195,7 @@ func createUser(log logr.Logger, db *sql.DB, user, password string) error {
 	return idempotentExec(log, db, idempotentExecReq{
 		objectType: "service user",
 		errorCode:  "duplicate_object",
-		query:      fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s' NOCREATEROLE VALID UNTIL 'infinity'", user, password),
+		query:      fmt.Sprintf("CREATE ROLE %s LOGIN PASSWORD '%s' NOCREATEROLE VALID UNTIL 'infinity'", user, password),
 	})
 }
 

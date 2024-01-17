@@ -1,9 +1,11 @@
 version: '2'
 services:
   postgres:
-    image: timms/postgres-logging:11.5
+    image: postgres:16.1
     environment:
       - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin
+      - POSTGRES_HOST_AUTH_METHOD=trust
     volumes:
       - ./scripts/init-test-db.sql:/docker-entrypoint-initdb.d/init.sql
     ports:

@@ -194,7 +194,7 @@ func TestPostgreSQLDatabase_Reconcile_hostCredentialsResourceReference(t *testin
 					Value: "admin",
 				},
 				Password: lunarwayv1alpha1.ResourceVar{
-					Value: "password",
+					Value: "admin",
 				},
 			},
 		}
@@ -243,7 +243,7 @@ func TestPostgreSQLDatabase_Reconcile_hostCredentialsResourceReference(t *testin
 	}
 
 	// seed database into the postgres host
-	seededDatabase(t, host, databaseName)
+	seededDatabase(t, host, databaseName, databaseName)
 
 	req := reconcile.Request{
 		NamespacedName: types.NamespacedName{
@@ -313,7 +313,7 @@ func TestPostgreSQLDatabase_Reconcile_unknownHostCredentialsResourceReference(t 
 		HostCredentials: nil,
 	}
 
-	seededDatabase(t, host, databaseName)
+	seededDatabase(t, host, databaseName, databaseName)
 
 	req := reconcile.Request{
 		NamespacedName: types.NamespacedName{
