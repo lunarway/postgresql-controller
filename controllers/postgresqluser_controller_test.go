@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/api/v1alpha1"
 	"go.lunarway.com/postgresql-controller/pkg/grants"
 	"go.lunarway.com/postgresql-controller/pkg/iam"
@@ -74,7 +75,7 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 					Value: host,
 				},
 				Password: lunarwayv1alpha1.ResourceVar{
-					Value: "123456",
+					Value: "user_password",
 				},
 				User: lunarwayv1alpha1.ResourceVar{
 					Value: database1Name,
@@ -152,7 +153,7 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 	}
 
 	// seed database1 into the postgres host
-	seededDatabase(t, host, database1Name)
+	seededDatabase(t, host, database1Name, userName)
 
 	// reconcile user requesting access to all databases with a bad database
 	// reference
@@ -212,7 +213,7 @@ func TestReconcile_rolePrefix(t *testing.T) {
 					Value: host,
 				},
 				Password: lunarwayv1alpha1.ResourceVar{
-					Value: "123456",
+					Value: database1Name,
 				},
 				User: lunarwayv1alpha1.ResourceVar{
 					Value: database1Name,
@@ -269,7 +270,7 @@ func TestReconcile_rolePrefix(t *testing.T) {
 	}
 
 	// seed database1 into the postgres host
-	seededDatabase(t, host, database1Name)
+	seededDatabase(t, host, database1Name, database1Name)
 
 	// reconcile user requesting access to all databases with a bad database
 	// reference
@@ -331,7 +332,7 @@ func TestReconcile_dotInName(t *testing.T) {
 					Value: host,
 				},
 				Password: lunarwayv1alpha1.ResourceVar{
-					Value: "123456",
+					Value: "user_password",
 				},
 				User: lunarwayv1alpha1.ResourceVar{
 					Value: database1Name,
@@ -390,7 +391,7 @@ func TestReconcile_dotInName(t *testing.T) {
 	}
 
 	// seed database1 into the postgres host
-	seededDatabase(t, host, database1Name)
+	seededDatabase(t, host, database1Name, database1Name)
 
 	// reconcile user requesting access to all databases with a bad database
 	// reference
@@ -458,7 +459,7 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 					Value: host,
 				},
 				Password: lunarwayv1alpha1.ResourceVar{
-					Value: "123456",
+					Value: "user_password",
 				},
 				User: lunarwayv1alpha1.ResourceVar{
 					Value: database1Name,
@@ -479,7 +480,7 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 					Value: host,
 				},
 				Password: lunarwayv1alpha1.ResourceVar{
-					Value: "123456",
+					Value: "user_password",
 				},
 				User: lunarwayv1alpha1.ResourceVar{
 					Value: database2Name,
@@ -536,8 +537,8 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 	}
 
 	// seed database1 into the postgres host
-	seededDatabase(t, host, database1Name)
-	seededDatabase(t, host, database2Name)
+	seededDatabase(t, host, database1Name, database1Name)
+	seededDatabase(t, host, database2Name, database2Name)
 
 	// reconcile user requesting access to all databases with a bad database
 	// reference
@@ -556,7 +557,7 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 
 // seededDatabase creates a database with name along with a 'movies' table owned
 // by the database role.
-func seededDatabase(t *testing.T, host, name string) {
+func seededDatabase(t *testing.T, host, databaseName, userName string) {
 	t.Helper()
 
 	dbConn, err := postgres.Connect(logf.Log, postgres.ConnectionString{
@@ -565,37 +566,31 @@ func seededDatabase(t *testing.T, host, name string) {
 		Password: "iam_creator",
 		User:     "iam_creator",
 	})
-	if !assert.NoErrorf(t, err, "failed to connect to database host to seed database '%s'", name) {
-		return
-	}
+	require.NoErrorf(t, err, "failed to connect to database host to seed database '%s'", databaseName)
+
 	err = postgres.Database(logf.Log, dbConn, host, postgres.Credentials{
-		Name:     name,
-		Password: "123456",
-		User:     name,
+		Name:     databaseName,
+		Password: databaseName,
+		User:     userName,
 	})
-	if !assert.NoErrorf(t, err, "failed to created seeded database '%s'", name) {
-		return
-	}
+	require.NoErrorf(t, err, "failed to created seeded database '%s'", databaseName)
+
 	db1Conn, err := postgres.Connect(logf.Log, postgres.ConnectionString{
-		Database: name,
+		Database: databaseName,
 		Host:     host,
-		Password: "123456",
-		User:     name,
+		Password: databaseName,
+		User:     userName,
 	})
-	if !assert.NoErrorf(t, err, "failed to connect to database '%s' to create a table", name) {
-		return
-	}
+	require.NoErrorf(t, err, "failed to connect to database '%s' to create a table", databaseName)
+
 	_, err = db1Conn.Exec(`CREATE TABLE movies(title varchar(50));`)
-	if !assert.NoErrorf(t, err, "failed to create table in database '%s'", name) {
-		return
-	}
+	require.NoErrorf(t, err, "failed to create table in database '%s'", databaseName)
 }
 
 func assertAccess(t *testing.T, host, databaseName, userName string) {
 	userConn, err := postgres.Connect(logf.Log, postgres.ConnectionString{
 		Database: databaseName,
 		Host:     host,
-		Password: "123456",
 		User:     userName,
 	})
 	if !assert.NoErrorf(t, err, "failed to connect to database '%s' with user '%s'", databaseName, userName) {

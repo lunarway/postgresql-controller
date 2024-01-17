@@ -147,7 +147,7 @@ ENVTEST_K8S_VERSION = 1.24
 
 .PHONY: test/unit
 test/unit: fmt vet envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test -v -race ./... -coverprofile cover.out
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" gotestsum
 
 POSTGRESQL_CONTROLLER_INTEGRATION_HOST=localhost:5432
 

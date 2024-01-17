@@ -203,7 +203,7 @@ func TestDatabase_existingResourcePrivilegesForReadWriteRoles(t *testing.T) {
 		Host:     postgresqlHost,
 		Database: name,
 		User:     developerName,
-		Password: "",
+		Password: password,
 	})
 	if err != nil {
 		t.Fatalf("Connect as developer user failed: %v", err)
@@ -377,7 +377,7 @@ func TestDatabase_mixedOwnershipOnSharedDatabase(t *testing.T) {
 		Host:     postgresqlHost,
 		Database: sharedDatabaseName,
 		User:     developer,
-		Password: "",
+		Password: developer,
 	})
 	if err != nil {
 		t.Fatalf("connect to newUser with developer failed: %v", err)
