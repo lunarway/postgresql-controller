@@ -38,11 +38,12 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 
 	host := test.Integration(t)
 	var (
-		epoch         = time.Now().UnixNano()
-		namespace     = "default"
-		database1Name = fmt.Sprintf("database1_%d", epoch)
-		database2Name = fmt.Sprintf("database2_%d", epoch)
-		userName      = fmt.Sprintf("service_user_%d", epoch)
+		epoch           = time.Now().UnixNano()
+		namespace       = "default"
+		database1Name   = fmt.Sprintf("database1_%d", epoch)
+		database2Name   = fmt.Sprintf("database2_%d", epoch)
+		userName        = fmt.Sprintf("service_user_%d", epoch)
+		managerRoleName = "postgres_role_manager"
 
 		// user requesting access to all databases on host
 		userResource = &lunarwayv1alpha1.PostgreSQLUser{
@@ -153,7 +154,7 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 	}
 
 	// seed database1 into the postgres host
-	seededDatabase(t, host, database1Name, userName)
+	seededDatabase(t, host, database1Name, userName, managerRoleName)
 
 	// reconcile user requesting access to all databases with a bad database
 	// reference
@@ -176,11 +177,12 @@ func TestReconcile_rolePrefix(t *testing.T) {
 
 	host := test.Integration(t)
 	var (
-		epoch         = time.Now().UnixNano()
-		namespace     = "default"
-		database1Name = fmt.Sprintf("database1_%d", epoch)
-		userName      = fmt.Sprintf("user_%d", epoch)
-		rolePrefix    = "iam_developer_"
+		epoch           = time.Now().UnixNano()
+		namespace       = "default"
+		database1Name   = fmt.Sprintf("database1_%d", epoch)
+		userName        = fmt.Sprintf("user_%d", epoch)
+		rolePrefix      = "iam_developer_"
+		managerRoleName = "postgres_role_manager"
 
 		// user requesting access to all databases on host
 		userResource = &lunarwayv1alpha1.PostgreSQLUser{
@@ -270,7 +272,7 @@ func TestReconcile_rolePrefix(t *testing.T) {
 	}
 
 	// seed database1 into the postgres host
-	seededDatabase(t, host, database1Name, database1Name)
+	seededDatabase(t, host, database1Name, database1Name, managerRoleName)
 
 	// reconcile user requesting access to all databases with a bad database
 	// reference
@@ -300,6 +302,7 @@ func TestReconcile_dotInName(t *testing.T) {
 		database1Name     = fmt.Sprintf("database1_%d", epoch)
 		userName          = fmt.Sprintf("user.%d", epoch)
 		userNameSanitized = fmt.Sprintf("user_%d", epoch)
+		managerRoleName   = "postgres_role_manager"
 
 		// user requesting access to all databases on host
 		userResource = &lunarwayv1alpha1.PostgreSQLUser{
@@ -391,7 +394,7 @@ func TestReconcile_dotInName(t *testing.T) {
 	}
 
 	// seed database1 into the postgres host
-	seededDatabase(t, host, database1Name, database1Name)
+	seededDatabase(t, host, database1Name, database1Name, managerRoleName)
 
 	// reconcile user requesting access to all databases with a bad database
 	// reference
@@ -422,11 +425,12 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 
 	host := test.Integration(t)
 	var (
-		epoch         = time.Now().UnixNano()
-		namespace     = "default"
-		database1Name = fmt.Sprintf("database1_%d", epoch)
-		database2Name = fmt.Sprintf("database2_%d", epoch)
-		userName      = fmt.Sprintf("user_%d", epoch)
+		epoch           = time.Now().UnixNano()
+		namespace       = "default"
+		database1Name   = fmt.Sprintf("database1_%d", epoch)
+		database2Name   = fmt.Sprintf("database2_%d", epoch)
+		userName        = fmt.Sprintf("user_%d", epoch)
+		managerRoleName = "postgres_role_manager"
 
 		// user requesting access to all databases on host
 		userResource = &lunarwayv1alpha1.PostgreSQLUser{
@@ -537,8 +541,8 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 	}
 
 	// seed database1 into the postgres host
-	seededDatabase(t, host, database1Name, database1Name)
-	seededDatabase(t, host, database2Name, database2Name)
+	seededDatabase(t, host, database1Name, database1Name, managerRoleName)
+	seededDatabase(t, host, database2Name, database2Name, managerRoleName)
 
 	// reconcile user requesting access to all databases with a bad database
 	// reference
@@ -557,7 +561,7 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 
 // seededDatabase creates a database with name along with a 'movies' table owned
 // by the database role.
-func seededDatabase(t *testing.T, host, databaseName, userName string) {
+func seededDatabase(t *testing.T, host, databaseName, userName string, managerRoleName string) {
 	t.Helper()
 
 	dbConn, err := postgres.Connect(logf.Log, postgres.ConnectionString{
@@ -572,7 +576,7 @@ func seededDatabase(t *testing.T, host, databaseName, userName string) {
 		Name:     databaseName,
 		Password: databaseName,
 		User:     userName,
-	})
+	}, managerRoleName)
 	require.NoErrorf(t, err, "failed to created seeded database '%s'", databaseName)
 
 	db1Conn, err := postgres.Connect(logf.Log, postgres.ConnectionString{

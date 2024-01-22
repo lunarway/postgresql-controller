@@ -55,7 +55,7 @@ func ParseUsernamePassword(s string) (Credentials, error) {
 // Database ensures that a user with provided password exists on the host and
 // that read and readwrite roles are created with default priviledges on a
 // schema named after the database name.
-func Database(log logr.Logger, db *sql.DB, host string, credentials Credentials) error {
+func Database(log logr.Logger, db *sql.DB, host string, credentials Credentials, managementRole string) error {
 	if host == "" {
 		return fmt.Errorf("host is required")
 	}
@@ -85,6 +85,12 @@ func Database(log logr.Logger, db *sql.DB, host string, credentials Credentials)
 			return fmt.Errorf("grant %s to service user %s: %w", credentials.Name, credentials.User, err)
 		}
 	}
+
+	// TODO: Somewhere around here, do something like
+	// err = execf(db, fmt.Sprintf("GRANT %s TO %s WITH ADMIN OPTION", credentials.Name, managementRole))
+	// if err != nil {
+	// 	return fmt.Errorf("grant %s to management role %s: %w", credentials.Name, managementRole, err)
+	// }
 
 	// Create read and readwrite roles that can be used to grant users access to
 	// the objects in this database.

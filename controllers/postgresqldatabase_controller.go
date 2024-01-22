@@ -43,6 +43,7 @@ type PostgreSQLDatabaseReconciler struct {
 	client.Client
 	Log logr.Logger
 
+	ManagerRoleName string
 	// contains a map of credentials for hosts
 	HostCredentials map[string]postgres.Credentials
 }
@@ -269,7 +270,7 @@ func (r *PostgreSQLDatabaseReconciler) EnsurePostgreSQLDatabase(ctx context.Cont
 			log.Error(err, "failed to close database connection", "host", params.Host, "database", "postgres", "user", params.Admin.Name)
 		}
 	}()
-	err = postgres.Database(log, db, params.Host, params.Target)
+	err = postgres.Database(log, db, params.Host, params.Target, r.ManagerRoleName)
 	if err != nil {
 		return fmt.Errorf("create database %s on host %s: %w", params.Target.Name, connectionString, err)
 	}
