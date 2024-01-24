@@ -134,8 +134,9 @@ func (r *PostgreSQLDatabaseReconciler) reconcile(ctx context.Context, reqLogger 
 		ctx,
 		reqLogger,
 		&EnsureParams{
-			Host:  host,
-			Admin: *adminCredentials,
+			Host:        host,
+			Admin:       *adminCredentials,
+			ManagerRole: r.ManagerRoleName,
 			Target: postgres.Credentials{
 				Name:     database.Spec.Name,
 				User:     user,
@@ -247,6 +248,8 @@ type EnsureParams struct {
 	// Admin holds the administrator credentials for the database instance.
 	Admin postgres.Credentials
 
+	ManagerRole string
+
 	// Target contains the credentials for the Postgres database that we intend
 	// to create.
 	Target postgres.Credentials
@@ -270,7 +273,7 @@ func (r *PostgreSQLDatabaseReconciler) EnsurePostgreSQLDatabase(ctx context.Cont
 			log.Error(err, "failed to close database connection", "host", params.Host, "database", "postgres", "user", params.Admin.Name)
 		}
 	}()
-	err = postgres.Database(log, db, params.Host, params.Target, r.ManagerRoleName)
+	err = postgres.Database(log, db, params.Host, params.Target, params.ManagerRole)
 	if err != nil {
 		return fmt.Errorf("create database %s on host %s: %w", params.Target.Name, connectionString, err)
 	}
