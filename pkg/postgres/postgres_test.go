@@ -278,10 +278,12 @@ func TestRole_owningWritePriviliges(t *testing.T) {
 		serviceUser1  = fmt.Sprintf("test_svc_1_%d", now)
 		developerUser = fmt.Sprintf("test_user_%d", now)
 		roleRDSIAM    = fmt.Sprintf("rds_iam_%d", now)
+		// managerRoleName = "postgres_manager_role"
 	)
 	log.Info(fmt.Sprintf("Running test with service users %s and developer %s", serviceUser1, developerUser))
 
 	// create service databases and tables for testing access rights
+	// createRole(t, iamCreatorRootDB, managerRoleName)
 	createServiceDatabase(t, log, iamCreatorRootDB, postgresqlHost, serviceUser1)
 	createRole(t, iamCreatorRootDB, roleRDSIAM)
 	dbExec(t, iamCreatorRootDB, "GRANT CONNECT ON DATABASE %s TO %s", serviceUser1, roleRDSIAM)
@@ -395,10 +397,12 @@ func TestRole_priviliges(t *testing.T) {
 		serviceUser2  = fmt.Sprintf("test_svc_2_%d", now)
 		developerUser = fmt.Sprintf("test_user_%d", now)
 		roleRDSIAM    = fmt.Sprintf("rds_iam_%d", now)
+		// managerRoleName = "postgres_manager_role"
 	)
 	log.Info(fmt.Sprintf("Running test with service users %s, %s and developer %s", serviceUser1, serviceUser2, developerUser))
 
 	// create service databases and tables for testing access rights
+	// createRole(t, iamCreatorRootDB, managerRoleName)
 	createServiceDatabase(t, log, iamCreatorRootDB, postgresqlHost, serviceUser1)
 	createServiceDatabase(t, log, iamCreatorRootDB, postgresqlHost, serviceUser2)
 	createRole(t, iamCreatorRootDB, roleRDSIAM)

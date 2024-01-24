@@ -2,11 +2,13 @@ package controllers
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"testing"
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/api/v1alpha1"
@@ -579,6 +581,10 @@ func seededDatabase(t *testing.T, host, databaseName, userName string, managerRo
 	}, managerRoleName)
 	require.NoErrorf(t, err, "failed to created seeded database '%s'", databaseName)
 
+	// Create the ManagmentRole
+	err = createManagerRole(logf.Log, dbConn, managerRoleName)
+	require.NoErrorf(t, err, "failed to create managerRole for dbConn during seedDatabase")
+
 	db1Conn, err := postgres.Connect(logf.Log, postgres.ConnectionString{
 		Database: databaseName,
 		Host:     host,
@@ -618,4 +624,18 @@ func doReconcile(t *testing.T, sut *PostgreSQLUserReconciler, req reconcile.Requ
 	}
 
 	t.Errorf("Did not reconcile after %d tries.", reconcileLimit)
+}
+
+func createManagerRole(log logr.Logger, db *sql.DB, roleName string) error {
+	_, err := db.Exec(fmt.Sprintf("CREATE ROLE %s LOGIN;", roleName))
+	if err != nil {
+		pqError, ok := err.(*pq.Error)
+		if !ok || pqError.Code.Name() != "duplicate_object" {
+			return err
+		}
+		log.Info("role already exists", "errorCode", pqError.Code, "errorName", pqError.Code.Name())
+	} else {
+		log.Info("role created")
+	}
+	return nil
 }
