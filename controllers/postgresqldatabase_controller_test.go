@@ -240,6 +240,7 @@ func TestPostgreSQLDatabase_Reconcile_hostCredentialsResourceReference(t *testin
 	r := &PostgreSQLDatabaseReconciler{
 		Client:          cl,
 		Log:             ctrl.Log.WithName(t.Name()),
+		ManagerRoleName: managerRoleName,
 		HostCredentials: nil,
 	}
 

@@ -259,7 +259,6 @@ func idempotentExec(log logr.Logger, db *sql.DB, args idempotentExecReq) error {
 	_, err := db.Exec(args.query)
 	if err != nil {
 		pqError, ok := err.(*pq.Error)
-		log.Info(fmt.Sprintf("MZC Debug: dbQuery: %s, pqErrorCode: %s", args.query, pqError.Code.Name()))
 		if !ok || pqError.Code.Name() != args.errorCode {
 			return err
 		}
