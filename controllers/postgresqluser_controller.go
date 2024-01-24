@@ -89,7 +89,7 @@ func (r *PostgreSQLUserReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 func (r *PostgreSQLUserReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&postgresqlv1alpha1.PostgreSQLUser{}).
-		WithOptions(controller.Options{MaxConcurrentReconciles: 1}). // explicitly set to 1 (which is also the default) because our reconciliation process is not necessarily concurrency safe.
+		WithOptions(controller.Options{MaxConcurrentReconciles: 1}). //explicitly set to 1 (which is also the default) because our reconciliation process is not necessarily concurrency safe.
 		Complete(r)
 }
 
@@ -203,6 +203,7 @@ func (r *PostgreSQLUserReconciler) getCredentials() *credentials.Credentials {
 }
 
 func (r *PostgreSQLUserReconciler) finalizeUser(reqLogger logr.Logger, client *iam.Client, user *postgresqlv1alpha1.PostgreSQLUser) error {
+
 	err := r.RemoveIAMUser(client, r.AWSLoginRoles, user.Spec.Name)
 	if err != nil {
 		return err
