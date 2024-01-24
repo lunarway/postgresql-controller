@@ -59,6 +59,9 @@ func Database(log logr.Logger, db *sql.DB, host string, credentials Credentials,
 	if host == "" {
 		return fmt.Errorf("host is required")
 	}
+	if managementRole == "" {
+		return fmt.Errorf("managementRole required")
+	}
 	err := credentials.Validate()
 	if err != nil {
 		return fmt.Errorf("credentials not valid: %w", err)
@@ -86,8 +89,12 @@ func Database(log logr.Logger, db *sql.DB, host string, credentials Credentials,
 		}
 	}
 
-	// TODO: Somewhere around here, do something like
-	err = execf(db, fmt.Sprintf("GRANT %s TO %s WITH ADMIN OPTION", credentials.Name, managementRole))
+	// TODO: idempotentExec works, but it should probably be refactored for this purpose as well.
+	err = idempotentExec(log, db, idempotentExecReq{
+		objectType: "service role",
+		errorCode:  "undefined_object",
+		query:      fmt.Sprintf("GRANT %s TO %s WITH ADMIN OPTION", credentials.Name, managementRole),
+	})
 	if err != nil {
 		return fmt.Errorf("grant %s to management role %s: %w", credentials.Name, managementRole, err)
 	}
@@ -252,6 +259,7 @@ func idempotentExec(log logr.Logger, db *sql.DB, args idempotentExecReq) error {
 	_, err := db.Exec(args.query)
 	if err != nil {
 		pqError, ok := err.(*pq.Error)
+		log.Info(fmt.Sprintf("MZC Debug: dbQuery: %s, pqErrorCode: %s", args.query, pqError.Code.Name()))
 		if !ok || pqError.Code.Name() != args.errorCode {
 			return err
 		}
