@@ -180,7 +180,7 @@ func TestPostgreSQLDatabase_Reconcile_hostCredentialsResourceReference(t *testin
 		namespace           = "default"
 		databaseName        = fmt.Sprintf("database_%d", epoch)
 		hostCredentialsName = fmt.Sprintf("hostcredentials_%d", epoch)
-		managerRoleName     = "postgres_role_manager"
+		managerRole         = "postgres_role_manager"
 
 		credentialsResource = &lunarwayv1alpha1.PostgreSQLHostCredentials{
 			ObjectMeta: metav1.ObjectMeta{
@@ -240,12 +240,12 @@ func TestPostgreSQLDatabase_Reconcile_hostCredentialsResourceReference(t *testin
 	r := &PostgreSQLDatabaseReconciler{
 		Client:          cl,
 		Log:             ctrl.Log.WithName(t.Name()),
-		ManagerRoleName: managerRoleName,
+		ManagerRoleName: managerRole,
 		HostCredentials: nil,
 	}
 
 	// seed database into the postgres host
-	seededDatabase(t, host, databaseName, databaseName, managerRoleName)
+	seededDatabase(t, host, databaseName, databaseName, managerRole)
 
 	req := reconcile.Request{
 		NamespacedName: types.NamespacedName{
@@ -269,10 +269,10 @@ func TestPostgreSQLDatabase_Reconcile_unknownHostCredentialsResourceReference(t 
 
 	host := test.Integration(t)
 	var (
-		epoch           = time.Now().UnixNano()
-		namespace       = "default"
-		databaseName    = fmt.Sprintf("database_%d", epoch)
-		managerRoleName = "postgres_role_manager"
+		epoch        = time.Now().UnixNano()
+		namespace    = "default"
+		databaseName = fmt.Sprintf("database_%d", epoch)
+		managerRole  = "postgres_role_manager"
 
 		databaseResource = &lunarwayv1alpha1.PostgreSQLDatabase{
 			ObjectMeta: metav1.ObjectMeta{
@@ -316,7 +316,7 @@ func TestPostgreSQLDatabase_Reconcile_unknownHostCredentialsResourceReference(t 
 		HostCredentials: nil,
 	}
 
-	seededDatabase(t, host, databaseName, databaseName, managerRoleName)
+	seededDatabase(t, host, databaseName, databaseName, managerRole)
 
 	req := reconcile.Request{
 		NamespacedName: types.NamespacedName{
