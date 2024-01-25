@@ -30,6 +30,8 @@ import (
 
 var trueValue = true
 
+var managerRole = "postgres_role_manager"
+
 // TestReconcile_badConfigmapReference tests that reconcilation is completed
 // successfully even though a an error occours during database resolvement. This
 // is to ensure that a single bad PostgreSQLDatabase resource will not block the
@@ -45,7 +47,6 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 		database1Name = fmt.Sprintf("database1_%d", epoch)
 		database2Name = fmt.Sprintf("database2_%d", epoch)
 		userName      = fmt.Sprintf("service_user_%d", epoch)
-		managerRole   = "postgres_role_manager"
 
 		// user requesting access to all databases on host
 		userResource = &lunarwayv1alpha1.PostgreSQLUser{
@@ -184,7 +185,6 @@ func TestReconcile_rolePrefix(t *testing.T) {
 		database1Name = fmt.Sprintf("database1_%d", epoch)
 		userName      = fmt.Sprintf("user_%d", epoch)
 		rolePrefix    = "iam_developer_"
-		managerRole   = "postgres_role_manager"
 
 		// user requesting access to all databases on host
 		userResource = &lunarwayv1alpha1.PostgreSQLUser{
@@ -304,7 +304,6 @@ func TestReconcile_dotInName(t *testing.T) {
 		database1Name     = fmt.Sprintf("database1_%d", epoch)
 		userName          = fmt.Sprintf("user.%d", epoch)
 		userNameSanitized = fmt.Sprintf("user_%d", epoch)
-		managerRole       = "postgres_role_manager"
 
 		// user requesting access to all databases on host
 		userResource = &lunarwayv1alpha1.PostgreSQLUser{
@@ -432,7 +431,6 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 		database1Name = fmt.Sprintf("database1_%d", epoch)
 		database2Name = fmt.Sprintf("database2_%d", epoch)
 		userName      = fmt.Sprintf("user_%d", epoch)
-		managerRole   = "postgres_role_manager"
 
 		// user requesting access to all databases on host
 		userResource = &lunarwayv1alpha1.PostgreSQLUser{

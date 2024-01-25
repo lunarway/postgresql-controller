@@ -180,7 +180,6 @@ func TestPostgreSQLDatabase_Reconcile_hostCredentialsResourceReference(t *testin
 		namespace           = "default"
 		databaseName        = fmt.Sprintf("database_%d", epoch)
 		hostCredentialsName = fmt.Sprintf("hostcredentials_%d", epoch)
-		managerRole         = "postgres_role_manager"
 
 		credentialsResource = &lunarwayv1alpha1.PostgreSQLHostCredentials{
 			ObjectMeta: metav1.ObjectMeta{
@@ -272,7 +271,6 @@ func TestPostgreSQLDatabase_Reconcile_unknownHostCredentialsResourceReference(t 
 		epoch        = time.Now().UnixNano()
 		namespace    = "default"
 		databaseName = fmt.Sprintf("database_%d", epoch)
-		managerRole  = "postgres_role_manager"
 
 		databaseResource = &lunarwayv1alpha1.PostgreSQLDatabase{
 			ObjectMeta: metav1.ObjectMeta{

@@ -91,11 +91,7 @@ func Database(log logr.Logger, db *sql.DB, host string, credentials Credentials,
 
 	// Grant the service user role to the managerRole WITH ADMIN OPTION
 	// This allows the managerRole to act on behalf of the service user
-	err = tryExec(log, db, tryExecReq{
-		objectType: "service role",
-		errorCode:  "undefined_object",
-		query:      fmt.Sprintf("GRANT %s TO %s WITH ADMIN OPTION", credentials.Name, managerRole),
-	})
+	err = grantAdminOption(log, db, credentials.Name, managerRole)
 	if err != nil {
 		return fmt.Errorf("grant %s to management role %s: %w", credentials.Name, managerRole, err)
 	}
@@ -248,6 +244,14 @@ func createRoles(log logr.Logger, db *sql.DB, roles ...string) error {
 		return errs
 	}
 	return nil
+}
+
+func grantAdminOption(log logr.Logger, db *sql.DB, serviceRole string, managerRole string) error {
+	return tryExec(log, db, tryExecReq{
+		objectType: "service role",
+		errorCode:  "undefined_object",
+		query:      fmt.Sprintf("GRANT %s TO %s WITH ADMIN OPTION", serviceRole, managerRole),
+	})
 }
 
 type tryExecReq struct {
