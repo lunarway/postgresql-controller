@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-logr/logr"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"go.lunarway.com/postgresql-controller/pkg/postgres"
 	"go.lunarway.com/postgresql-controller/test"
@@ -77,6 +79,7 @@ func TestParseUsernamePassword(t *testing.T) {
 func TestDatabase_sunshine(t *testing.T) {
 	postgresqlHost := test.Integration(t)
 	log := test.SetLogger(t)
+	managerRole := "postgres_role_name"
 	db, err := postgres.Connect(log, postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: "postgres",
@@ -85,6 +88,10 @@ func TestDatabase_sunshine(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
+	}
+	err = createManagerRole(log, db, managerRole)
+	if err != nil {
+		t.Fatalf("create manager role failed: %v", err)
 	}
 	defer db.Close()
 
@@ -95,7 +102,7 @@ func TestDatabase_sunshine(t *testing.T) {
 		Name:     name,
 		User:     name,
 		Password: password,
-	})
+	}, managerRole)
 	if err != nil {
 		t.Fatalf("EnsurePostgreSQLDatabase failed: %v", err)
 	}
@@ -133,6 +140,7 @@ func TestDatabase_sunshine(t *testing.T) {
 func TestDatabase_existingResourcePrivilegesForReadWriteRoles(t *testing.T) {
 	postgresqlHost := test.Integration(t)
 	log := test.SetLogger(t)
+	managerRole := "postgres_role_name"
 	log.Info("TC: Connection as iam_creator")
 	db, err := postgres.Connect(log, postgres.ConnectionString{
 		Host:     postgresqlHost,
@@ -183,7 +191,7 @@ func TestDatabase_existingResourcePrivilegesForReadWriteRoles(t *testing.T) {
 		Name:     name,
 		User:     name,
 		Password: password,
-	})
+	}, managerRole)
 	if err != nil {
 		t.Fatalf("Create service database failed: %v", err)
 	}
@@ -220,6 +228,7 @@ func TestDatabase_existingResourcePrivilegesForReadWriteRoles(t *testing.T) {
 // referencing the default name of the database instance.
 func TestDatabase_defaultDatabaseName(t *testing.T) {
 	postgresqlHost := test.Integration(t)
+	managerRole := "postgres_role_name"
 	log := test.SetLogger(t)
 	log.Info("TC: Connecting as iam_creator")
 	db, err := postgres.Connect(log, postgres.ConnectionString{
@@ -233,6 +242,11 @@ func TestDatabase_defaultDatabaseName(t *testing.T) {
 	}
 	defer db.Close()
 
+	err = createManagerRole(log, db, managerRole)
+	if err != nil {
+		t.Fatalf("create manager role failed: %v", err)
+	}
+
 	// setup a database that will be shared
 	log.Info("TC: Create a legacy database that will be shared with other services")
 	err = postgres.Database(log, db, postgresqlHost, postgres.Credentials{
@@ -240,7 +254,7 @@ func TestDatabase_defaultDatabaseName(t *testing.T) {
 		User:     "legacy",
 		Password: "legacy_pass",
 		Shared:   false,
-	})
+	}, managerRole)
 	if err != nil {
 		t.Fatalf("create legacy database failed: %v", err)
 	}
@@ -252,7 +266,7 @@ func TestDatabase_defaultDatabaseName(t *testing.T) {
 		User:     "service",
 		Password: "service_pass",
 		Shared:   true,
-	})
+	}, managerRole)
 	if err != nil {
 		t.Fatalf("Create service database failed: %v", err)
 	}
@@ -283,6 +297,12 @@ func TestDatabase_mixedOwnershipOnSharedDatabase(t *testing.T) {
 	sharedDatabaseName := fmt.Sprintf("shared_%d", epoch)
 	newUser := fmt.Sprintf("new_user_%d", epoch)
 	developer := fmt.Sprintf("developer_%d", epoch)
+	managerRole := "postgres_role_name"
+
+	err = createManagerRole(log, db, managerRole)
+	if err != nil {
+		t.Fatalf("create manager role failed: %v", err)
+	}
 
 	// create the shared database with a role of the same name and owned by the
 	// shared role
@@ -327,7 +347,7 @@ func TestDatabase_mixedOwnershipOnSharedDatabase(t *testing.T) {
 		User:     newUser,
 		Password: newUser,
 		Shared:   true,
-	})
+	}, managerRole)
 	if err != nil {
 		t.Fatalf("create new_user schema on shared database failed: %v", err)
 	}
@@ -396,6 +416,7 @@ func TestDatabase_mixedOwnershipOnSharedDatabase(t *testing.T) {
 func TestDatabase_idempotency(t *testing.T) {
 	postgresqlHost := test.Integration(t)
 	log := test.SetLogger(t)
+	managerRole := "postgres_role_name"
 	db, err := postgres.Connect(log, postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: "postgres",
@@ -404,6 +425,11 @@ func TestDatabase_idempotency(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
+	}
+
+	err = createManagerRole(log, db, managerRole)
+	if err != nil {
+		t.Fatalf("create managerRole: %v", err)
 	}
 	defer db.Close()
 
@@ -414,7 +440,7 @@ func TestDatabase_idempotency(t *testing.T) {
 		Name:     name,
 		User:     name,
 		Password: password,
-	})
+	}, managerRole)
 	if err != nil {
 		t.Fatalf("EnsurePostgreSQLDatabase failed: %v", err)
 	}
@@ -424,7 +450,7 @@ func TestDatabase_idempotency(t *testing.T) {
 		Name:     name,
 		User:     name,
 		Password: password,
-	})
+	}, managerRole)
 	if err != nil {
 		t.Logf("The error: %#v", err)
 		t.Fatalf("Second EnsurePostgreSQLDatabase failed: %v", err)
@@ -468,4 +494,18 @@ func stringsResult(t *testing.T, rows *sql.Rows) []string {
 	}
 	sort.Strings(results)
 	return results
+}
+
+func createManagerRole(log logr.Logger, db *sql.DB, roleName string) error {
+	_, err := db.Exec(fmt.Sprintf("CREATE ROLE %s LOGIN;", roleName))
+	if err != nil {
+		pqError, ok := err.(*pq.Error)
+		if !ok || pqError.Code.Name() != "duplicate_object" {
+			return err
+		}
+		log.Info("role already exists", "errorCode", pqError.Code, "errorName", pqError.Code.Name())
+	} else {
+		log.Info("role created")
+	}
+	return nil
 }

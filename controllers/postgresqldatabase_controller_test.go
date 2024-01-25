@@ -239,11 +239,12 @@ func TestPostgreSQLDatabase_Reconcile_hostCredentialsResourceReference(t *testin
 	r := &PostgreSQLDatabaseReconciler{
 		Client:          cl,
 		Log:             ctrl.Log.WithName(t.Name()),
+		ManagerRoleName: managerRole,
 		HostCredentials: nil,
 	}
 
 	// seed database into the postgres host
-	seededDatabase(t, host, databaseName, databaseName)
+	seededDatabase(t, host, databaseName, databaseName, managerRole)
 
 	req := reconcile.Request{
 		NamespacedName: types.NamespacedName{
@@ -313,7 +314,7 @@ func TestPostgreSQLDatabase_Reconcile_unknownHostCredentialsResourceReference(t 
 		HostCredentials: nil,
 	}
 
-	seededDatabase(t, host, databaseName, databaseName)
+	seededDatabase(t, host, databaseName, databaseName, managerRole)
 
 	req := reconcile.Request{
 		NamespacedName: types.NamespacedName{

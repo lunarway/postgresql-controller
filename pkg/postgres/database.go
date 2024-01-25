@@ -55,9 +55,12 @@ func ParseUsernamePassword(s string) (Credentials, error) {
 // Database ensures that a user with provided password exists on the host and
 // that read and readwrite roles are created with default priviledges on a
 // schema named after the database name.
-func Database(log logr.Logger, db *sql.DB, host string, credentials Credentials) error {
+func Database(log logr.Logger, db *sql.DB, host string, credentials Credentials, managerRole string) error {
 	if host == "" {
 		return fmt.Errorf("host is required")
+	}
+	if managerRole == "" {
+		return fmt.Errorf("managerRole required")
 	}
 	err := credentials.Validate()
 	if err != nil {
@@ -84,6 +87,13 @@ func Database(log logr.Logger, db *sql.DB, host string, credentials Credentials)
 		if err != nil {
 			return fmt.Errorf("grant %s to service user %s: %w", credentials.Name, credentials.User, err)
 		}
+	}
+
+	// Grant the service user role to the managerRole WITH ADMIN OPTION
+	// This allows the managerRole to act on behalf of the service user
+	err = grantAdminOption(log, db, credentials.Name, managerRole)
+	if err != nil {
+		return fmt.Errorf("grant %s to management role %s: %w", credentials.Name, managerRole, err)
 	}
 
 	// Create read and readwrite roles that can be used to grant users access to
@@ -192,7 +202,7 @@ func Database(log logr.Logger, db *sql.DB, host string, credentials Credentials)
 
 func createUser(log logr.Logger, db *sql.DB, user, password string) error {
 	log = log.WithValues("user", user)
-	return idempotentExec(log, db, idempotentExecReq{
+	return tryExec(log, db, tryExecReq{
 		objectType: "service user",
 		errorCode:  "duplicate_object",
 		query:      fmt.Sprintf("CREATE ROLE %s LOGIN PASSWORD '%s' NOCREATEROLE VALID UNTIL 'infinity'", user, password),
@@ -201,7 +211,7 @@ func createUser(log logr.Logger, db *sql.DB, user, password string) error {
 
 func createDatabase(log logr.Logger, db *sql.DB, name string) error {
 	log = log.WithValues("database", name)
-	return idempotentExec(log, db, idempotentExecReq{
+	return tryExec(log, db, tryExecReq{
 		objectType: "database",
 		errorCode:  "duplicate_database",
 		query:      fmt.Sprintf("CREATE DATABASE %s", name),
@@ -210,7 +220,7 @@ func createDatabase(log logr.Logger, db *sql.DB, name string) error {
 
 func createSchema(log logr.Logger, db *sql.DB, name string) error {
 	log = log.WithValues("schema", name)
-	return idempotentExec(log, db, idempotentExecReq{
+	return tryExec(log, db, tryExecReq{
 		objectType: "schema",
 		errorCode:  "duplicate_schema",
 		query:      fmt.Sprintf("CREATE SCHEMA %s", name),
@@ -221,7 +231,7 @@ func createRoles(log logr.Logger, db *sql.DB, roles ...string) error {
 	var errs error
 	for _, role := range roles {
 		log := log.WithValues("role", role)
-		err := idempotentExec(log, db, idempotentExecReq{
+		err := tryExec(log, db, tryExecReq{
 			objectType: "service role",
 			errorCode:  "duplicate_object",
 			query:      fmt.Sprintf("CREATE ROLE %s", role),
@@ -236,20 +246,28 @@ func createRoles(log logr.Logger, db *sql.DB, roles ...string) error {
 	return nil
 }
 
-type idempotentExecReq struct {
+func grantAdminOption(log logr.Logger, db *sql.DB, serviceRole string, managerRole string) error {
+	return tryExec(log, db, tryExecReq{
+		objectType: "service role",
+		errorCode:  "undefined_object",
+		query:      fmt.Sprintf("GRANT %s TO %s WITH ADMIN OPTION", serviceRole, managerRole),
+	})
+}
+
+type tryExecReq struct {
 	objectType string
 	errorCode  string
 	query      string
 }
 
-func idempotentExec(log logr.Logger, db *sql.DB, args idempotentExecReq) error {
+func tryExec(log logr.Logger, db *sql.DB, args tryExecReq) error {
 	_, err := db.Exec(args.query)
 	if err != nil {
 		pqError, ok := err.(*pq.Error)
 		if !ok || pqError.Code.Name() != args.errorCode {
 			return err
 		}
-		log.Info(fmt.Sprintf("%s already exists", args.objectType), "errorCode", pqError.Code, "errorName", pqError.Code.Name())
+		log.Info(fmt.Sprintf("expected err '%s' occured. Ignoring for objectType '%s'", args.errorCode, args.objectType), "errorCode", pqError.Code, "errorName", pqError.Code.Name())
 	} else {
 		log.Info(fmt.Sprintf("%s created", args.objectType))
 	}

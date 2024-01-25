@@ -504,11 +504,12 @@ func TestRole_priviliges(t *testing.T) {
 
 func createServiceDatabase(t *testing.T, log logr.Logger, database *sql.DB, host, service string) {
 	t.Helper()
+	managerRole := "postgres_manager_role"
 	err := postgres.Database(log, database, host, postgres.Credentials{
 		Name:     service,
 		User:     service,
 		Password: "1234",
-	})
+	}, managerRole)
 	if err != nil {
 		t.Fatalf("Failed to create database: %v", err)
 	}

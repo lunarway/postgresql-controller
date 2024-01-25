@@ -2,11 +2,13 @@ package controllers
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"testing"
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/api/v1alpha1"
@@ -27,6 +29,8 @@ import (
 )
 
 var trueValue = true
+
+var managerRole = "postgres_role_manager"
 
 // TestReconcile_badConfigmapReference tests that reconcilation is completed
 // successfully even though a an error occours during database resolvement. This
@@ -153,7 +157,7 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 	}
 
 	// seed database1 into the postgres host
-	seededDatabase(t, host, database1Name, userName)
+	seededDatabase(t, host, database1Name, userName, managerRole)
 
 	// reconcile user requesting access to all databases with a bad database
 	// reference
@@ -270,7 +274,7 @@ func TestReconcile_rolePrefix(t *testing.T) {
 	}
 
 	// seed database1 into the postgres host
-	seededDatabase(t, host, database1Name, database1Name)
+	seededDatabase(t, host, database1Name, database1Name, managerRole)
 
 	// reconcile user requesting access to all databases with a bad database
 	// reference
@@ -391,7 +395,7 @@ func TestReconcile_dotInName(t *testing.T) {
 	}
 
 	// seed database1 into the postgres host
-	seededDatabase(t, host, database1Name, database1Name)
+	seededDatabase(t, host, database1Name, database1Name, managerRole)
 
 	// reconcile user requesting access to all databases with a bad database
 	// reference
@@ -537,8 +541,8 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 	}
 
 	// seed database1 into the postgres host
-	seededDatabase(t, host, database1Name, database1Name)
-	seededDatabase(t, host, database2Name, database2Name)
+	seededDatabase(t, host, database1Name, database1Name, managerRole)
+	seededDatabase(t, host, database2Name, database2Name, managerRole)
 
 	// reconcile user requesting access to all databases with a bad database
 	// reference
@@ -557,7 +561,7 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 
 // seededDatabase creates a database with name along with a 'movies' table owned
 // by the database role.
-func seededDatabase(t *testing.T, host, databaseName, userName string) {
+func seededDatabase(t *testing.T, host, databaseName, userName string, managerRole string) {
 	t.Helper()
 
 	dbConn, err := postgres.Connect(logf.Log, postgres.ConnectionString{
@@ -568,11 +572,15 @@ func seededDatabase(t *testing.T, host, databaseName, userName string) {
 	})
 	require.NoErrorf(t, err, "failed to connect to database host to seed database '%s'", databaseName)
 
+	// Create the ManagmentRole
+	err = createManagerRole(logf.Log, dbConn, managerRole)
+	require.NoErrorf(t, err, "failed to create managerRole for dbConn during seedDatabase")
+
 	err = postgres.Database(logf.Log, dbConn, host, postgres.Credentials{
 		Name:     databaseName,
 		Password: databaseName,
 		User:     userName,
-	})
+	}, managerRole)
 	require.NoErrorf(t, err, "failed to created seeded database '%s'", databaseName)
 
 	db1Conn, err := postgres.Connect(logf.Log, postgres.ConnectionString{
@@ -614,4 +622,18 @@ func doReconcile(t *testing.T, sut *PostgreSQLUserReconciler, req reconcile.Requ
 	}
 
 	t.Errorf("Did not reconcile after %d tries.", reconcileLimit)
+}
+
+func createManagerRole(log logr.Logger, db *sql.DB, roleName string) error {
+	_, err := db.Exec(fmt.Sprintf("CREATE ROLE %s LOGIN;", roleName))
+	if err != nil {
+		pqError, ok := err.(*pq.Error)
+		if !ok || pqError.Code.Name() != "duplicate_object" {
+			return err
+		}
+		log.Info("role already exists", "errorCode", pqError.Code, "errorName", pqError.Code.Name())
+	} else {
+		log.Info("role created")
+	}
+	return nil
 }

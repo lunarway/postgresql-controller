@@ -22,6 +22,7 @@ type controllerConfiguration struct {
 	UserRolePrefix           string
 	AWS                      awsConfig
 	HostCredentials          map[string]postgres.Credentials
+	ManagerRoleName          string
 	AllDatabasesReadEnabled  bool
 	AllDatabasesWriteEnabled bool
 	ExtendedWriteEnabled     bool
@@ -47,6 +48,7 @@ func (c *controllerConfiguration) RegisterFlags(flagSet *pflag.FlagSet) {
 	flagSet.DurationVar(&c.ResyncPeriod, "resync-period", 10*time.Hour, "determines the minimum frequency at which watched resources are reconciled")
 
 	flagSet.Var(&hostCredentials{value: &c.HostCredentials}, "host-credentials", "Host and credential pairs in the form hostname=user:password. Use comma separated pairs for multiple hosts")
+	flagSet.StringVar(&c.ManagerRoleName, "manager-role-name", "postgres_role_manager", "Name of the role which will be managing other roles")
 	flagSet.StringSliceVar(&c.UserRoles, "user-roles", []string{"rds_iam"}, "List of roles granted to all users")
 	flagSet.BoolVar(&c.AllDatabasesReadEnabled, "all-databases-enabled-read", false, "Enable usage of allDatabases field in read access requests")
 	flagSet.BoolVar(&c.AllDatabasesWriteEnabled, "all-databases-enabled-write", false, "Enable usage of allDatabases field in write access requests")
