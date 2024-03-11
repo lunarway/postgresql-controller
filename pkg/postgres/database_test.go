@@ -98,11 +98,16 @@ func TestDatabase_sunshine(t *testing.T) {
 	name := fmt.Sprintf("test_%d", time.Now().UnixNano())
 	password := "test"
 
-	err = postgres.Database(logf.Log, db, postgresqlHost, postgres.Credentials{
-		Name:     name,
-		User:     name,
-		Password: password,
-	}, managerRole)
+	err = postgres.Database(logf.Log, postgresqlHost,
+		postgres.Credentials{
+			Name:     "postgres",
+			User:     "iam_creator",
+			Password: "iam_creator",
+		}, postgres.Credentials{
+			Name:     name,
+			User:     name,
+			Password: password,
+		}, managerRole)
 	if err != nil {
 		t.Fatalf("EnsurePostgreSQLDatabase failed: %v", err)
 	}
@@ -187,11 +192,16 @@ func TestDatabase_existingResourcePrivilegesForReadWriteRoles(t *testing.T) {
 	`, name))
 
 	log.Info("TC: Run controller database creation")
-	err = postgres.Database(log, db, postgresqlHost, postgres.Credentials{
-		Name:     name,
-		User:     name,
-		Password: password,
-	}, managerRole)
+	err = postgres.Database(log, postgresqlHost,
+		postgres.Credentials{
+			Name:     "postgres",
+			User:     "iam_creator",
+			Password: "iam_creator",
+		}, postgres.Credentials{
+			Name:     name,
+			User:     name,
+			Password: password,
+		}, managerRole)
 	if err != nil {
 		t.Fatalf("Create service database failed: %v", err)
 	}
@@ -249,24 +259,34 @@ func TestDatabase_defaultDatabaseName(t *testing.T) {
 
 	// setup a database that will be shared
 	log.Info("TC: Create a legacy database that will be shared with other services")
-	err = postgres.Database(log, db, postgresqlHost, postgres.Credentials{
-		Name:     "legacy",
-		User:     "legacy",
-		Password: "legacy_pass",
-		Shared:   false,
-	}, managerRole)
+	err = postgres.Database(log, postgresqlHost,
+		postgres.Credentials{
+			Name:     "postgres",
+			User:     "iam_creator",
+			Password: "iam_creator",
+		}, postgres.Credentials{
+			Name:     "legacy",
+			User:     "legacy",
+			Password: "legacy_pass",
+			Shared:   false,
+		}, managerRole)
 	if err != nil {
 		t.Fatalf("create legacy database failed: %v", err)
 	}
 
 	// setup a new schema on the shared database
 	log.Info("TC: Request new database using default postgres database (postgres)")
-	err = postgres.Database(log, db, postgresqlHost, postgres.Credentials{
-		Name:     "legacy",
-		User:     "service",
-		Password: "service_pass",
-		Shared:   true,
-	}, managerRole)
+	err = postgres.Database(log, postgresqlHost,
+		postgres.Credentials{
+			Name:     "postgres",
+			User:     "iam_creator",
+			Password: "iam_creator",
+		}, postgres.Credentials{
+			Name:     "legacy",
+			User:     "service",
+			Password: "service_pass",
+			Shared:   true,
+		}, managerRole)
 	if err != nil {
 		t.Fatalf("Create service database failed: %v", err)
 	}
@@ -342,12 +362,17 @@ func TestDatabase_mixedOwnershipOnSharedDatabase(t *testing.T) {
 	// shared database with a new user where the schema exists created by the
 	// shared user
 	log.Info("TC: Create new_user database on shared database")
-	err = postgres.Database(log, db, postgresqlHost, postgres.Credentials{
-		Name:     sharedDatabaseName,
-		User:     newUser,
-		Password: newUser,
-		Shared:   true,
-	}, managerRole)
+	err = postgres.Database(log, postgresqlHost,
+		postgres.Credentials{
+			Name:     "postgres",
+			User:     "iam_creator",
+			Password: "iam_creator",
+		}, postgres.Credentials{
+			Name:     sharedDatabaseName,
+			User:     newUser,
+			Password: newUser,
+			Shared:   true,
+		}, managerRole)
 	if err != nil {
 		t.Fatalf("create new_user schema on shared database failed: %v", err)
 	}
@@ -436,7 +461,11 @@ func TestDatabase_idempotency(t *testing.T) {
 	name := fmt.Sprintf("test_%d", time.Now().UnixNano())
 	password := "test"
 
-	err = postgres.Database(log, db, postgresqlHost, postgres.Credentials{
+	err = postgres.Database(log, postgresqlHost, postgres.Credentials{
+		Name:     "postgres",
+		User:     "iam_creator",
+		Password: "iam_creator",
+	}, postgres.Credentials{
 		Name:     name,
 		User:     name,
 		Password: password,
@@ -446,7 +475,11 @@ func TestDatabase_idempotency(t *testing.T) {
 	}
 
 	// Invoke again with same name
-	err = postgres.Database(log, db, postgresqlHost, postgres.Credentials{
+	err = postgres.Database(log, postgresqlHost, postgres.Credentials{
+		Name:     "postgres",
+		User:     "iam_creator",
+		Password: "iam_creator",
+	}, postgres.Credentials{
 		Name:     name,
 		User:     name,
 		Password: password,
