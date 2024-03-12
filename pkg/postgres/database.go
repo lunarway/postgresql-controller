@@ -101,11 +101,6 @@ func Database(log logr.Logger, host string, adminCredentials, serviceCredentials
 	if err != nil {
 		return fmt.Errorf("create service user: %w", err)
 	}
-	var (
-		readRole            = fmt.Sprintf("%s_%s", serviceCredentials.User, roleSuffixRead)
-		readWriteRole       = fmt.Sprintf("%s_%s", serviceCredentials.User, roleSuffixWrite)
-		readOwningWriteRole = fmt.Sprintf("%s_%s", serviceCredentials.User, roleSuffixOwningWrite)
-	)
 
 	// if the database is shared we need to grant the existing database role to
 	// the user to allow it to create schemas etc. this is a terrible hack to
@@ -127,6 +122,11 @@ func Database(log logr.Logger, host string, adminCredentials, serviceCredentials
 
 	// Create read and readwrite roles that can be used to grant users access to
 	// the objects in this database.
+	var (
+		readRole            = fmt.Sprintf("%s_%s", serviceCredentials.User, roleSuffixRead)
+		readWriteRole       = fmt.Sprintf("%s_%s", serviceCredentials.User, roleSuffixWrite)
+		readOwningWriteRole = fmt.Sprintf("%s_%s", serviceCredentials.User, roleSuffixOwningWrite)
+	)
 	err = createRoles(log, serviceConnection, readRole, readWriteRole, readOwningWriteRole)
 	if err != nil {
 		return fmt.Errorf("create service read, readwrite and readowningwrite roles: %w", err)
