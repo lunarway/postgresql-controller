@@ -62,11 +62,7 @@ func Database(log logr.Logger, host string, adminCredentials, serviceCredentials
 	if managerRole == "" {
 		return fmt.Errorf("managerRole required")
 	}
-	err := adminCredentials.Validate()
-	if err != nil {
-		return fmt.Errorf("adminCredentials not valid: %w", err)
-	}
-	err = serviceCredentials.Validate()
+	err := serviceCredentials.Validate()
 	if err != nil {
 		return fmt.Errorf("serviceCredentials not valid: %w", err)
 	}
@@ -81,7 +77,7 @@ func Database(log logr.Logger, host string, adminCredentials, serviceCredentials
 	serviceConnectionString := ConnectionString{
 		Host:     host,
 		Database: serviceCredentials.Name,
-		User:     adminCredentials.User,
+		User:     adminCredentials.Name,
 		Password: adminCredentials.Password,
 		Params:   adminCredentials.Params,
 	}
@@ -204,8 +200,8 @@ func createDatabase(log logr.Logger, host string, adminCredentials Credentials, 
 
 	connectionString := ConnectionString{
 		Host:     host,
-		Database: adminCredentials.Name,
-		User:     adminCredentials.User,
+		Database: "postgres",
+		User:     adminCredentials.Name,
 		Password: adminCredentials.Password,
 		Params:   adminCredentials.Params,
 	}
