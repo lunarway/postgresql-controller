@@ -576,7 +576,11 @@ func seededDatabase(t *testing.T, host, databaseName, userName string, managerRo
 	err = createManagerRole(logf.Log, dbConn, managerRole)
 	require.NoErrorf(t, err, "failed to create managerRole for dbConn during seedDatabase")
 
-	err = postgres.Database(logf.Log, dbConn, host, postgres.Credentials{
+	err = postgres.Database(logf.Log, host, postgres.Credentials{
+		Name:     "postgres",
+		Password: "iam_creator",
+		User:     "iam_creator",
+	}, postgres.Credentials{
 		Name:     databaseName,
 		Password: databaseName,
 		User:     userName,

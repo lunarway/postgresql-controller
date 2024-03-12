@@ -256,26 +256,9 @@ type EnsureParams struct {
 }
 
 func (r *PostgreSQLDatabaseReconciler) EnsurePostgreSQLDatabase(ctx context.Context, log logr.Logger, params *EnsureParams) error {
-	connectionString := postgres.ConnectionString{
-		Host:     params.Host,
-		Database: "postgres", // default database
-		User:     params.Admin.Name,
-		Password: params.Admin.Password,
-		Params:   params.Admin.Params,
-	}
-	db, err := postgres.Connect(log, connectionString)
+	err := postgres.Database(log, params.Host, params.Admin, params.Target, params.ManagerRole)
 	if err != nil {
-		return fmt.Errorf("connect to host %s: %w", connectionString, err)
-	}
-	defer func() {
-		err := db.Close()
-		if err != nil {
-			log.Error(err, "failed to close database connection", "host", params.Host, "database", "postgres", "user", params.Admin.Name)
-		}
-	}()
-	err = postgres.Database(log, db, params.Host, params.Target, params.ManagerRole)
-	if err != nil {
-		return fmt.Errorf("create database %s on host %s: %w", params.Target.Name, connectionString, err)
+		return fmt.Errorf("create database %s on host %s: %w", params.Target.Name, params.Host, err)
 	}
 	return nil
 }

@@ -282,7 +282,7 @@ func TestRole_owningWritePriviliges(t *testing.T) {
 	log.Info(fmt.Sprintf("Running test with service users %s and developer %s", serviceUser1, developerUser))
 
 	// create service databases and tables for testing access rights
-	createServiceDatabase(t, log, iamCreatorRootDB, postgresqlHost, serviceUser1)
+	createServiceDatabase(t, log, postgresqlHost, serviceUser1)
 	createRole(t, iamCreatorRootDB, roleRDSIAM)
 	dbExec(t, iamCreatorRootDB, "GRANT CONNECT ON DATABASE %s TO %s", serviceUser1, roleRDSIAM)
 
@@ -399,8 +399,8 @@ func TestRole_priviliges(t *testing.T) {
 	log.Info(fmt.Sprintf("Running test with service users %s, %s and developer %s", serviceUser1, serviceUser2, developerUser))
 
 	// create service databases and tables for testing access rights
-	createServiceDatabase(t, log, iamCreatorRootDB, postgresqlHost, serviceUser1)
-	createServiceDatabase(t, log, iamCreatorRootDB, postgresqlHost, serviceUser2)
+	createServiceDatabase(t, log, postgresqlHost, serviceUser1)
+	createServiceDatabase(t, log, postgresqlHost, serviceUser2)
 	createRole(t, iamCreatorRootDB, roleRDSIAM)
 	dbExec(t, iamCreatorRootDB, "GRANT CONNECT ON DATABASE %s TO %s", serviceUser1, roleRDSIAM)
 	dbExec(t, iamCreatorRootDB, "GRANT CONNECT ON DATABASE %s TO %s", serviceUser2, roleRDSIAM)
@@ -502,14 +502,19 @@ func TestRole_priviliges(t *testing.T) {
 	}
 }
 
-func createServiceDatabase(t *testing.T, log logr.Logger, database *sql.DB, host, service string) {
+func createServiceDatabase(t *testing.T, log logr.Logger, host, service string) {
 	t.Helper()
 	managerRole := "postgres_manager_role"
-	err := postgres.Database(log, database, host, postgres.Credentials{
-		Name:     service,
-		User:     service,
-		Password: "1234",
-	}, managerRole)
+	err := postgres.Database(log, host,
+		postgres.Credentials{
+			Name:     "postgres",
+			User:     "iam_creator",
+			Password: "iam_creator",
+		}, postgres.Credentials{
+			Name:     service,
+			User:     service,
+			Password: "1234",
+		}, managerRole)
 	if err != nil {
 		t.Fatalf("Failed to create database: %v", err)
 	}
