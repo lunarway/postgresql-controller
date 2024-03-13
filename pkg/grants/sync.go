@@ -70,7 +70,7 @@ func (g *Granter) connectToHosts(log logr.Logger, accesses HostAccess) (map[stri
 		connectionString := postgres.ConnectionString{
 			Host:     host,
 			Database: database,
-			User:     credentials.Name,
+			User:     credentials.User,
 			Password: credentials.Password,
 		}
 		db, err := postgres.Connect(log, connectionString)

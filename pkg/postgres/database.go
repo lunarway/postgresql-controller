@@ -44,7 +44,7 @@ func ParseUsernamePassword(s string) (Credentials, error) {
 		return Credentials{}, fmt.Errorf("username empty")
 	}
 	c := Credentials{
-		Name: pair[0],
+		User: pair[0],
 	}
 	if len(pair) == 2 {
 		c.Password = pair[1]
@@ -77,7 +77,7 @@ func Database(log logr.Logger, host string, adminCredentials, serviceCredentials
 	serviceConnectionString := ConnectionString{
 		Host:     host,
 		Database: serviceCredentials.Name,
-		User:     adminCredentials.Name,
+		User:     adminCredentials.User,
 		Password: adminCredentials.Password,
 		Params:   adminCredentials.Params,
 	}
@@ -201,7 +201,7 @@ func createDatabase(log logr.Logger, host string, adminCredentials Credentials, 
 	connectionString := ConnectionString{
 		Host:     host,
 		Database: "postgres",
-		User:     adminCredentials.Name,
+		User:     adminCredentials.User,
 		Password: adminCredentials.Password,
 		Params:   adminCredentials.Params,
 	}

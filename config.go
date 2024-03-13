@@ -130,7 +130,7 @@ func (h *hostCredentials) String() string {
 	}
 	records := make([]string, 0, len(*h.value)>>1)
 	for k, v := range *h.value {
-		pair := k + "=" + v.Name
+		pair := k + "=" + v.User
 		if v.Password != "" {
 			pair += ":********"
 		}

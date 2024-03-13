@@ -138,7 +138,7 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 			Now: time.Now,
 			HostCredentials: map[string]postgres.Credentials{
 				host: {
-					Name:     "iam_creator",
+					User:     "iam_creator",
 					Password: "iam_creator",
 				},
 			},
@@ -255,7 +255,7 @@ func TestReconcile_rolePrefix(t *testing.T) {
 			Now: time.Now,
 			HostCredentials: map[string]postgres.Credentials{
 				host: {
-					Name:     "iam_creator",
+					User:     "iam_creator",
 					Password: "iam_creator",
 				},
 			},
@@ -374,7 +374,7 @@ func TestReconcile_dotInName(t *testing.T) {
 			Now: time.Now,
 			HostCredentials: map[string]postgres.Credentials{
 				host: {
-					Name:     "iam_creator",
+					User:     "iam_creator",
 					Password: "iam_creator",
 				},
 			},
@@ -522,7 +522,7 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 			Now: time.Now,
 			HostCredentials: map[string]postgres.Credentials{
 				host: {
-					Name:     "iam_creator",
+					User:     "iam_creator",
 					Password: "iam_creator",
 				},
 			},
@@ -577,7 +577,7 @@ func seededDatabase(t *testing.T, host, databaseName, userName string, managerRo
 	require.NoErrorf(t, err, "failed to create managerRole for dbConn during seedDatabase")
 
 	err = postgres.Database(logf.Log, host, postgres.Credentials{
-		Name:     "iam_creator",
+		User:     "iam_creator",
 		Password: "iam_creator",
 	}, postgres.Credentials{
 		Name:     databaseName,
