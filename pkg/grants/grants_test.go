@@ -779,7 +779,7 @@ func TestGranter_connectToHosts(t *testing.T) {
 			name: "single host with credentials",
 			credentials: map[string]postgres.Credentials{
 				"localhost:5432": {
-					Name:     "iam_creator",
+					User:     "iam_creator",
 					Password: "iam_creator",
 				},
 			},
@@ -800,11 +800,11 @@ func TestGranter_connectToHosts(t *testing.T) {
 			name: "multiple hosts without upstream",
 			credentials: map[string]postgres.Credentials{
 				"localhost:5432": {
-					Name:     "iam_creator",
+					User:     "iam_creator",
 					Password: "iam_creator",
 				},
 				"unknown": {
-					Name:     "iam_creator",
+					User:     "iam_creator",
 					Password: "12345678",
 				},
 			},

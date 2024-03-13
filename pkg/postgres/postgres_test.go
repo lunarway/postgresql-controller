@@ -507,7 +507,6 @@ func createServiceDatabase(t *testing.T, log logr.Logger, host, service string) 
 	managerRole := "postgres_manager_role"
 	err := postgres.Database(log, host,
 		postgres.Credentials{
-			Name:     "postgres",
 			User:     "iam_creator",
 			Password: "iam_creator",
 		}, postgres.Credentials{

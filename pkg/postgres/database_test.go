@@ -33,7 +33,7 @@ func TestParseUsernamePassword(t *testing.T) {
 			name:  "complete",
 			input: "user:password",
 			output: postgres.Credentials{
-				Name:     "user",
+				User:     "user",
 				Password: "password",
 			},
 			err: nil,
@@ -42,7 +42,7 @@ func TestParseUsernamePassword(t *testing.T) {
 			name:  "no password",
 			input: "user",
 			output: postgres.Credentials{
-				Name:     "user",
+				User:     "user",
 				Password: "",
 			},
 			err: nil,
@@ -51,7 +51,7 @@ func TestParseUsernamePassword(t *testing.T) {
 			name:  "empty password",
 			input: "user:",
 			output: postgres.Credentials{
-				Name:     "user",
+				User:     "user",
 				Password: "",
 			},
 			err: nil,
@@ -100,7 +100,6 @@ func TestDatabase_sunshine(t *testing.T) {
 
 	err = postgres.Database(logf.Log, postgresqlHost,
 		postgres.Credentials{
-			Name:     "postgres",
 			User:     "iam_creator",
 			Password: "iam_creator",
 		}, postgres.Credentials{
@@ -194,7 +193,6 @@ func TestDatabase_existingResourcePrivilegesForReadWriteRoles(t *testing.T) {
 	log.Info("TC: Run controller database creation")
 	err = postgres.Database(log, postgresqlHost,
 		postgres.Credentials{
-			Name:     "postgres",
 			User:     "iam_creator",
 			Password: "iam_creator",
 		}, postgres.Credentials{
@@ -261,7 +259,6 @@ func TestDatabase_defaultDatabaseName(t *testing.T) {
 	log.Info("TC: Create a legacy database that will be shared with other services")
 	err = postgres.Database(log, postgresqlHost,
 		postgres.Credentials{
-			Name:     "postgres",
 			User:     "iam_creator",
 			Password: "iam_creator",
 		}, postgres.Credentials{
@@ -278,7 +275,6 @@ func TestDatabase_defaultDatabaseName(t *testing.T) {
 	log.Info("TC: Request new database using default postgres database (postgres)")
 	err = postgres.Database(log, postgresqlHost,
 		postgres.Credentials{
-			Name:     "postgres",
 			User:     "iam_creator",
 			Password: "iam_creator",
 		}, postgres.Credentials{
@@ -364,7 +360,6 @@ func TestDatabase_mixedOwnershipOnSharedDatabase(t *testing.T) {
 	log.Info("TC: Create new_user database on shared database")
 	err = postgres.Database(log, postgresqlHost,
 		postgres.Credentials{
-			Name:     "postgres",
 			User:     "iam_creator",
 			Password: "iam_creator",
 		}, postgres.Credentials{
@@ -462,7 +457,6 @@ func TestDatabase_idempotency(t *testing.T) {
 	password := "test"
 
 	err = postgres.Database(log, postgresqlHost, postgres.Credentials{
-		Name:     "postgres",
 		User:     "iam_creator",
 		Password: "iam_creator",
 	}, postgres.Credentials{
@@ -476,7 +470,6 @@ func TestDatabase_idempotency(t *testing.T) {
 
 	// Invoke again with same name
 	err = postgres.Database(log, postgresqlHost, postgres.Credentials{
-		Name:     "postgres",
 		User:     "iam_creator",
 		Password: "iam_creator",
 	}, postgres.Credentials{
