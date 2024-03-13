@@ -27,9 +27,6 @@ func (c Credentials) Validate() error {
 	if c.User == "" {
 		return fmt.Errorf("user is empty")
 	}
-	if c.Password == "" {
-		return fmt.Errorf("password is empty")
-	}
 	return nil
 }
 
@@ -93,7 +90,7 @@ func Database(log logr.Logger, host string, adminCredentials, serviceCredentials
 	}()
 
 	// Create the service user
-	err = createUser(log, serviceConnection, serviceCredentials.User, serviceCredentials.Password)
+	err = createServiceRole(log, serviceConnection, serviceCredentials.User, serviceCredentials.Password)
 	if err != nil {
 		return fmt.Errorf("create service user: %w", err)
 	}
@@ -186,12 +183,18 @@ func Database(log logr.Logger, host string, adminCredentials, serviceCredentials
 	return nil
 }
 
-func createUser(log logr.Logger, db *sql.DB, user, password string) error {
+func createServiceRole(log logr.Logger, db *sql.DB, user, password string) error {
 	log = log.WithValues("user", user)
+	var query string
+	if password != "" {
+		query = fmt.Sprintf("CREATE ROLE %s LOGIN PASSWORD '%s' NOCREATEROLE VALID UNTIL 'infinity'", user, password)
+	} else {
+		query = fmt.Sprintf("CREATE ROLE %s NOCREATEROLE", user)
+	}
 	return tryExec(log, db, tryExecReq{
 		objectType: "service user",
 		errorCode:  "duplicate_object",
-		query:      fmt.Sprintf("CREATE ROLE %s LOGIN PASSWORD '%s' NOCREATEROLE VALID UNTIL 'infinity'", user, password),
+		query:      query,
 	})
 }
 
