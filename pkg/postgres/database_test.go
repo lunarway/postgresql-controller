@@ -111,11 +111,162 @@ func TestDatabase_sunshine(t *testing.T) {
 		t.Fatalf("EnsurePostgreSQLDatabase failed: %v", err)
 	}
 
+	assert.True(t, roleCanLogin(t, db, name))
+
 	newDB, err := postgres.Connect(log, postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: name,
 		User:     name,
 		Password: password,
+	})
+	if err != nil {
+		t.Fatalf("connect to database failed: %v", err)
+	}
+
+	// Validate Schema
+	schemas := storedSchema(t, newDB, name)
+	assert.Equal(t, []string{name}, schemas, "schema not as expected")
+
+	// Validate iam_creator not able to see schema
+	schemas = storedSchema(t, db, name)
+	assert.Equal(t, []string(nil), schemas, "schema not as expected")
+
+	// Validate owner of database
+	owners := validateOwner(t, db, name)
+	t.Logf("Owners of database: %v", owners)
+	assert.Equal(t, []string{name}, owners, "owner not as expected")
+}
+
+func TestDatabase_noPassword(t *testing.T) {
+	postgresqlHost := test.Integration(t)
+	log := test.SetLogger(t)
+	managerRole := "postgres_role_name"
+	db, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		Database: "postgres",
+		User:     "iam_creator",
+		Password: "iam_creator",
+	})
+	if err != nil {
+		t.Fatalf("connect to database failed: %v", err)
+	}
+	err = createManagerRole(log, db, managerRole)
+	if err != nil {
+		t.Fatalf("create manager role failed: %v", err)
+	}
+	defer db.Close()
+
+	name := fmt.Sprintf("test_%d", time.Now().UnixNano())
+
+	err = postgres.Database(logf.Log, postgresqlHost,
+		postgres.Credentials{
+			User:     "iam_creator",
+			Password: "iam_creator",
+		}, postgres.Credentials{
+			Name: name,
+			User: name,
+		}, managerRole)
+	if err != nil {
+		t.Fatalf("EnsurePostgreSQLDatabase failed: %v", err)
+	}
+
+	assert.False(t, roleCanLogin(t, db, name))
+
+	newDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		Database: name,
+		User:     "iam_creator",
+		Password: "iam_creator",
+	})
+	if err != nil {
+		t.Fatalf("connect to database failed: %v", err)
+	}
+
+	// Validate Schema
+	schemas := storedSchema(t, newDB, name)
+	assert.Equal(t, []string{name}, schemas, "schema not as expected")
+
+	// Validate iam_creator not able to see schema
+	schemas = storedSchema(t, db, name)
+	assert.Equal(t, []string(nil), schemas, "schema not as expected")
+
+	// Validate owner of database
+	owners := validateOwner(t, db, name)
+	t.Logf("Owners of database: %v", owners)
+	assert.Equal(t, []string{name}, owners, "owner not as expected")
+}
+
+func TestDatabase_switchFromLoginToNoLoginAndBack(t *testing.T) {
+	postgresqlHost := test.Integration(t)
+	log := test.SetLogger(t)
+	managerRole := "postgres_role_name"
+	db, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		Database: "postgres",
+		User:     "iam_creator",
+		Password: "iam_creator",
+	})
+	if err != nil {
+		t.Fatalf("connect to database failed: %v", err)
+	}
+
+	err = createManagerRole(log, db, managerRole)
+	if err != nil {
+		t.Fatalf("create managerRole: %v", err)
+	}
+	defer db.Close()
+
+	name := fmt.Sprintf("test_%d", time.Now().UnixNano())
+	password := "test"
+
+	err = postgres.Database(log, postgresqlHost, postgres.Credentials{
+		User:     "iam_creator",
+		Password: "iam_creator",
+	}, postgres.Credentials{
+		Name:     name,
+		User:     name,
+		Password: password,
+	}, managerRole)
+	if err != nil {
+		t.Fatalf("Database failed: %v", err)
+	}
+
+	assert.True(t, roleCanLogin(t, db, name))
+
+	// Invoke again with same name but no password
+	err = postgres.Database(log, postgresqlHost, postgres.Credentials{
+		User:     "iam_creator",
+		Password: "iam_creator",
+	}, postgres.Credentials{
+		Name: name,
+		User: name,
+	}, managerRole)
+	if err != nil {
+		t.Logf("The error: %#v", err)
+		t.Fatalf("Second Database failed: %v", err)
+	}
+	assert.False(t, roleCanLogin(t, db, name))
+
+	// Invoke again with same name with password
+	err = postgres.Database(log, postgresqlHost, postgres.Credentials{
+		User:     "iam_creator",
+		Password: "iam_creator",
+	}, postgres.Credentials{
+		Name:     name,
+		User:     name,
+		Password: password,
+	}, managerRole)
+	if err != nil {
+		t.Logf("The error: %#v", err)
+		t.Fatalf("Second Database failed: %v", err)
+	}
+	assert.True(t, roleCanLogin(t, db, name))
+
+	newDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		Database: name,
+		User:     "iam_creator",
+		Password: "iam_creator",
 	})
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
@@ -481,6 +632,18 @@ func TestDatabase_idempotency(t *testing.T) {
 		t.Logf("The error: %#v", err)
 		t.Fatalf("Second EnsurePostgreSQLDatabase failed: %v", err)
 	}
+}
+
+func roleCanLogin(t *testing.T, db *sql.DB, role string) bool {
+	t.Helper()
+	row := db.QueryRow("SELECT rolcanlogin FROM pg_roles WHERE rolname = $1", role)
+
+	var rolcanlogin bool
+	err := row.Scan(&rolcanlogin)
+	if err != nil {
+		t.Fatalf("get rolcanlogin failed: %v", err)
+	}
+	return rolcanlogin
 }
 
 func validateOwner(t *testing.T, db *sql.DB, owner string) []string {
