@@ -260,6 +260,95 @@ func TestPostgreSQLDatabase_Reconcile_hostCredentialsResourceReference(t *testin
 	}, res, "result not as expected")
 }
 
+// TestPostgreSQLDatabase_Reconcile_noPassword tests that
+// a PostgreSQLDatabase resource can reference a PostgreSQLHostCredentials
+// resource.
+func TestPostgreSQLDatabase_Reconcile_noPassword(t *testing.T) {
+	logf.SetLogger(zap.New(zap.UseDevMode(true)))
+
+	host := test.Integration(t)
+	var (
+		epoch               = time.Now().UnixNano()
+		namespace           = "default"
+		databaseName        = fmt.Sprintf("database_%d", epoch)
+		hostCredentialsName = fmt.Sprintf("hostcredentials_%d", epoch)
+
+		credentialsResource = &lunarwayv1alpha1.PostgreSQLHostCredentials{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      hostCredentialsName,
+				Namespace: namespace,
+			},
+			Spec: lunarwayv1alpha1.PostgreSQLHostCredentialsSpec{
+				Host: lunarwayv1alpha1.ResourceVar{
+					Value: "localhost",
+				},
+				User: lunarwayv1alpha1.ResourceVar{
+					Value: "admin",
+				},
+				Password: lunarwayv1alpha1.ResourceVar{
+					Value: "admin",
+				},
+			},
+		}
+
+		databaseResource = &lunarwayv1alpha1.PostgreSQLDatabase{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      databaseName,
+				Namespace: namespace,
+			},
+			Spec: lunarwayv1alpha1.PostgreSQLDatabaseSpec{
+				Name:            databaseName,
+				HostCredentials: hostCredentialsName,
+				User: lunarwayv1alpha1.ResourceVar{
+					Value: databaseName,
+				},
+			},
+			Status: lunarwayv1alpha1.PostgreSQLDatabaseStatus{
+				Phase: lunarwayv1alpha1.PostgreSQLDatabasePhaseRunning,
+			},
+		}
+	)
+
+	// Register operator types with the runtime scheme.
+	s := scheme.Scheme
+	s.AddKnownTypes(lunarwayv1alpha1.GroupVersion, databaseResource, credentialsResource, &lunarwayv1alpha1.PostgreSQLDatabaseList{})
+
+	// Add tracked objects to the fake client simulating their existence in a k8s
+	// cluster
+	objs := []runtime.Object{
+		databaseResource,
+		credentialsResource,
+	}
+	cl := fake.NewClientBuilder().
+		WithRuntimeObjects(objs...).
+		Build()
+
+	// Create a controller object with the fake client but otherwise "live" setup
+	// with database interaction
+	r := &PostgreSQLDatabaseReconciler{
+		Client:          cl,
+		Log:             ctrl.Log.WithName(t.Name()),
+		ManagerRoleName: managerRole,
+		HostCredentials: nil,
+	}
+
+	// seed database into the postgres host
+	seededDatabase(t, host, databaseName, databaseName, managerRole)
+
+	req := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      databaseName,
+			Namespace: namespace,
+		},
+	}
+	res, err := r.Reconcile(context.Background(), req)
+	assert.NoError(t, err, "reconciliation failed")
+	assert.Equal(t, reconcile.Result{
+		Requeue:      false,
+		RequeueAfter: 0,
+	}, res, "result not as expected")
+}
+
 // TestPostgreSQLDatabase_Reconcile_unknownHostCredentialsResourceReference
 // tests that references to an unknown host credentials resource will results in
 // a requeued reconciliation.
