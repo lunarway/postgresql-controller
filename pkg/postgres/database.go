@@ -185,17 +185,21 @@ func Database(log logr.Logger, host string, adminCredentials, serviceCredentials
 
 func createServiceRole(log logr.Logger, db *sql.DB, user, password string) error {
 	log = log.WithValues("user", user)
-	var query string
-	if password != "" {
-		query = fmt.Sprintf("CREATE ROLE %s LOGIN PASSWORD '%s' NOCREATEROLE VALID UNTIL 'infinity'", user, password)
-	} else {
-		query = fmt.Sprintf("CREATE ROLE %s NOCREATEROLE", user)
-	}
-	return tryExec(log, db, tryExecReq{
+	err := tryExec(log, db, tryExecReq{
 		objectType: "service user",
 		errorCode:  "duplicate_object",
-		query:      query,
+		query:      fmt.Sprintf("CREATE ROLE %s NOCREATEROLE", user),
 	})
+	if err != nil {
+		return err
+	}
+
+	if password != "" {
+		err = execf(db, "ALTER ROLE %s LOGIN PASSWORD '%s' NOCREATEROLE VALID UNTIL 'infinity'", user, password)
+	} else {
+		err = execf(db, "ALTER ROLE %s NOLOGIN NOCREATEROLE", user)
+	}
+	return err
 }
 
 func createDatabase(log logr.Logger, host string, adminCredentials Credentials, name string) error {
