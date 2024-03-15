@@ -207,7 +207,7 @@ func TestPostgreSQLDatabase_Reconcile_hostCredentialsResourceReference(t *testin
 			Spec: lunarwayv1alpha1.PostgreSQLDatabaseSpec{
 				Name:            databaseName,
 				HostCredentials: hostCredentialsName,
-				Password: lunarwayv1alpha1.ResourceVar{
+				Password: &lunarwayv1alpha1.ResourceVar{
 					Value: "123456",
 				},
 				User: lunarwayv1alpha1.ResourceVar{
@@ -369,7 +369,7 @@ func TestPostgreSQLDatabase_Reconcile_unknownHostCredentialsResourceReference(t 
 			Spec: lunarwayv1alpha1.PostgreSQLDatabaseSpec{
 				Name:            databaseName,
 				HostCredentials: "unknown",
-				Password: lunarwayv1alpha1.ResourceVar{
+				Password: &lunarwayv1alpha1.ResourceVar{
 					Value: "123456",
 				},
 				User: lunarwayv1alpha1.ResourceVar{

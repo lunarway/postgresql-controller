@@ -134,7 +134,11 @@ func (in *PostgreSQLDatabaseList) DeepCopyObject() runtime.Object {
 func (in *PostgreSQLDatabaseSpec) DeepCopyInto(out *PostgreSQLDatabaseSpec) {
 	*out = *in
 	in.User.DeepCopyInto(&out.User)
-	in.Password.DeepCopyInto(&out.Password)
+	if in.Password != nil {
+		in, out := &in.Password, &out.Password
+		*out = new(ResourceVar)
+		(*in).DeepCopyInto(*out)
+	}
 	in.Host.DeepCopyInto(&out.Host)
 }
 

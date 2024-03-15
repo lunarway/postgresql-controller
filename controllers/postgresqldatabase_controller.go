@@ -121,9 +121,12 @@ func (r *PostgreSQLDatabaseReconciler) reconcile(ctx context.Context, reqLogger 
 	}
 	status.user = user
 	reqLogger = reqLogger.WithValues("user", user)
-	password, err := kube.ResourceValue(r.Client, database.Spec.Password, request.Namespace)
-	if err != nil {
-		return status, fmt.Errorf("resolve password reference: %w", err)
+	password := ""
+	if database.Spec.Password != nil {
+		password, err = kube.ResourceValue(r.Client, *database.Spec.Password, request.Namespace)
+		if err != nil {
+			return status, fmt.Errorf("resolve password reference: %w", err)
+		}
 	}
 	isShared := database.Spec.IsShared
 
