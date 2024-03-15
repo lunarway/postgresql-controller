@@ -78,7 +78,7 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 				Host: lunarwayv1alpha1.ResourceVar{
 					Value: host,
 				},
-				Password: lunarwayv1alpha1.ResourceVar{
+				Password: &lunarwayv1alpha1.ResourceVar{
 					Value: "user_password",
 				},
 				User: lunarwayv1alpha1.ResourceVar{
@@ -102,7 +102,7 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 						},
 					},
 				},
-				Password: lunarwayv1alpha1.ResourceVar{
+				Password: &lunarwayv1alpha1.ResourceVar{
 					Value: "12346",
 				},
 				User: lunarwayv1alpha1.ResourceVar{
@@ -216,7 +216,7 @@ func TestReconcile_rolePrefix(t *testing.T) {
 				Host: lunarwayv1alpha1.ResourceVar{
 					Value: host,
 				},
-				Password: lunarwayv1alpha1.ResourceVar{
+				Password: &lunarwayv1alpha1.ResourceVar{
 					Value: database1Name,
 				},
 				User: lunarwayv1alpha1.ResourceVar{
@@ -335,7 +335,7 @@ func TestReconcile_dotInName(t *testing.T) {
 				Host: lunarwayv1alpha1.ResourceVar{
 					Value: host,
 				},
-				Password: lunarwayv1alpha1.ResourceVar{
+				Password: &lunarwayv1alpha1.ResourceVar{
 					Value: "user_password",
 				},
 				User: lunarwayv1alpha1.ResourceVar{
@@ -462,7 +462,7 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 				Host: lunarwayv1alpha1.ResourceVar{
 					Value: host,
 				},
-				Password: lunarwayv1alpha1.ResourceVar{
+				Password: &lunarwayv1alpha1.ResourceVar{
 					Value: "user_password",
 				},
 				User: lunarwayv1alpha1.ResourceVar{
@@ -483,7 +483,7 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 				Host: lunarwayv1alpha1.ResourceVar{
 					Value: host,
 				},
-				Password: lunarwayv1alpha1.ResourceVar{
+				Password: &lunarwayv1alpha1.ResourceVar{
 					Value: "user_password",
 				},
 				User: lunarwayv1alpha1.ResourceVar{
