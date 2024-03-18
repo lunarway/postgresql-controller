@@ -112,6 +112,7 @@ func TestDatabase_sunshine(t *testing.T) {
 	}
 
 	assert.True(t, roleCanLogin(t, db, name))
+	assert.True(t, hasPassword(t, log, postgresqlHost, name))
 
 	newDB, err := postgres.Connect(log, postgres.ConnectionString{
 		Host:     postgresqlHost,
@@ -200,6 +201,7 @@ func TestDatabase_switchFromLoginToNoLoginAndBack(t *testing.T) {
 	postgresqlHost := test.Integration(t)
 	log := test.SetLogger(t)
 	managerRole := "postgres_role_name"
+
 	db, err := postgres.Connect(log, postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: "postgres",
@@ -232,6 +234,7 @@ func TestDatabase_switchFromLoginToNoLoginAndBack(t *testing.T) {
 	}
 
 	assert.True(t, roleCanLogin(t, db, name))
+	assert.True(t, hasPassword(t, log, postgresqlHost, name))
 
 	// Invoke again with same name but no password
 	err = postgres.Database(log, postgresqlHost, postgres.Credentials{
@@ -246,6 +249,7 @@ func TestDatabase_switchFromLoginToNoLoginAndBack(t *testing.T) {
 		t.Fatalf("Second Database failed: %v", err)
 	}
 	assert.False(t, roleCanLogin(t, db, name))
+	assert.False(t, hasPassword(t, log, postgresqlHost, name))
 
 	// Invoke again with same name with password
 	err = postgres.Database(log, postgresqlHost, postgres.Credentials{
@@ -261,6 +265,7 @@ func TestDatabase_switchFromLoginToNoLoginAndBack(t *testing.T) {
 		t.Fatalf("Second Database failed: %v", err)
 	}
 	assert.True(t, roleCanLogin(t, db, name))
+	assert.True(t, hasPassword(t, log, postgresqlHost, name))
 
 	newDB, err := postgres.Connect(log, postgres.ConnectionString{
 		Host:     postgresqlHost,
@@ -632,6 +637,30 @@ func TestDatabase_idempotency(t *testing.T) {
 		t.Logf("The error: %#v", err)
 		t.Fatalf("Second EnsurePostgreSQLDatabase failed: %v", err)
 	}
+}
+
+func hasPassword(t *testing.T, log logr.Logger, host, username string) bool {
+	db, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     host,
+		Database: "postgres",
+		User:     "admin",
+		Password: "admin",
+	})
+	if err != nil {
+		t.Fatalf("connect to database as admin failed: %v", err)
+	}
+
+	row := db.QueryRow("SELECT passwd FROM pg_shadow WHERE usename = $1", username)
+	if row.Err() != nil {
+		t.Fatalf("get password failed: %v", row.Err())
+	}
+
+	var password string
+	err = row.Scan(&password)
+	if err != nil {
+		return false
+	}
+	return true
 }
 
 func roleCanLogin(t *testing.T, db *sql.DB, role string) bool {

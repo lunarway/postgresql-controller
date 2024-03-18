@@ -195,9 +195,9 @@ func createServiceRole(log logr.Logger, db *sql.DB, user, password string) error
 	}
 
 	if password != "" {
-		err = execf(db, "ALTER ROLE %s LOGIN PASSWORD '%s' NOCREATEROLE VALID UNTIL 'infinity'", user, password)
+		err = execf(db, "ALTER ROLE %s LOGIN PASSWORD '%s' VALID UNTIL 'infinity'", user, password)
 	} else {
-		err = execf(db, "ALTER ROLE %s NOLOGIN NOCREATEROLE", user)
+		err = execf(db, "ALTER ROLE %s NOLOGIN PASSWORD NULL", user)
 	}
 	return err
 }
