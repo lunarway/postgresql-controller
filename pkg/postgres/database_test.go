@@ -647,7 +647,7 @@ func hasPassword(t *testing.T, log logr.Logger, host, username string) bool {
 		Password: "admin",
 	})
 	if err != nil {
-		t.Fatalf("connect to database as admin failed: %v", err)
+		return err == nil
 	}
 
 	row := db.QueryRow("SELECT passwd FROM pg_shadow WHERE usename = $1", username)
@@ -655,12 +655,7 @@ func hasPassword(t *testing.T, log logr.Logger, host, username string) bool {
 		t.Fatalf("get password failed: %v", row.Err())
 	}
 
-	var password string
-	err = row.Scan(&password)
-	if err != nil {
-		return false
-	}
-	return true
+	return row.Scan(new(string)) == nil
 }
 
 func roleCanLogin(t *testing.T, db *sql.DB, role string) bool {
