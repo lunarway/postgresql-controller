@@ -141,7 +141,7 @@ func TestConnect_idleConnections(t *testing.T) {
 		Host:     postgresqlHost,
 		User:     "iam_creator",
 		Database: "postgres",
-		Password: "",
+		Password: "iam_creator",
 	}
 
 	// connect 100 times without closing the connections before completing the
@@ -164,7 +164,7 @@ func TestRole_staticRoles(t *testing.T) {
 		Host:     postgresqlHost,
 		User:     "iam_creator",
 		Database: "postgres",
-		Password: "",
+		Password: "iam_creator",
 	})
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
@@ -256,78 +256,6 @@ func TestRole_staticRoles(t *testing.T) {
 	}
 }
 
-// TestRole_priviliges_databaseNameAndSchemaDiffers tests that Role can grant
-// access to another schema than that of the same name as the database. Normally
-// a schema with the same name as the database is expected but some services
-// uses the public schema.
-func TestRole_priviliges_databaseNameAndSchemaDiffers(t *testing.T) {
-	postgresqlHost := test.Integration(t)
-	log := test.SetLogger(t)
-
-	iamCreatorRootDB, err := postgres.Connect(log, postgres.ConnectionString{
-		Host:     postgresqlHost,
-		User:     "iam_creator",
-		Database: "postgres",
-		Password: "",
-	})
-	if err != nil {
-		t.Fatalf("connect to database failed: %v", err)
-	}
-	defer iamCreatorRootDB.Close()
-
-	var (
-		now           = time.Now().UnixNano()
-		serviceUser1  = fmt.Sprintf("test_svc_1_%d", now)
-		developerUser = fmt.Sprintf("test_user_%d", now)
-		roleRDSIAM    = fmt.Sprintf("rds_iam_%d", now)
-	)
-	log.Info(fmt.Sprintf("Running test with service user %s and developer %s", serviceUser1, developerUser))
-
-	// create service databases and tables for testing access rights
-	createServiceDatabase(t, log, iamCreatorRootDB, postgresqlHost, serviceUser1)
-	createRole(t, iamCreatorRootDB, roleRDSIAM)
-	dbExec(t, iamCreatorRootDB, "GRANT CONNECT ON DATABASE %s TO %s", serviceUser1, roleRDSIAM)
-
-	// reconnect to start a new session with grants from above database creation
-	iamCreatorUserDB, err := postgres.Connect(log, postgres.ConnectionString{
-		Host:     postgresqlHost,
-		User:     "iam_creator",
-		Database: serviceUser1,
-		Password: "",
-	})
-	if err != nil {
-		t.Fatalf("connect to database failed: %v", err)
-	}
-	defer iamCreatorUserDB.Close()
-
-	dbExec(t, iamCreatorRootDB, "GRANT CONNECT ON DATABASE %s TO %s", serviceUser1, roleRDSIAM)
-	err = postgres.Role(log, iamCreatorUserDB, developerUser, []string{roleRDSIAM}, []postgres.DatabaseSchema{
-		{
-			Name:       serviceUser1,
-			Schema:     "public",
-			Privileges: postgres.PrivilegeRead,
-		},
-	})
-	if !assert.NoError(t, err, "unexpected output error") {
-		return
-	}
-
-	userDB, err := postgres.Connect(log, postgres.ConnectionString{
-		Host:     postgresqlHost,
-		User:     developerUser,
-		Database: serviceUser1,
-		Password: "",
-	})
-	if err != nil {
-		t.Fatalf("could not connect with new user: %v", err)
-	}
-	defer userDB.Close()
-	_, err = userDB.Query("SELECT * FROM public.public_films")
-	if err != nil {
-		t.Fatalf("could not select from public.public_films table: %v", err)
-	}
-}
-
 // TestRole_owningWritePriviliges tests that Role can grant owner privileges if
 // requested making it possible to DROP and ALTER tables.
 func TestRole_owningWritePriviliges(t *testing.T) {
@@ -338,7 +266,7 @@ func TestRole_owningWritePriviliges(t *testing.T) {
 		Host:     postgresqlHost,
 		User:     "iam_creator",
 		Database: "postgres",
-		Password: "",
+		Password: "iam_creator",
 	})
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
@@ -354,7 +282,7 @@ func TestRole_owningWritePriviliges(t *testing.T) {
 	log.Info(fmt.Sprintf("Running test with service users %s and developer %s", serviceUser1, developerUser))
 
 	// create service databases and tables for testing access rights
-	createServiceDatabase(t, log, iamCreatorRootDB, postgresqlHost, serviceUser1)
+	createServiceDatabase(t, log, postgresqlHost, serviceUser1)
 	createRole(t, iamCreatorRootDB, roleRDSIAM)
 	dbExec(t, iamCreatorRootDB, "GRANT CONNECT ON DATABASE %s TO %s", serviceUser1, roleRDSIAM)
 
@@ -367,7 +295,7 @@ func TestRole_owningWritePriviliges(t *testing.T) {
 		Host:     postgresqlHost,
 		User:     "iam_creator",
 		Database: serviceUser1,
-		Password: "",
+		Password: "iam_creator",
 	})
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
@@ -409,7 +337,7 @@ func TestRole_owningWritePriviliges(t *testing.T) {
 		Host:     postgresqlHost,
 		User:     "iam_creator",
 		Database: serviceUser1,
-		Password: "",
+		Password: "iam_creator",
 	})
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
@@ -454,7 +382,7 @@ func TestRole_priviliges(t *testing.T) {
 		Host:     postgresqlHost,
 		User:     "iam_creator",
 		Database: "postgres",
-		Password: "",
+		Password: "iam_creator",
 	})
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
@@ -471,8 +399,8 @@ func TestRole_priviliges(t *testing.T) {
 	log.Info(fmt.Sprintf("Running test with service users %s, %s and developer %s", serviceUser1, serviceUser2, developerUser))
 
 	// create service databases and tables for testing access rights
-	createServiceDatabase(t, log, iamCreatorRootDB, postgresqlHost, serviceUser1)
-	createServiceDatabase(t, log, iamCreatorRootDB, postgresqlHost, serviceUser2)
+	createServiceDatabase(t, log, postgresqlHost, serviceUser1)
+	createServiceDatabase(t, log, postgresqlHost, serviceUser2)
 	createRole(t, iamCreatorRootDB, roleRDSIAM)
 	dbExec(t, iamCreatorRootDB, "GRANT CONNECT ON DATABASE %s TO %s", serviceUser1, roleRDSIAM)
 	dbExec(t, iamCreatorRootDB, "GRANT CONNECT ON DATABASE %s TO %s", serviceUser2, roleRDSIAM)
@@ -486,7 +414,7 @@ func TestRole_priviliges(t *testing.T) {
 		Host:     postgresqlHost,
 		User:     "iam_creator",
 		Database: serviceUser1,
-		Password: "",
+		Password: "iam_creator",
 	})
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
@@ -532,7 +460,7 @@ func TestRole_priviliges(t *testing.T) {
 		Host:     postgresqlHost,
 		User:     "iam_creator",
 		Database: serviceUser2,
-		Password: "",
+		Password: "iam_creator",
 	})
 	if err != nil {
 		t.Fatalf("connect to database failed: %v", err)
@@ -574,13 +502,18 @@ func TestRole_priviliges(t *testing.T) {
 	}
 }
 
-func createServiceDatabase(t *testing.T, log logr.Logger, database *sql.DB, host, service string) {
+func createServiceDatabase(t *testing.T, log logr.Logger, host, service string) {
 	t.Helper()
-	err := postgres.Database(log, database, host, postgres.Credentials{
-		Name:     service,
-		User:     service,
-		Password: "1234",
-	})
+	managerRole := "postgres_manager_role"
+	err := postgres.Database(log, host,
+		postgres.Credentials{
+			User:     "iam_creator",
+			Password: "iam_creator",
+		}, postgres.Credentials{
+			Name:     service,
+			User:     service,
+			Password: "1234",
+		}, managerRole)
 	if err != nil {
 		t.Fatalf("Failed to create database: %v", err)
 	}

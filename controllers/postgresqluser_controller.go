@@ -47,7 +47,7 @@ type PostgreSQLUserReconciler struct {
 	Scheme *runtime.Scheme
 
 	Granter       grants.Granter
-	EnsureIAMUser func(client *iam.Client, config iam.EnsureUserConfig, username, rolename string) error
+	EnsureIAMUser func(client *iam.Client, logger logr.Logger, config iam.EnsureUserConfig, username, rolename string) error
 	RemoveIAMUser func(client *iam.Client, awsLoginRoles []string, username string) error
 
 	RolePrefix         string
@@ -176,7 +176,7 @@ func (r *PostgreSQLUserReconciler) reconcile(ctx context.Context, reqLogger logr
 	// Error check in the bottom because we want aws policy to be set no matter what.
 	granterErr := r.Granter.SyncUser(reqLogger, request.Namespace, r.RolePrefix, *sanitizedUser)
 
-	awsPolicyErr := r.EnsureIAMUser(client, iam.EnsureUserConfig{
+	awsPolicyErr := r.EnsureIAMUser(client, reqLogger, iam.EnsureUserConfig{
 		PolicyBaseName:    r.AWSPolicyName,
 		Region:            r.AWSRegion,
 		AccountID:         r.AWSAccountID,

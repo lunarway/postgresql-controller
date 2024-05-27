@@ -2,11 +2,15 @@ package controllers
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"testing"
 	"time"
 
+	"github.com/go-logr/logr"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/api/v1alpha1"
 	"go.lunarway.com/postgresql-controller/pkg/grants"
 	"go.lunarway.com/postgresql-controller/pkg/iam"
@@ -25,6 +29,8 @@ import (
 )
 
 var trueValue = true
+
+var managerRole = "postgres_role_manager"
 
 // TestReconcile_badConfigmapReference tests that reconcilation is completed
 // successfully even though a an error occours during database resolvement. This
@@ -72,8 +78,8 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 				Host: lunarwayv1alpha1.ResourceVar{
 					Value: host,
 				},
-				Password: lunarwayv1alpha1.ResourceVar{
-					Value: "123456",
+				Password: &lunarwayv1alpha1.ResourceVar{
+					Value: "user_password",
 				},
 				User: lunarwayv1alpha1.ResourceVar{
 					Value: database1Name,
@@ -96,7 +102,7 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 						},
 					},
 				},
-				Password: lunarwayv1alpha1.ResourceVar{
+				Password: &lunarwayv1alpha1.ResourceVar{
 					Value: "12346",
 				},
 				User: lunarwayv1alpha1.ResourceVar{
@@ -132,8 +138,8 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 			Now: time.Now,
 			HostCredentials: map[string]postgres.Credentials{
 				host: {
-					Name:     "iam_creator",
-					Password: "",
+					User:     "iam_creator",
+					Password: "iam_creator",
 				},
 			},
 			AllDatabasesReadEnabled:  true,
@@ -145,13 +151,13 @@ func TestReconcile_badConfigmapReference(t *testing.T) {
 				return kube.ResourceValue(cl, resource, namespace)
 			},
 		},
-		EnsureIAMUser: func(client *iam.Client, config iam.EnsureUserConfig, username, rolename string) error {
+		EnsureIAMUser: func(client *iam.Client, logger logr.Logger, config iam.EnsureUserConfig, username, rolename string) error {
 			return nil
 		},
 	}
 
 	// seed database1 into the postgres host
-	seededDatabase(t, host, database1Name)
+	seededDatabase(t, host, database1Name, userName, managerRole)
 
 	// reconcile user requesting access to all databases with a bad database
 	// reference
@@ -210,8 +216,8 @@ func TestReconcile_rolePrefix(t *testing.T) {
 				Host: lunarwayv1alpha1.ResourceVar{
 					Value: host,
 				},
-				Password: lunarwayv1alpha1.ResourceVar{
-					Value: "123456",
+				Password: &lunarwayv1alpha1.ResourceVar{
+					Value: database1Name,
 				},
 				User: lunarwayv1alpha1.ResourceVar{
 					Value: database1Name,
@@ -249,8 +255,8 @@ func TestReconcile_rolePrefix(t *testing.T) {
 			Now: time.Now,
 			HostCredentials: map[string]postgres.Credentials{
 				host: {
-					Name:     "iam_creator",
-					Password: "",
+					User:     "iam_creator",
+					Password: "iam_creator",
 				},
 			},
 			AllDatabasesReadEnabled:  true,
@@ -262,13 +268,13 @@ func TestReconcile_rolePrefix(t *testing.T) {
 				return kube.ResourceValue(cl, resource, namespace)
 			},
 		},
-		EnsureIAMUser: func(client *iam.Client, config iam.EnsureUserConfig, username, rolename string) error {
+		EnsureIAMUser: func(client *iam.Client, logger logr.Logger, config iam.EnsureUserConfig, username, rolename string) error {
 			return nil
 		},
 	}
 
 	// seed database1 into the postgres host
-	seededDatabase(t, host, database1Name)
+	seededDatabase(t, host, database1Name, database1Name, managerRole)
 
 	// reconcile user requesting access to all databases with a bad database
 	// reference
@@ -329,8 +335,8 @@ func TestReconcile_dotInName(t *testing.T) {
 				Host: lunarwayv1alpha1.ResourceVar{
 					Value: host,
 				},
-				Password: lunarwayv1alpha1.ResourceVar{
-					Value: "123456",
+				Password: &lunarwayv1alpha1.ResourceVar{
+					Value: "user_password",
 				},
 				User: lunarwayv1alpha1.ResourceVar{
 					Value: database1Name,
@@ -368,8 +374,8 @@ func TestReconcile_dotInName(t *testing.T) {
 			Now: time.Now,
 			HostCredentials: map[string]postgres.Credentials{
 				host: {
-					Name:     "iam_creator",
-					Password: "",
+					User:     "iam_creator",
+					Password: "iam_creator",
 				},
 			},
 			AllDatabasesReadEnabled:  true,
@@ -381,7 +387,7 @@ func TestReconcile_dotInName(t *testing.T) {
 				return kube.ResourceValue(cl, resource, namespace)
 			},
 		},
-		EnsureIAMUser: func(client *iam.Client, config iam.EnsureUserConfig, username, rolename string) error {
+		EnsureIAMUser: func(client *iam.Client, logger logr.Logger, config iam.EnsureUserConfig, username, rolename string) error {
 			assert.Equal(t, userName, username, "iam username must be the original")
 			assert.Equal(t, rolename, userNameSanitized, "iam rolename must be the sanitized")
 			return nil
@@ -389,7 +395,7 @@ func TestReconcile_dotInName(t *testing.T) {
 	}
 
 	// seed database1 into the postgres host
-	seededDatabase(t, host, database1Name)
+	seededDatabase(t, host, database1Name, database1Name, managerRole)
 
 	// reconcile user requesting access to all databases with a bad database
 	// reference
@@ -456,8 +462,8 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 				Host: lunarwayv1alpha1.ResourceVar{
 					Value: host,
 				},
-				Password: lunarwayv1alpha1.ResourceVar{
-					Value: "123456",
+				Password: &lunarwayv1alpha1.ResourceVar{
+					Value: "user_password",
 				},
 				User: lunarwayv1alpha1.ResourceVar{
 					Value: database1Name,
@@ -477,8 +483,8 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 				Host: lunarwayv1alpha1.ResourceVar{
 					Value: host,
 				},
-				Password: lunarwayv1alpha1.ResourceVar{
-					Value: "123456",
+				Password: &lunarwayv1alpha1.ResourceVar{
+					Value: "user_password",
 				},
 				User: lunarwayv1alpha1.ResourceVar{
 					Value: database2Name,
@@ -516,8 +522,8 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 			Now: time.Now,
 			HostCredentials: map[string]postgres.Credentials{
 				host: {
-					Name:     "iam_creator",
-					Password: "",
+					User:     "iam_creator",
+					Password: "iam_creator",
 				},
 			},
 			AllDatabasesReadEnabled:  true,
@@ -529,14 +535,14 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 				return kube.ResourceValue(cl, resource, namespace)
 			},
 		},
-		EnsureIAMUser: func(client *iam.Client, config iam.EnsureUserConfig, username, rolename string) error {
+		EnsureIAMUser: func(client *iam.Client, logger logr.Logger, config iam.EnsureUserConfig, username, rolename string) error {
 			return nil
 		},
 	}
 
 	// seed database1 into the postgres host
-	seededDatabase(t, host, database1Name)
-	seededDatabase(t, host, database2Name)
+	seededDatabase(t, host, database1Name, database1Name, managerRole)
+	seededDatabase(t, host, database2Name, database2Name, managerRole)
 
 	// reconcile user requesting access to all databases with a bad database
 	// reference
@@ -555,46 +561,47 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 
 // seededDatabase creates a database with name along with a 'movies' table owned
 // by the database role.
-func seededDatabase(t *testing.T, host, name string) {
+func seededDatabase(t *testing.T, host, databaseName, userName string, managerRole string) {
 	t.Helper()
 
 	dbConn, err := postgres.Connect(logf.Log, postgres.ConnectionString{
 		Database: "postgres",
 		Host:     host,
-		Password: "",
+		Password: "iam_creator",
 		User:     "iam_creator",
 	})
-	if !assert.NoErrorf(t, err, "failed to connect to database host to seed database '%s'", name) {
-		return
-	}
-	err = postgres.Database(logf.Log, dbConn, host, postgres.Credentials{
-		Name:     name,
-		Password: "123456",
-		User:     name,
-	})
-	if !assert.NoErrorf(t, err, "failed to created seeded database '%s'", name) {
-		return
-	}
+	require.NoErrorf(t, err, "failed to connect to database host to seed database '%s'", databaseName)
+
+	// Create the ManagmentRole
+	err = createManagerRole(logf.Log, dbConn, managerRole)
+	require.NoErrorf(t, err, "failed to create managerRole for dbConn during seedDatabase")
+
+	err = postgres.Database(logf.Log, host, postgres.Credentials{
+		User:     "iam_creator",
+		Password: "iam_creator",
+	}, postgres.Credentials{
+		Name:     databaseName,
+		Password: databaseName,
+		User:     userName,
+	}, managerRole)
+	require.NoErrorf(t, err, "failed to created seeded database '%s'", databaseName)
+
 	db1Conn, err := postgres.Connect(logf.Log, postgres.ConnectionString{
-		Database: name,
+		Database: databaseName,
 		Host:     host,
-		Password: "123456",
-		User:     name,
+		Password: databaseName,
+		User:     userName,
 	})
-	if !assert.NoErrorf(t, err, "failed to connect to database '%s' to create a table", name) {
-		return
-	}
+	require.NoErrorf(t, err, "failed to connect to database '%s' to create a table", databaseName)
+
 	_, err = db1Conn.Exec(`CREATE TABLE movies(title varchar(50));`)
-	if !assert.NoErrorf(t, err, "failed to create table in database '%s'", name) {
-		return
-	}
+	require.NoErrorf(t, err, "failed to create table in database '%s'", databaseName)
 }
 
 func assertAccess(t *testing.T, host, databaseName, userName string) {
 	userConn, err := postgres.Connect(logf.Log, postgres.ConnectionString{
 		Database: databaseName,
 		Host:     host,
-		Password: "",
 		User:     userName,
 	})
 	if !assert.NoErrorf(t, err, "failed to connect to database '%s' with user '%s'", databaseName, userName) {
@@ -618,4 +625,18 @@ func doReconcile(t *testing.T, sut *PostgreSQLUserReconciler, req reconcile.Requ
 	}
 
 	t.Errorf("Did not reconcile after %d tries.", reconcileLimit)
+}
+
+func createManagerRole(log logr.Logger, db *sql.DB, roleName string) error {
+	_, err := db.Exec(fmt.Sprintf("CREATE ROLE %s LOGIN;", roleName))
+	if err != nil {
+		pqError, ok := err.(*pq.Error)
+		if !ok || pqError.Code.Name() != "duplicate_object" {
+			return err
+		}
+		log.Info("role already exists", "errorCode", pqError.Code, "errorName", pqError.Code.Name())
+	} else {
+		log.Info("role created")
+	}
+	return nil
 }

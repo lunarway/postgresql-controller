@@ -43,6 +43,7 @@ type PostgreSQLDatabaseReconciler struct {
 	client.Client
 	Log logr.Logger
 
+	ManagerRoleName string
 	// contains a map of credentials for hosts
 	HostCredentials map[string]postgres.Credentials
 }
@@ -120,9 +121,12 @@ func (r *PostgreSQLDatabaseReconciler) reconcile(ctx context.Context, reqLogger 
 	}
 	status.user = user
 	reqLogger = reqLogger.WithValues("user", user)
-	password, err := kube.ResourceValue(r.Client, database.Spec.Password, request.Namespace)
-	if err != nil {
-		return status, fmt.Errorf("resolve password reference: %w", err)
+	password := ""
+	if database.Spec.Password != nil {
+		password, err = kube.ResourceValue(r.Client, *database.Spec.Password, request.Namespace)
+		if err != nil {
+			return status, fmt.Errorf("resolve password reference: %w", err)
+		}
 	}
 	isShared := database.Spec.IsShared
 
@@ -133,8 +137,9 @@ func (r *PostgreSQLDatabaseReconciler) reconcile(ctx context.Context, reqLogger 
 		ctx,
 		reqLogger,
 		&EnsureParams{
-			Host:  host,
-			Admin: *adminCredentials,
+			Host:        host,
+			Admin:       *adminCredentials,
+			ManagerRole: r.ManagerRoleName,
 			Target: postgres.Credentials{
 				Name:     database.Spec.Name,
 				User:     user,
@@ -246,32 +251,17 @@ type EnsureParams struct {
 	// Admin holds the administrator credentials for the database instance.
 	Admin postgres.Credentials
 
+	ManagerRole string
+
 	// Target contains the credentials for the Postgres database that we intend
 	// to create.
 	Target postgres.Credentials
 }
 
 func (r *PostgreSQLDatabaseReconciler) EnsurePostgreSQLDatabase(ctx context.Context, log logr.Logger, params *EnsureParams) error {
-	connectionString := postgres.ConnectionString{
-		Host:     params.Host,
-		Database: "postgres", // default database
-		User:     params.Admin.Name,
-		Password: params.Admin.Password,
-		Params:   params.Admin.Params,
-	}
-	db, err := postgres.Connect(log, connectionString)
+	err := postgres.Database(log, params.Host, params.Admin, params.Target, params.ManagerRole)
 	if err != nil {
-		return fmt.Errorf("connect to host %s: %w", connectionString, err)
-	}
-	defer func() {
-		err := db.Close()
-		if err != nil {
-			log.Error(err, "failed to close database connection", "host", params.Host, "database", "postgres", "user", params.Admin.Name)
-		}
-	}()
-	err = postgres.Database(log, db, params.Host, params.Target)
-	if err != nil {
-		return fmt.Errorf("create database %s on host %s: %w", params.Target.Name, connectionString, err)
+		return fmt.Errorf("create database %s on host %s: %w", params.Target.Name, params.Host, err)
 	}
 	return nil
 }

@@ -39,7 +39,7 @@ func TestHostCredentials_Set(t *testing.T) {
 			err:   nil,
 			output: map[string]postgres.Credentials{
 				"host:5432": {
-					Name:     "user",
+					User:     "user",
 					Password: "pass",
 				},
 			},
@@ -50,11 +50,11 @@ func TestHostCredentials_Set(t *testing.T) {
 			err:   nil,
 			output: map[string]postgres.Credentials{
 				"host1:5432": {
-					Name:     "user1",
+					User:     "user1",
 					Password: "pass1",
 				},
 				"host2:5432": {
-					Name:     "user2",
+					User:     "user2",
 					Password: "pass2",
 				},
 			},
@@ -71,7 +71,7 @@ func TestHostCredentials_Set(t *testing.T) {
 			err:   nil,
 			output: map[string]postgres.Credentials{
 				"host1:5432": {
-					Name:     "user1",
+					User:     "user1",
 					Password: "pass1",
 					Params:   "sslmode=enabled",
 				},
@@ -117,7 +117,7 @@ func TestHostCredentials_String(t *testing.T) {
 			name: "single host",
 			value: map[string]postgres.Credentials{
 				"host:5432": {
-					Name:     "user",
+					User:     "user",
 					Password: "pass",
 				},
 			},
@@ -127,11 +127,11 @@ func TestHostCredentials_String(t *testing.T) {
 			name: "multiple hosts",
 			value: map[string]postgres.Credentials{
 				"host1:5432": {
-					Name:     "user1",
+					User:     "user1",
 					Password: "pass1",
 				},
 				"host2:5432": {
-					Name:     "user2",
+					User:     "user2",
 					Password: "pass2",
 				},
 			},

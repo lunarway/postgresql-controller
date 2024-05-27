@@ -37,7 +37,8 @@ type PostgreSQLDatabaseSpec struct {
 	User ResourceVar `json:"user"`
 
 	// Password used with the User name to connect to the database
-	Password ResourceVar `json:"password"`
+	// +optional
+	Password *ResourceVar `json:"password"`
 
 	// IsShared indicates whether the database is shared between multiple
 	// PostgreSQLDatabase objects. The controller will not grant ownership of the
