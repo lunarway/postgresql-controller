@@ -1,6 +1,8 @@
 module go.lunarway.com/postgresql-controller
 
-go 1.18
+go 1.21
+
+toolchain go1.21.4
 
 require (
 	github.com/aws/aws-sdk-go v1.44.296
