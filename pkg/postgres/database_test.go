@@ -657,10 +657,7 @@ func hasPassword(t *testing.T, log logr.Logger, host, username string) bool {
 
 	var password string
 	err = row.Scan(&password)
-	if err != nil {
-		return false
-	}
-	return true
+	return err == nil
 }
 
 func roleCanLogin(t *testing.T, db *sql.DB, role string) bool {
