@@ -3,8 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.9.2
-  creationTimestamp: null
+    controller-gen.kubebuilder.io/version: v0.15.0
   name: postgresqldatabases.postgresql.lunar.tech
 spec:
   group: postgresql.lunar.tech
@@ -41,14 +40,19 @@ spec:
           API
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
             type: string
           kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
             type: string
           metadata:
             type: object
@@ -56,8 +60,9 @@ spec:
             description: PostgreSQLDatabaseSpec defines the desired state of PostgreSQLDatabase
             properties:
               host:
-                description: Host that the database should be created on. This should
-                  be omitted if HostCredentials is provided.
+                description: |-
+                  Host that the database should be created on. This should be omitted if
+                  HostCredentials is provided.
                 properties:
                   value:
                     description: Defaults to "".
@@ -98,18 +103,21 @@ spec:
                     type: object
                 type: object
               hostCredentials:
-                description: HostCredentials is the name of a PostgreSQLHostCredentials
-                  resource in the same namespace. This should be omitted if Host is
-                  provided.
+                description: |-
+                  HostCredentials is the name of a PostgreSQLHostCredentials resource in
+                  the same namespace. This should be omitted if Host is provided.
                 type: string
               isShared:
-                description: "IsShared indicates whether the database is shared between
-                  multiple PostgreSQLDatabase objects. The controller will not grant
-                  ownership of the database if this is set to true. Further the owning
-                  role of the database is granted to this user to allow access to
-                  the resources it may have created before this user was enabled.
-                  \n This option is here to support legacy applications sharing database
-                  instances and should never be used for new databases."
+                description: |-
+                  IsShared indicates whether the database is shared between multiple
+                  PostgreSQLDatabase objects. The controller will not grant ownership of the
+                  database if this is set to true. Further the owning role of the database is
+                  granted to this user to allow access to the resources it may have created
+                  before this user was enabled.
+
+
+                  This option is here to support legacy applications sharing database
+                  instances and should never be used for new databases.
                 type: boolean
               name:
                 description: Name of the database
@@ -208,13 +216,14 @@ spec:
               host:
                 type: string
               phase:
-                description: PostgreSQLDatabasePhase represents the current phase
-                  of a PostgreSQL database.
+                description: |-
+                  PostgreSQLDatabasePhase represents the current phase of a PostgreSQL
+                  database.
                 type: string
               phaseUpdated:
-                description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
-                  of cluster Important: Run "make" to regenerate code after modifying
-                  this file'
+                description: |-
+                  INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
+                  Important: Run "make" to regenerate code after modifying this file
                 format: date-time
                 type: string
               user:
