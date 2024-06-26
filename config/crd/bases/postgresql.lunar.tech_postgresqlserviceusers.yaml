@@ -147,6 +147,26 @@ spec:
           status:
             description: PostgreSQLServiceUserStatus defines the observed state of
               PostgreSQLServiceUser
+            properties:
+              error:
+                description: Error if present, how did the reconciliation loop fail
+                type: string
+              host:
+                description: Host, which host was reconciled
+                type: string
+              name:
+                description: Name, which service user was reconciled
+                type: string
+              phase:
+                description: Phase which state is the given resource currently in
+                type: string
+              phaseUpdated:
+                description: PhaseUpdated when was the phase last updated
+                format: date-time
+                type: string
+            required:
+            - phase
+            - phaseUpdated
             type: object
         type: object
     served: true

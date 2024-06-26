@@ -24,6 +24,7 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // PostgreSQLServiceUserSpec defines the desired state of PostgreSQLServiceUser
+// +k8s:openapi-gen=true
 type PostgreSQLServiceUserSpec struct {
 	// Name of the service user
 	Name string `json:"name"`
@@ -40,15 +41,44 @@ type PostgreSQLServiceUserSpec struct {
 }
 
 // PostgreSQLServiceUserSpec defines the desired state of PostgreSQLServiceUser
+// +k8s:openapi-gen=true
 type PostgreSQLServiceUserRole struct {
 	// RoleName is the name of the role to which to grant to the user
 	RoleName string `json:"roleName"`
 }
 
+// PostgreSQLServiceUserPhase represents the current phase of a PostgreSQL service user
+// +k8s:openapi-gen=true
+type PostgreSQLServiceUserPhase string
+
+const (
+	// PostgreSQLServiceUserPhaseFailed indicates that the controller was unable to reconcile a database service user resource
+	PostgreSQLServiceUserPhaseFailed PostgreSQLServiceUserPhase = "Failed"
+	// PostgreSQLServiceUserPhaseInvalid indicates that the controller was unable to reconcile a database service user resource as the specification was not inline with what the controller expected. The resource will not be reconciled again until it has been changed.
+	PostgreSQLServiceUserPhaseInvalid PostgreSQLServiceUserPhase = "Invalid"
+	// PostgreSQLServiceUserPhaseRunning indicates that the controller has reconciled the database service user resource
+	PostgreSQLServiceUserPhaseRunning PostgreSQLServiceUserPhase = "Running"
+)
+
 // PostgreSQLServiceUserStatus defines the observed state of PostgreSQLServiceUser
 type PostgreSQLServiceUserStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	// PhaseUpdated when was the phase last updated
+	PhaseUpdated metav1.Time `json:"phaseUpdated"`
+
+	// Phase which state is the given resource currently in
+	Phase PostgreSQLServiceUserPhase `json:"phase"`
+
+	// Host, which host was reconciled
+	Host string `json:"host,omitempty"`
+
+	// Name, which service user was reconciled
+	Name string `json:"name,omitempty"`
+
+	// Error if present, how did the reconciliation loop fail
+	Error string `json:"error,omitempty"`
 }
 
 //+kubebuilder:object:root=true
