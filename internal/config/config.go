@@ -1,35 +1,37 @@
-package main
+package config
 
 import (
 	"bytes"
 	"encoding/csv"
+	"flag"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/spf13/pflag"
 	"go.lunarway.com/postgresql-controller/pkg/postgres"
 )
 
-type controllerConfiguration struct {
+type ControllerConfiguration struct {
 	MetricsAddress           string
 	ProbeAddress             string
 	EnableLeaderElection     bool
 	ResyncPeriod             time.Duration
-	UserRoles                []string
+	UserRoles                string
 	UserRolePrefix           string
-	AWS                      awsConfig
+	AWS                      AwsConfig
 	HostCredentials          map[string]postgres.Credentials
 	ManagerRoleName          string
 	AllDatabasesReadEnabled  bool
 	AllDatabasesWriteEnabled bool
 	ExtendedWriteEnabled     bool
 	IAMPolicyPrefix          string
+	SecureMetrics            bool
+	EnableHTTP2              bool
 }
 
-type awsConfig struct {
+type AwsConfig struct {
 	PolicyName      string
 	Region          string
 	AccountID       string
@@ -39,7 +41,7 @@ type awsConfig struct {
 	LoginRoles      string
 }
 
-func (c *controllerConfiguration) RegisterFlags(flagSet *pflag.FlagSet) {
+func (c *ControllerConfiguration) RegisterFlags(flagSet *flag.FlagSet) {
 	flagSet.StringVar(&c.MetricsAddress, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flagSet.StringVar(&c.ProbeAddress, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flagSet.BoolVar(&c.EnableLeaderElection, "leader-elect", false,
@@ -47,9 +49,9 @@ func (c *controllerConfiguration) RegisterFlags(flagSet *pflag.FlagSet) {
 			"Enabling this will ensure there is only one active controller manager.")
 	flagSet.DurationVar(&c.ResyncPeriod, "resync-period", 10*time.Hour, "determines the minimum frequency at which watched resources are reconciled")
 
-	flagSet.Var(&hostCredentials{value: &c.HostCredentials}, "host-credentials", "Host and credential pairs in the form hostname=user:password. Use comma separated pairs for multiple hosts")
+	flagSet.Var(&HostCredentials{value: &c.HostCredentials}, "host-credentials", "Host and credential pairs in the form hostname=user:password. Use comma separated pairs for multiple hosts")
 	flagSet.StringVar(&c.ManagerRoleName, "manager-role-name", "postgres_role_manager", "Name of the role which will be managing other roles")
-	flagSet.StringSliceVar(&c.UserRoles, "user-roles", []string{"rds_iam"}, "List of roles granted to all users")
+	flagSet.StringVar(&c.UserRoles, "user-roles", "rds_iam", "List of roles granted to all users")
 	flagSet.BoolVar(&c.AllDatabasesReadEnabled, "all-databases-enabled-read", false, "Enable usage of allDatabases field in read access requests")
 	flagSet.BoolVar(&c.AllDatabasesWriteEnabled, "all-databases-enabled-write", false, "Enable usage of allDatabases field in write access requests")
 	flagSet.StringVar(&c.UserRolePrefix, "user-role-prefix", "iam_developer_", "Prefix of roles created in PostgreSQL for users")
@@ -62,9 +64,19 @@ func (c *controllerConfiguration) RegisterFlags(flagSet *pflag.FlagSet) {
 	flagSet.StringVar(&c.AWS.LoginRoles, "aws-login-role", "", "AWS IAM role to attach the policies to")
 	flagSet.BoolVar(&c.ExtendedWriteEnabled, "extended-write-enabled", false, "Enable extended write access requests")
 	flagSet.StringVar(&c.IAMPolicyPrefix, "iam-policy-prefix", "/", "Path prefix to use when creating IAM policies")
+	flagSet.BoolVar(&c.SecureMetrics, "secure-metrics", false, "Whether to serve metrics with https")
+	flagSet.BoolVar(&c.EnableHTTP2, "enable-http2", false, "Whether to serve traffic via. http2")
 }
 
-func (c *controllerConfiguration) Log(log logr.Logger) {
+func (c *ControllerConfiguration) GetUserRoles() []string {
+	return strings.Split(c.UserRoles, ",")
+}
+
+func (c *ControllerConfiguration) GetLoginRoles() []string {
+	return strings.Split(c.AWS.LoginRoles, ",")
+}
+
+func (c *ControllerConfiguration) Log(log logr.Logger) {
 	var hostNames []string
 	for host := range c.HostCredentials {
 		hostNames = append(hostNames, host)
@@ -83,11 +95,11 @@ func (c *controllerConfiguration) Log(log logr.Logger) {
 	)
 }
 
-type hostCredentials struct {
+type HostCredentials struct {
 	value *map[string]postgres.Credentials
 }
 
-func (h *hostCredentials) Set(val string) error {
+func (h *HostCredentials) Set(val string) error {
 	val = strings.TrimSpace(val)
 	if val == "" {
 		return nil
@@ -120,11 +132,11 @@ func (h *hostCredentials) Set(val string) error {
 	return nil
 }
 
-func (h *hostCredentials) Type() string {
+func (h *HostCredentials) Type() string {
 	return "stringToCredentials"
 }
 
-func (h *hostCredentials) String() string {
+func (h *HostCredentials) String() string {
 	if h.value == nil {
 		return "[]"
 	}

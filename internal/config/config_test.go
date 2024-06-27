@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"errors"
@@ -81,7 +81,7 @@ func TestHostCredentials_Set(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			output := make(map[string]postgres.Credentials)
-			h := hostCredentials{
+			h := HostCredentials{
 				value: &output,
 			}
 
@@ -140,7 +140,7 @@ func TestHostCredentials_String(t *testing.T) {
 	}
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			h := hostCredentials{
+			h := HostCredentials{
 				value: &tc.value,
 			}
 

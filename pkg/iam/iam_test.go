@@ -50,6 +50,8 @@ func assumeRolePolicyDocument() *string {
 // TestEnsureUser_roleChange tests that EnsureUser will update the role when
 // called multiple times with different roles.
 func TestEnsureUser_roleChange(t *testing.T) {
+	test.Integration(t)
+
 	logger := test.NewLogger(t)
 
 	var (
@@ -111,6 +113,8 @@ func TestEnsureUser_roleChange(t *testing.T) {
 }
 
 func TestEnsureUser_AWSLoginRole_Added(t *testing.T) {
+	test.Integration(t)
+
 	logger := test.NewLogger(t)
 
 	var (
