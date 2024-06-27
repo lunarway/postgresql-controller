@@ -1,0 +1,241 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.14.0
+  name: postgresqlserviceusers.postgresql.lunar.tech
+spec:
+  group: postgresql.lunar.tech
+  names:
+    kind: PostgreSQLServiceUser
+    listKind: PostgreSQLServiceUserList
+    plural: postgresqlserviceusers
+    singular: postgresqlserviceuser
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.conditions[0].message
+      name: Status
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: PostgreSQLServiceUser is the Schema for the postgresqlserviceusers
+          API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: PostgreSQLServiceUserSpec defines the desired state of PostgreSQLServiceUser
+            properties:
+              host:
+                description: Host to connect to
+                properties:
+                  value:
+                    description: Defaults to "".
+                    type: string
+                  valueFrom:
+                    description: Source to read the value from.
+                    properties:
+                      configMapKeyRef:
+                        description: Selects a key of a config map in the custom resource's
+                          namespace
+                        properties:
+                          key:
+                            description: The key of the secret or config map to select
+                              from.  Must be a valid key.
+                            type: string
+                          name:
+                            description: The name of the secret or config map in the
+                              namespace to select from.
+                            type: string
+                        required:
+                        - key
+                        type: object
+                      secretKeyRef:
+                        description: Selects a key of a secret in the custom resource's
+                          namespace
+                        properties:
+                          key:
+                            description: The key of the secret or config map to select
+                              from.  Must be a valid key.
+                            type: string
+                          name:
+                            description: The name of the secret or config map in the
+                              namespace to select from.
+                            type: string
+                        required:
+                        - key
+                        type: object
+                    type: object
+                type: object
+              password:
+                description: Password used with the Host and Name used to connect
+                  to the database
+                properties:
+                  value:
+                    description: Defaults to "".
+                    type: string
+                  valueFrom:
+                    description: Source to read the value from.
+                    properties:
+                      configMapKeyRef:
+                        description: Selects a key of a config map in the custom resource's
+                          namespace
+                        properties:
+                          key:
+                            description: The key of the secret or config map to select
+                              from.  Must be a valid key.
+                            type: string
+                          name:
+                            description: The name of the secret or config map in the
+                              namespace to select from.
+                            type: string
+                        required:
+                        - key
+                        type: object
+                      secretKeyRef:
+                        description: Selects a key of a secret in the custom resource's
+                          namespace
+                        properties:
+                          key:
+                            description: The key of the secret or config map to select
+                              from.  Must be a valid key.
+                            type: string
+                          name:
+                            description: The name of the secret or config map in the
+                              namespace to select from.
+                            type: string
+                        required:
+                        - key
+                        type: object
+                    type: object
+                type: object
+              roles:
+                description: Roles to grant to the select name
+                items:
+                  description: PostgreSQLServiceUserSpec defines the desired state
+                    of PostgreSQLServiceUser
+                  properties:
+                    roleName:
+                      description: RoleName is the name of the role to which to grant
+                        to the user
+                      type: string
+                  required:
+                  - roleName
+                  type: object
+                type: array
+              username:
+                description: Name of the service user
+                properties:
+                  value:
+                    description: Defaults to "".
+                    type: string
+                  valueFrom:
+                    description: Source to read the value from.
+                    properties:
+                      configMapKeyRef:
+                        description: Selects a key of a config map in the custom resource's
+                          namespace
+                        properties:
+                          key:
+                            description: The key of the secret or config map to select
+                              from.  Must be a valid key.
+                            type: string
+                          name:
+                            description: The name of the secret or config map in the
+                              namespace to select from.
+                            type: string
+                        required:
+                        - key
+                        type: object
+                      secretKeyRef:
+                        description: Selects a key of a secret in the custom resource's
+                          namespace
+                        properties:
+                          key:
+                            description: The key of the secret or config map to select
+                              from.  Must be a valid key.
+                            type: string
+                          name:
+                            description: The name of the secret or config map in the
+                              namespace to select from.
+                            type: string
+                        required:
+                        - key
+                        type: object
+                    type: object
+                type: object
+            required:
+            - host
+            - username
+            type: object
+          status:
+            description: PostgreSQLServiceUserStatus defines the observed state of
+              PostgreSQLServiceUser
+            properties:
+              conditions:
+                description: Represents the latest available observations of a service
+                  users current state.
+                items:
+                  description: PostgreSQLServiceUserCondition describe the state of
+                    a postgres service user
+                  properties:
+                    lastTransitionTime:
+                      description: Last time the condition transitioned from one status
+                        to another.
+                      format: date-time
+                      type: string
+                    lastUpdateTime:
+                      description: The last time this condition was updated.
+                      format: date-time
+                      type: string
+                    message:
+                      description: A human readable message indicating details about
+                        the transition.
+                      type: string
+                    reason:
+                      description: The reason for the condition's last transition.
+                      type: string
+                    status:
+                      description: Status of the condition for a postgres service
+                        user
+                      type: string
+                    type:
+                      description: Type which state is the given resource currently
+                        in
+                      type: string
+                  required:
+                  - status
+                  - type
+                  type: object
+                type: array
+              observedGeneration:
+                description: ObservedGeneration reflects the generation most recently
+                  observed by the sealed-secrets controller.
+                format: int64
+                type: integer
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
