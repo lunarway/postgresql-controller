@@ -14,7 +14,11 @@ spec:
     singular: postgresqlserviceuser
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.conditions[0].message
+      name: Status
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: PostgreSQLServiceUser is the Schema for the postgresqlserviceusers
@@ -81,9 +85,6 @@ spec:
                         type: object
                     type: object
                 type: object
-              name:
-                description: Name of the service user
-                type: string
               password:
                 description: Password used with the Host and Name used to connect
                   to the database
@@ -140,34 +141,61 @@ spec:
                   - roleName
                   type: object
                 type: array
+              username:
+                description: Name of the service user
+                type: string
             required:
             - host
-            - name
+            - username
             type: object
           status:
             description: PostgreSQLServiceUserStatus defines the observed state of
               PostgreSQLServiceUser
             properties:
-              error:
-                description: Error if present, how did the reconciliation loop fail
-                type: string
-              host:
-                description: Host, which host was reconciled
-                type: string
-              name:
-                description: Name, which service user was reconciled
-                type: string
-              phase:
-                description: Phase which state is the given resource currently in
-                type: string
-              phaseUpdated:
-                description: PhaseUpdated when was the phase last updated
-                format: date-time
-                type: string
-            required:
-            - phase
-            - phaseUpdated
+              conditions:
+                description: Represents the latest available observations of a service
+                  users current state.
+                items:
+                  description: PostgreSQLServiceUserCondition describe the state of
+                    a postgres service user
+                  properties:
+                    lastTransitionTime:
+                      description: Last time the condition transitioned from one status
+                        to another.
+                      format: date-time
+                      type: string
+                    lastUpdateTime:
+                      description: The last time this condition was updated.
+                      format: date-time
+                      type: string
+                    message:
+                      description: A human readable message indicating details about
+                        the transition.
+                      type: string
+                    reason:
+                      description: The reason for the condition's last transition.
+                      type: string
+                    status:
+                      description: Status of the condition for a postgres service
+                        user
+                      type: string
+                    type:
+                      description: Type which state is the given resource currently
+                        in
+                      type: string
+                  required:
+                  - status
+                  - type
+                  type: object
+                type: array
+              observedGeneration:
+                description: ObservedGeneration reflects the generation most recently
+                  observed by the sealed-secrets controller.
+                format: int64
+                type: integer
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true

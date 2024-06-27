@@ -17,17 +17,15 @@ limitations under the License.
 package v1alpha1
 
 import (
+	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
-
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // PostgreSQLServiceUserSpec defines the desired state of PostgreSQLServiceUser
 // +k8s:openapi-gen=true
 type PostgreSQLServiceUserSpec struct {
 	// Name of the service user
-	Name string `json:"name"`
+	Username string `json:"username"`
 
 	// Host to connect to
 	Host ResourceVar `json:"host"`
@@ -37,6 +35,7 @@ type PostgreSQLServiceUserSpec struct {
 	Password *ResourceVar `json:"password"`
 
 	// Roles to grant to the select name
+	// +optional
 	Roles []PostgreSQLServiceUserRole `json:"roles,omitempty"`
 }
 
@@ -47,50 +46,64 @@ type PostgreSQLServiceUserRole struct {
 	RoleName string `json:"roleName"`
 }
 
-// PostgreSQLServiceUserPhase represents the current phase of a PostgreSQL service user
+// PostgreSQLServiceUserConditionType represents the current phase of a PostgreSQL service user
 // +k8s:openapi-gen=true
-type PostgreSQLServiceUserPhase string
+type PostgreSQLServiceUserConditionType string
 
 const (
 	// PostgreSQLServiceUserPhaseFailed indicates that the controller was unable to reconcile a database service user resource
-	PostgreSQLServiceUserPhaseFailed PostgreSQLServiceUserPhase = "Failed"
+	PostgreSQLServiceUserPhaseFailed PostgreSQLServiceUserConditionType = "Failed"
 	// PostgreSQLServiceUserPhaseInvalid indicates that the controller was unable to reconcile a database service user resource as the specification was not inline with what the controller expected. The resource will not be reconciled again until it has been changed.
-	PostgreSQLServiceUserPhaseInvalid PostgreSQLServiceUserPhase = "Invalid"
+	PostgreSQLServiceUserPhaseInvalid PostgreSQLServiceUserConditionType = "Invalid"
 	// PostgreSQLServiceUserPhaseRunning indicates that the controller has reconciled the database service user resource
-	PostgreSQLServiceUserPhaseRunning PostgreSQLServiceUserPhase = "Running"
+	PostgreSQLServiceUserPhaseRunning PostgreSQLServiceUserConditionType = "Running"
 )
+
+// PostgreSQLServiceUserCondition describe the state of a postgres service user
+type PostgreSQLServiceUserCondition struct {
+	// Type which state is the given resource currently in
+	Type PostgreSQLServiceUserConditionType `json:"type" protobuf:"bytes,1,opt,name=type,casttype=DeploymentConditionType"`
+
+	// Status of the condition for a postgres service user
+	Status apiv1.ConditionStatus `json:"status" protobuf:"bytes,2,opt,name=status,casttype=k8s.io/api/core/v1.ConditionStatus"`
+
+	// The last time this condition was updated.
+	LastUpdateTime metav1.Time `json:"lastUpdateTime,omitempty" protobuf:"bytes,6,opt,name=lastUpdateTime"`
+
+	// Last time the condition transitioned from one status to another.
+	LastTransitionTime metav1.Time `json:"lastTransitionTime,omitempty" protobuf:"bytes,7,opt,name=lastTransitionTime"`
+
+	// The reason for the condition's last transition.
+	Reason string `json:"reason,omitempty" protobuf:"bytes,4,opt,name=reason"`
+
+	// A human readable message indicating details about the transition.
+	Message string `json:"message,omitempty" protobuf:"bytes,5,opt,name=message"`
+}
 
 // PostgreSQLServiceUserStatus defines the observed state of PostgreSQLServiceUser
 type PostgreSQLServiceUserStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// ObservedGeneration reflects the generation most recently observed by the sealed-secrets controller.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty" protobuf:"varint,1,opt,name=observedGeneration"`
 
-	// PhaseUpdated when was the phase last updated
-	PhaseUpdated metav1.Time `json:"phaseUpdated"`
-
-	// Phase which state is the given resource currently in
-	Phase PostgreSQLServiceUserPhase `json:"phase"`
-
-	// Host, which host was reconciled
-	Host string `json:"host,omitempty"`
-
-	// Name, which service user was reconciled
-	Name string `json:"name,omitempty"`
-
-	// Error if present, how did the reconciliation loop fail
-	Error string `json:"error,omitempty"`
+	// Represents the latest available observations of a service users current state.
+	// +optional
+	// +patchMergeKey=type
+	// +patchStrategy=merge
+	Conditions []PostgreSQLServiceUserCondition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,2,rep,name=conditions"`
 }
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[0].message"
 
 // PostgreSQLServiceUser is the Schema for the postgresqlserviceusers API
 type PostgreSQLServiceUser struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   PostgreSQLServiceUserSpec   `json:"spec,omitempty"`
-	Status PostgreSQLServiceUserStatus `json:"status,omitempty"`
+	Spec   PostgreSQLServiceUserSpec    `json:"spec"`
+	Status *PostgreSQLServiceUserStatus `json:"status,omitempty"`
 }
 
 //+kubebuilder:object:root=true
@@ -98,7 +111,7 @@ type PostgreSQLServiceUser struct {
 // PostgreSQLServiceUserList contains a list of PostgreSQLServiceUser
 type PostgreSQLServiceUserList struct {
 	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
+	metav1.ListMeta `json:"metadata"`
 	Items           []PostgreSQLServiceUser `json:"items"`
 }
 
