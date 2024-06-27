@@ -95,6 +95,14 @@ build: manifests generate fmt vet ## Build manager binary.
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./cmd/main.go
 
+.PHONY: docker-buildx-build
+docker-buildx-build: test
+	docker buildx build --platform=linux/amd64,linux/arm64 -t ${IMG} .
+
+.PHONY: docker-buildx-push
+docker-buildx-push: docker-buildx-build
+	docker buildx build --platform=linux/amd64,linux/arm64 -t ${IMG} --push .
+
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
