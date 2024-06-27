@@ -25,7 +25,7 @@ import (
 // +k8s:openapi-gen=true
 type PostgreSQLServiceUserSpec struct {
 	// Name of the service user
-	Username string `json:"username"`
+	Username ResourceVar `json:"username"`
 
 	// Host to connect to
 	Host ResourceVar `json:"host"`

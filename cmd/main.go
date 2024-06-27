@@ -36,7 +36,6 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	postgresqllunartechv1alpha1 "go.lunarway.com/postgresql-controller/api/v1alpha1"
 	postgresqlv1alpha1 "go.lunarway.com/postgresql-controller/api/v1alpha1"
 	"go.lunarway.com/postgresql-controller/internal/config"
 	"go.lunarway.com/postgresql-controller/internal/controller"
@@ -178,7 +177,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "PostgreSQLHostCredentials")
 		os.Exit(1)
 	}
-	if err = (&controllers.PostgreSQLServiceUserReconciler{
+	if err = (&controller.PostgreSQLServiceUserReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
