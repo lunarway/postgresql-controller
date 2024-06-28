@@ -1,6 +1,7 @@
 package postgres
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -52,7 +53,7 @@ func ParseUsernamePassword(s string) (Credentials, error) {
 // Database ensures that a user with provided password exists on the host and
 // that read and readwrite roles are created with default privileges on a
 // schema named after the database name.
-func Database(log logr.Logger, host string, adminCredentials, serviceCredentials Credentials, managerRole string) error {
+func Database(log logr.Logger, host string, adminCredentials, serviceCredentials Credentials, managerRole string, extensions Extensions) error {
 	if host == "" {
 		return fmt.Errorf("host is required")
 	}
@@ -178,6 +179,10 @@ func Database(log logr.Logger, host string, adminCredentials, serviceCredentials
 	err = grantConnectAndUsage(log, serviceConnection, serviceCredentials)
 	if err != nil {
 		return fmt.Errorf("grant connect and usage to public for service user '%s': %w", serviceCredentials.User, err)
+	}
+
+	if err := ensureExtensions(context.Background(), serviceConnection, serviceCredentials, adminCredentials, extensions); err != nil {
+		return fmt.Errorf("failed to reconcile extensions: '%s': %w", serviceCredentials.User, err)
 	}
 
 	return nil

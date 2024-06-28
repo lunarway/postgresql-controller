@@ -11,6 +11,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.lunarway.com/postgresql-controller/pkg/postgres"
 	"go.lunarway.com/postgresql-controller/test"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -106,7 +107,7 @@ func TestDatabase_sunshine(t *testing.T) {
 			Name:     name,
 			User:     name,
 			Password: password,
-		}, managerRole)
+		}, managerRole, nil)
 	if err != nil {
 		t.Fatalf("EnsurePostgreSQLDatabase failed: %v", err)
 	}
@@ -138,6 +139,249 @@ func TestDatabase_sunshine(t *testing.T) {
 	assert.Equal(t, []string{name}, owners, "owner not as expected")
 }
 
+func TestDatabase_HasExtensionsNotExistingAlreadyEnableExtensions(t *testing.T) {
+	postgresqlHost := test.Integration(t)
+	log := test.SetLogger(t)
+
+	managerRole := "postgres_role_name"
+	db, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		Database: "postgres",
+		User:     "iam_creator",
+		Password: "iam_creator",
+	})
+	require.NoError(t, err, "connect to database failed")
+	defer db.Close()
+
+	err = createManagerRole(log, db, managerRole)
+	require.NoError(t, err, "create manager role failed")
+
+	name := fmt.Sprintf("test_%d", time.Now().UnixNano())
+	password := "test"
+
+	extensions := []postgres.Extension{
+		{
+			Name: "pg_stat_statements",
+		},
+	}
+
+	err = postgres.Database(logf.Log, postgresqlHost,
+		postgres.Credentials{
+			User:     "iam_creator",
+			Password: "iam_creator",
+		}, postgres.Credentials{
+			Name:     name,
+			User:     name,
+			Password: password,
+		}, managerRole, extensions)
+	require.NoError(t, err, "EnsurePostgreSQLDatabase failed")
+
+	assert.True(t, roleCanLogin(t, db, name))
+	assert.True(t, hasPassword(t, log, postgresqlHost, name))
+
+	newDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		Database: name,
+		User:     name,
+		Password: password,
+	})
+	require.NoError(t, err, "connect to database failed")
+
+	// Validate Extensions
+	enabledExtensions := enabledExtensions(t, newDB)
+	assert.Equal(t,
+		[]string{
+			"pg_stat_statements",
+			"plpgsql",
+		},
+		enabledExtensions,
+	)
+}
+
+func TestDatabase_HasExtensionsNoUpdates(t *testing.T) {
+	postgresqlHost := test.Integration(t)
+	log := test.SetLogger(t)
+
+	managerRole := "postgres_role_name"
+	db, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		Database: "postgres",
+		User:     "iam_creator",
+		Password: "iam_creator",
+	})
+	require.NoError(t, err, "connect to database failed")
+	defer db.Close()
+
+	err = createManagerRole(log, db, managerRole)
+	require.NoError(t, err, "create manager role failed")
+
+	name := fmt.Sprintf("test_%d", time.Now().UnixNano())
+	password := "test"
+
+	extensions := []postgres.Extension{
+		{
+			Name: "pg_stat_statements",
+		},
+	}
+
+	err = postgres.Database(
+		logf.Log,
+		postgresqlHost,
+		postgres.Credentials{
+			User:     "iam_creator",
+			Password: "iam_creator",
+		},
+		postgres.Credentials{
+			Name:     name,
+			User:     name,
+			Password: password,
+		},
+		managerRole,
+		extensions,
+	)
+	require.NoError(t, err, "EnsurePostgreSQLDatabase failed")
+
+	assert.True(t, roleCanLogin(t, db, name))
+	assert.True(t, hasPassword(t, log, postgresqlHost, name))
+
+	newDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		Database: name,
+		User:     name,
+		Password: password,
+	})
+	require.NoError(t, err, "connect to database failed")
+
+	// Validate Extensions
+	actualExtensions := enabledExtensions(t, newDB)
+	assert.Equal(t,
+		[]string{
+			"pg_stat_statements",
+			"plpgsql",
+		},
+		actualExtensions,
+	)
+
+	err = postgres.Database(
+		logf.Log,
+		postgresqlHost,
+		postgres.Credentials{
+			User:     "iam_creator",
+			Password: "iam_creator",
+		},
+		postgres.Credentials{
+			Name:     name,
+			User:     name,
+			Password: password,
+		},
+		managerRole,
+		extensions,
+	)
+	require.NoError(t, err, "EnsurePostgreSQLDatabase failed")
+
+	// Validate Extensions
+	actualExtensions = enabledExtensions(t, newDB)
+	assert.Equal(t,
+		[]string{
+			"pg_stat_statements",
+			"plpgsql",
+		},
+		actualExtensions,
+	)
+}
+
+func TestDatabase_HasExtensionsGiveEmptyDeclarativeExtensionsShouldDoNothing(t *testing.T) {
+	postgresqlHost := test.Integration(t)
+	log := test.SetLogger(t)
+
+	managerRole := "postgres_role_name"
+	db, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		Database: "postgres",
+		User:     "iam_creator",
+		Password: "iam_creator",
+	})
+	require.NoError(t, err, "connect to database failed")
+	defer db.Close()
+
+	err = createManagerRole(log, db, managerRole)
+	require.NoError(t, err, "create manager role failed")
+
+	name := fmt.Sprintf("test_%d", time.Now().UnixNano())
+	password := "test"
+
+	extensions := []postgres.Extension{
+		{
+			Name: "pg_stat_statements",
+		},
+	}
+
+	err = postgres.Database(
+		logf.Log,
+		postgresqlHost,
+		postgres.Credentials{
+			User:     "iam_creator",
+			Password: "iam_creator",
+		},
+		postgres.Credentials{
+			Name:     name,
+			User:     name,
+			Password: password,
+		},
+		managerRole,
+		extensions,
+	)
+	require.NoError(t, err, "EnsurePostgreSQLDatabase failed")
+
+	assert.True(t, roleCanLogin(t, db, name))
+	assert.True(t, hasPassword(t, log, postgresqlHost, name))
+
+	newDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     postgresqlHost,
+		Database: name,
+		User:     name,
+		Password: password,
+	})
+	require.NoError(t, err, "connect to database failed")
+
+	// Validate Extensions
+	actualExtensions := enabledExtensions(t, newDB)
+	assert.Equal(t,
+		[]string{
+			"pg_stat_statements",
+			"plpgsql",
+		},
+		actualExtensions,
+	)
+
+	err = postgres.Database(
+		logf.Log,
+		postgresqlHost,
+		postgres.Credentials{
+			User:     "iam_creator",
+			Password: "iam_creator",
+		},
+		postgres.Credentials{
+			Name:     name,
+			User:     name,
+			Password: password,
+		},
+		managerRole,
+		// No extensions
+		[]postgres.Extension{},
+	)
+	require.NoError(t, err, "EnsurePostgreSQLDatabase failed")
+
+	// Validate Extensions
+	actualExtensions = enabledExtensions(t, newDB)
+	assert.Equal(t,
+		[]string{
+			"pg_stat_statements",
+			"plpgsql",
+		},
+		actualExtensions,
+	)
+}
 func TestDatabase_noPassword(t *testing.T) {
 	postgresqlHost := test.Integration(t)
 	log := test.SetLogger(t)
@@ -166,7 +410,7 @@ func TestDatabase_noPassword(t *testing.T) {
 		}, postgres.Credentials{
 			Name: name,
 			User: name,
-		}, managerRole)
+		}, managerRole, nil)
 	if err != nil {
 		t.Fatalf("EnsurePostgreSQLDatabase failed: %v", err)
 	}
@@ -228,7 +472,7 @@ func TestDatabase_switchFromLoginToNoLoginAndBack(t *testing.T) {
 		Name:     name,
 		User:     name,
 		Password: password,
-	}, managerRole)
+	}, managerRole, nil)
 	if err != nil {
 		t.Fatalf("Database failed: %v", err)
 	}
@@ -243,7 +487,7 @@ func TestDatabase_switchFromLoginToNoLoginAndBack(t *testing.T) {
 	}, postgres.Credentials{
 		Name: name,
 		User: name,
-	}, managerRole)
+	}, managerRole, nil)
 	if err != nil {
 		t.Logf("The error: %#v", err)
 		t.Fatalf("Second Database failed: %v", err)
@@ -259,7 +503,7 @@ func TestDatabase_switchFromLoginToNoLoginAndBack(t *testing.T) {
 		Name:     name,
 		User:     name,
 		Password: password,
-	}, managerRole)
+	}, managerRole, nil)
 	if err != nil {
 		t.Logf("The error: %#v", err)
 		t.Fatalf("Second Database failed: %v", err)
@@ -355,7 +599,7 @@ func TestDatabase_existingResourcePrivilegesForReadWriteRoles(t *testing.T) {
 			Name:     name,
 			User:     name,
 			Password: password,
-		}, managerRole)
+		}, managerRole, nil)
 	if err != nil {
 		t.Fatalf("Create service database failed: %v", err)
 	}
@@ -422,7 +666,7 @@ func TestDatabase_defaultDatabaseName(t *testing.T) {
 			User:     "legacy",
 			Password: "legacy_pass",
 			Shared:   false,
-		}, managerRole)
+		}, managerRole, nil)
 	if err != nil {
 		t.Fatalf("create legacy database failed: %v", err)
 	}
@@ -438,7 +682,7 @@ func TestDatabase_defaultDatabaseName(t *testing.T) {
 			User:     "service",
 			Password: "service_pass",
 			Shared:   true,
-		}, managerRole)
+		}, managerRole, nil)
 	if err != nil {
 		t.Fatalf("Create service database failed: %v", err)
 	}
@@ -523,7 +767,7 @@ func TestDatabase_mixedOwnershipOnSharedDatabase(t *testing.T) {
 			User:     newUser,
 			Password: newUser,
 			Shared:   true,
-		}, managerRole)
+		}, managerRole, nil)
 	if err != nil {
 		t.Fatalf("create new_user schema on shared database failed: %v", err)
 	}
@@ -619,7 +863,7 @@ func TestDatabase_idempotency(t *testing.T) {
 		Name:     name,
 		User:     name,
 		Password: password,
-	}, managerRole)
+	}, managerRole, nil)
 	if err != nil {
 		t.Fatalf("EnsurePostgreSQLDatabase failed: %v", err)
 	}
@@ -632,7 +876,7 @@ func TestDatabase_idempotency(t *testing.T) {
 		Name:     name,
 		User:     name,
 		Password: password,
-	}, managerRole)
+	}, managerRole, nil)
 	if err != nil {
 		t.Logf("The error: %#v", err)
 		t.Fatalf("Second EnsurePostgreSQLDatabase failed: %v", err)
@@ -686,6 +930,17 @@ func validateOwner(t *testing.T, db *sql.DB, owner string) []string {
 func storedSchema(t *testing.T, db *sql.DB, schemaName string) []string {
 	t.Helper()
 	rows, err := db.Query("select schema_name from information_schema.schemata where schema_name = $1", schemaName)
+	if err != nil {
+		t.Fatalf("get schema for schema query failed: %v", err)
+	}
+	defer rows.Close()
+	return stringsResult(t, rows)
+}
+
+// enabledExtensions return which extensions are enabled for a database
+func enabledExtensions(t *testing.T, db *sql.DB) []string {
+	t.Helper()
+	rows, err := db.Query("select extname from pg_extension")
 	if err != nil {
 		t.Fatalf("get schema for schema query failed: %v", err)
 	}
