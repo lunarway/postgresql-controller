@@ -61,6 +61,16 @@ type PostgreSQLDatabaseSpec struct {
 	// the same namespace. This should be omitted if Host is provided.
 	// +optional
 	HostCredentials string `json:"hostCredentials,omitempty"`
+
+	// Extensions is a list of extensions a given record expects to have available
+	// +optional
+	Extensions []PostgreSQLDatabaseExtension `json:"extensions,omitempty"`
+}
+
+// PostgreSQLDatabaseExtension describes which an extension for a given database should be installed
+// +k8s:openapi-gen=true
+type PostgreSQLDatabaseExtension struct {
+	ExtensionName string `json:"extensionName"`
 }
 
 // PostgreSQLDatabasePhase represents the current phase of a PostgreSQL
