@@ -7,6 +7,9 @@ import (
 	"testing"
 	"time"
 
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
 	"github.com/go-logr/logr"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
@@ -640,3 +643,77 @@ func createManagerRole(log logr.Logger, db *sql.DB, roleName string) error {
 	}
 	return nil
 }
+
+var _ = Describe("PostgresSQLDatabase controller", func() {
+	const (
+		DatabaseName      = "test_database"
+		DatabaseNamespace = "test_namespace"
+
+		timeout  = time.Second * 10
+		duration = time.Second * 10
+		interval = time.Millisecond * 250
+	)
+
+	Context("When updating PostgreSQLDatabase Status", func() {
+		It("Should trigger a refresh", func() {
+			By("Reconling the database resource and update status", func() {
+
+				var (
+					ctx                 = context.Background()
+					epoch               = time.Now().UnixNano()
+					namespace           = "default"
+					databaseName        = fmt.Sprintf("database_%d", epoch)
+					hostCredentialsName = fmt.Sprintf("hostcredentials_%d", epoch)
+				)
+
+				credentialsResource := &lunarwayv1alpha1.PostgreSQLHostCredentials{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      hostCredentialsName,
+						Namespace: namespace,
+					},
+					Spec: lunarwayv1alpha1.PostgreSQLHostCredentialsSpec{
+						Host: lunarwayv1alpha1.ResourceVar{
+							Value: "localhost",
+						},
+						User: lunarwayv1alpha1.ResourceVar{
+							Value: "admin",
+						},
+						Password: lunarwayv1alpha1.ResourceVar{
+							Value: "admin",
+						},
+					},
+				}
+
+				databaseResource := &lunarwayv1alpha1.PostgreSQLDatabase{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      databaseName,
+						Namespace: namespace,
+					},
+					Spec: lunarwayv1alpha1.PostgreSQLDatabaseSpec{
+						Name:            databaseName,
+						HostCredentials: hostCredentialsName,
+						Password: &lunarwayv1alpha1.ResourceVar{
+							Value: "123456",
+						},
+						User: lunarwayv1alpha1.ResourceVar{
+							Value: databaseName,
+						},
+					},
+					Status: lunarwayv1alpha1.PostgreSQLDatabaseStatus{
+						Phase: lunarwayv1alpha1.PostgreSQLDatabasePhaseRunning,
+					},
+				}
+
+				Eventually(func() bool {
+					err := k8sClient.Create(ctx, credentialsResource)
+					return err != nil
+				}, timeout, interval).Should(BeTrue())
+
+				Eventually(func() bool {
+					err := k8sClient.Create(ctx, databaseResource)
+					return err != nil
+				}).Should(BeTrue())
+			})
+		})
+	})
+})
