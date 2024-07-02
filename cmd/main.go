@@ -71,6 +71,11 @@ func main() {
 
 	config.Log(setupLog)
 
+	if err := flagSet.Parse(os.Args[1:]); err != nil {
+		setupLog.Error(err, "parse flags")
+		os.Exit(1)
+	}
+
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will
 	// prevent from being vulnerable to the HTTP/2 Stream Cancellation and
