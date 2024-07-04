@@ -135,6 +135,24 @@ func (f *Fixture) GivenTwoDatabaseResourcesExists() *Fixture {
 
 	f.addK8sResources(resources...)
 
+	for i := 0; i < 2; i++ {
+		f.log.Info("checking database resource", "name", f.incrementResource(i, f.data.databaseName))
+
+		checkResource(f,
+			types.NamespacedName{
+				Namespace: f.data.namespace,
+				Name:      f.toResourceName(f.incrementResource(i, f.data.databaseName)),
+			},
+			func(t *assert.CollectT, obj *v1alpha1.PostgreSQLDatabase) {
+				assert.Equal(t, f.incrementResource(i, f.data.databaseName), obj.Spec.Name)
+				assert.Equal(t, f.host, obj.Spec.Host.Value)
+				assert.Empty(t, obj.Status.Error, "database resource shouldn't return an error")
+				assert.Equal(t, v1alpha1.PostgreSQLDatabasePhaseRunning, obj.Status.Phase)
+				assert.NotEmpty(t, obj.Status.PhaseUpdated)
+			},
+		)
+	}
+
 	return f
 }
 
@@ -164,6 +182,8 @@ func (f *Fixture) WhenAServiceUserResourceIsAdded() *Fixture {
 }
 
 func (f *Fixture) ThenAServiceUserIsSetup() *Fixture {
+	// TODO: needs actual implementation to check that the user with password can connect to the database
+
 	return f
 }
 
