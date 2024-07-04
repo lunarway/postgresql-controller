@@ -11,9 +11,14 @@ import (
 func Integration(t *testing.T) string {
 	t.Helper()
 
-	host := os.Getenv("POSTGRESQL_CONTROLLER_INTEGRATION_HOST")
+	host := GetHost()
 	if host == "" {
 		t.Skip("Integration tests not enabled as POSTGRESQL_CONTROLLER_INTEGRATION_HOST is empty")
 	}
+	return host
+}
+
+func GetHost() string {
+	host := os.Getenv("POSTGRESQL_CONTROLLER_INTEGRATION_HOST")
 	return host
 }

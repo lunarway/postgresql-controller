@@ -1,13 +1,18 @@
 package controller
 
 import (
+	"context"
 	"log"
+	"os"
 	"path/filepath"
 	"testing"
 
 	postgresqlv1alpha1 "go.lunarway.com/postgresql-controller/api/v1alpha1"
+	"go.lunarway.com/postgresql-controller/pkg/postgres"
+	"go.lunarway.com/postgresql-controller/test"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -19,22 +24,24 @@ var k8sClient client.Client
 var testEnv *envtest.Environment
 
 func TestMain(m *testing.M) {
+	ctx, cancel := context.WithCancel(context.Background())
+
 	// Before tests
-	if err := beforeTests(); err != nil {
+	if err := beforeTests(ctx); err != nil {
 		log.Fatalf("failed to setup dependencies for tests: %s", err.Error())
 	}
 
-	// Tear down after tests
-	defer func() {
-		if err := afterTests(); err != nil {
-			log.Fatalf("failed to cleanup after tests: %s", err.Error())
-		}
-	}()
+	exitCode := m.Run()
 
-	m.Run()
+	// Tear down after tests
+	if err := afterTests(ctx, cancel); err != nil {
+		log.Fatalf("failed to cleanup after tests: %s", err.Error())
+	}
+
+	os.Exit(exitCode)
 }
 
-func beforeTests() error {
+func beforeTests(ctx context.Context) error {
 	logf.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	testEnv = &envtest.Environment{
@@ -61,9 +68,39 @@ func beforeTests() error {
 		return err
 	}
 
+	k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
+		Scheme: scheme.Scheme,
+	})
+	if err != nil {
+		return err
+	}
+
+	if err = (&PostgreSQLDatabaseReconciler{
+		Client: k8sManager.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("PostgreSQLDatabase"),
+
+		ManagerRoleName: managerRole,
+		HostCredentials: map[string]postgres.Credentials{test.GetHost(): {
+			Name:     "admin",
+			User:     "admin",
+			Password: "admin",
+		}},
+	}).SetupWithManager(k8sManager); err != nil {
+		return err
+	}
+
+	go func() {
+		err = k8sManager.Start(ctx)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}()
+
 	return nil
 }
 
-func afterTests() error {
+func afterTests(_ context.Context, cancel func()) error {
+	cancel()
+
 	return testEnv.Stop()
 }
