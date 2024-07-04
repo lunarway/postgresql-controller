@@ -11,6 +11,7 @@ import (
 	"go.lunarway.com/postgresql-controller/api/v1alpha1"
 	"go.lunarway.com/postgresql-controller/test"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
@@ -21,15 +22,10 @@ func TestPostgreSQLServiceUser(t *testing.T) {
 
 	var (
 		namespace = "default"
-
-		timeout  = time.Second * 5
-		interval = time.Millisecond * 250
 	)
 
-	t.Run("can reconcile user", func(t *testing.T) {
+	t.Run("can reconcile service user", func(t *testing.T) {
 		var (
-			ctx = context.Background()
-
 			epoch        = time.Now().UnixNano()
 			databaseName = fmt.Sprintf("database_service_user_%d", epoch)
 			userName     = fmt.Sprintf("service_user_%d", epoch)
@@ -77,23 +73,28 @@ func TestPostgreSQLServiceUser(t *testing.T) {
 
 		seededDatabase(t, host, databaseName, userName, managerRole)
 
-		assert.EventuallyWithT(
-			t,
-			func(collect *assert.CollectT) {
-				err := k8sClient.Create(ctx, databaseResource)
-				assert.NoError(collect, err)
-			},
-			timeout,
-			interval,
-		)
-		assert.EventuallyWithT(
-			t,
-			func(collect *assert.CollectT) {
-				err := k8sClient.Create(ctx, serviceUserResource)
-				assert.NoError(collect, err)
-			},
-			timeout,
-			interval,
-		)
+		addResources(t, databaseResource, serviceUserResource)
 	})
+}
+
+func addResources(t *testing.T, resources ...client.Object) {
+	t.Helper()
+
+	var (
+		ctx      = context.Background()
+		timeout  = time.Second * 5
+		interval = time.Millisecond * 250
+	)
+
+	for _, resource := range resources {
+		assert.EventuallyWithT(
+			t,
+			func(collect *assert.CollectT) {
+				err := k8sClient.Create(ctx, resource)
+				assert.NoError(t, err, "failed to create kubernetes resource")
+			},
+			timeout,
+			interval,
+		)
+	}
 }
