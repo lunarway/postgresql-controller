@@ -218,6 +218,10 @@ endef
 test/unit: fmt vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test -v -race ./... -coverprofile cover.out
 
+.PHONY: test/unit/gotestsum
+test/unit/gotestsum: fmt vet envtest ## Run tests.
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" gotestsum -- -v -race ./... -coverprofile cover.out
+
 POSTGRESQL_CONTROLLER_INTEGRATION_HOST=localhost:5432
 
 .PHONY: test/integration/dependencies/run
@@ -233,6 +237,11 @@ test/integration/dependencies/stop:
 test/integration: test/integration/dependencies/run
 	@echo Running integration tests against PostgreSQL instance on ${POSTGRESQL_CONTROLLER_INTEGRATION_HOST}:
 	POSTGRESQL_CONTROLLER_INTEGRATION_HOST=${POSTGRESQL_CONTROLLER_INTEGRATION_HOST} make test/unit
+
+.PHONY: test/integration/gotestsum
+test/integration/gotestsum: test/integration/dependencies/run
+	@echo Running integration tests against PostgreSQL instance on ${POSTGRESQL_CONTROLLER_INTEGRATION_HOST}:
+	POSTGRESQL_CONTROLLER_INTEGRATION_HOST=${POSTGRESQL_CONTROLLER_INTEGRATION_HOST} make test/unit/gotestsum
 
 .PHONY: test/cluster
 test/cluster:
