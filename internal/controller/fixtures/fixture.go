@@ -13,41 +13,14 @@ import (
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.lunarway.com/postgresql-controller/api/v1alpha1"
 	"go.lunarway.com/postgresql-controller/pkg/postgres"
 	"go.lunarway.com/postgresql-controller/test"
 	"golang.org/x/sync/errgroup"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
-
-type fixtureData struct {
-	epoch int64
-
-	databaseName string
-	userName     string
-	password     string
-	managerRole  string
-
-	namespace string
-}
-
-func newFixtureData() fixtureData {
-	epoch := time.Now().UnixNano()
-
-	return fixtureData{
-		epoch:        epoch,
-		databaseName: fmt.Sprintf("database_%d", epoch),
-		userName:     fmt.Sprintf("user_%d", epoch),
-		password:     fmt.Sprintf("user_%d", epoch),
-		managerRole:  "postgres_role_manager",
-
-		namespace: "default",
-	}
-}
 
 type Fixture struct {
 	t    *testing.T
@@ -68,127 +41,15 @@ func (f *Fixture) GivenASeededDatabase() *Fixture {
 	return f
 }
 
-func (f *Fixture) GivenADatabaseResourceExists() *Fixture {
-	f.log.Info("given a database resource exists")
-
-	databaseResource := &v1alpha1.PostgreSQLDatabase{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      f.toResourceName(f.data.databaseName),
-			Namespace: f.data.namespace,
-		},
-		Spec: v1alpha1.PostgreSQLDatabaseSpec{
-			Name: f.data.databaseName,
-			User: v1alpha1.ResourceVar{
-				Value: f.data.databaseName,
-			},
-			Password: &v1alpha1.ResourceVar{
-				Value: f.data.databaseName,
-			},
-			Host: v1alpha1.ResourceVar{
-				Value: f.host,
-			},
-		},
-	}
-
-	f.log.Info("adding kubernetes resources")
-	f.addK8sResources(databaseResource)
-
-	f.log.Info("checking databse resources exists")
-	checkResource(f,
-		types.NamespacedName{
-			Namespace: f.data.namespace,
-			Name:      f.toResourceName(f.data.databaseName),
-		},
-		func(t *assert.CollectT, obj *v1alpha1.PostgreSQLDatabase) {
-			assert.Equal(t, f.host, obj.Spec.Host.Value)
-			assert.Empty(t, obj.Status.Error, "database resource shouldn't return an error")
-			assert.Equal(t, v1alpha1.PostgreSQLDatabasePhaseRunning, obj.Status.Phase)
-			assert.NotEmpty(t, obj.Status.PhaseUpdated)
-		},
-	)
-
-	return f
-}
-
-func (f *Fixture) GivenTwoDatabaseResourcesExists() *Fixture {
-	resources := make([]client.Object, 0)
-	for i := 0; i < 2; i++ {
-		resources = append(resources, &v1alpha1.PostgreSQLDatabase{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      f.toResourceName(f.incrementResource(i, f.data.databaseName)),
-				Namespace: f.data.namespace,
-			},
-			Spec: v1alpha1.PostgreSQLDatabaseSpec{
-				Name: f.incrementResource(i, f.data.databaseName),
-				User: v1alpha1.ResourceVar{
-					Value: f.incrementResource(i, f.data.databaseName),
-				},
-				Password: &v1alpha1.ResourceVar{
-					Value: f.data.databaseName,
-				},
-				Host: v1alpha1.ResourceVar{
-					Value: f.host,
-				},
-			},
-		})
-	}
-
-	f.addK8sResources(resources...)
-
-	for i := 0; i < 2; i++ {
-		f.log.Info("checking database resource", "name", f.incrementResource(i, f.data.databaseName))
-
-		checkResource(f,
-			types.NamespacedName{
-				Namespace: f.data.namespace,
-				Name:      f.toResourceName(f.incrementResource(i, f.data.databaseName)),
-			},
-			func(t *assert.CollectT, obj *v1alpha1.PostgreSQLDatabase) {
-				assert.Equal(t, f.incrementResource(i, f.data.databaseName), obj.Spec.Name)
-				assert.Equal(t, f.host, obj.Spec.Host.Value)
-				assert.Empty(t, obj.Status.Error, "database resource shouldn't return an error")
-				assert.Equal(t, v1alpha1.PostgreSQLDatabasePhaseRunning, obj.Status.Phase)
-				assert.NotEmpty(t, obj.Status.PhaseUpdated)
-			},
-		)
-	}
-
-	return f
-}
-
-func (f *Fixture) WhenAServiceUserResourceIsAdded() *Fixture {
-	serviceUserResource := &v1alpha1.PostgreSQLServiceUser{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      f.toResourceName(f.data.userName),
-			Namespace: f.data.namespace,
-		},
-		Spec: v1alpha1.PostgreSQLServiceUserSpec{
-			Username: v1alpha1.ResourceVar{
-				Value: f.data.userName,
-			},
-			Host: v1alpha1.ResourceVar{
-				Value: f.host,
-			},
-			Password: &v1alpha1.ResourceVar{
-				Value: f.data.password,
-			},
-			Roles: []v1alpha1.PostgreSQLServiceUserRole{},
-		},
-	}
-
-	f.addK8sResources(serviceUserResource)
-
-	return f
-}
-
-func (f *Fixture) ThenAServiceUserIsSetup() *Fixture {
-	// TODO: needs actual implementation to check that the user with password can connect to the database
-
-	return f
-}
-
 func (f *Fixture) toResourceName(raw string) string {
 	return strings.ReplaceAll(raw, "_", "-")
+}
+
+func (f *Fixture) toNamespacedName(raw string) types.NamespacedName {
+	return types.NamespacedName{
+		Namespace: f.data.namespace,
+		Name:      f.toResourceName(raw),
+	}
 }
 
 func (f *Fixture) incrementResource(index int, raw string) string {
@@ -317,6 +178,7 @@ func WithKubeClient(k client.Client) FixtureOption {
 // Test sets up a common fixture testing routine
 func Test(testFunc func(f *Fixture), fixtureOptions ...FixtureOption) func(t *testing.T) {
 	return func(t *testing.T) {
+		t.Parallel()
 
 		logf.SetLogger(zap.New(zap.UseDevMode(true)))
 

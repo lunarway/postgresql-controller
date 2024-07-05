@@ -75,16 +75,34 @@ func beforeTests(ctx context.Context) error {
 		return err
 	}
 
+	// Add Reconcilers here mimicing the setup in cmd/main.go
+
 	if err = (&PostgreSQLDatabaseReconciler{
 		Client: k8sManager.GetClient(),
 		Log:    ctrl.Log.WithName("controllers").WithName("PostgreSQLDatabase"),
 
 		ManagerRoleName: managerRole,
-		HostCredentials: map[string]postgres.Credentials{test.GetHost(): {
-			Name:     "admin",
-			User:     "admin",
-			Password: "admin",
-		}},
+		HostCredentials: map[string]postgres.Credentials{
+			test.GetHost(): {
+				Name:     "admin",
+				User:     "admin",
+				Password: "admin",
+			},
+		},
+	}).SetupWithManager(k8sManager); err != nil {
+		return err
+	}
+
+	if err = (&PostgreSQLHostCredentialsReconciler{
+		Client: k8sManager.GetClient(),
+		Scheme: k8sManager.GetScheme(),
+	}).SetupWithManager(k8sManager); err != nil {
+		return err
+	}
+
+	if err = (&PostgreSQLServiceUserReconciler{
+		Client: k8sClient,
+		Scheme: scheme.Scheme,
 	}).SetupWithManager(k8sManager); err != nil {
 		return err
 	}
@@ -95,6 +113,9 @@ func beforeTests(ctx context.Context) error {
 			log.Fatal(err)
 		}
 	}()
+
+	// wait until k8s has been elected, i.e. it is ready
+	<-k8sManager.Elected()
 
 	return nil
 }
