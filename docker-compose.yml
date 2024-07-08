@@ -16,4 +16,4 @@ services:
       - SERVICES=iam
     ports:
       - 4566:4566
-      - 8080:8080
+      - 18080:8080
