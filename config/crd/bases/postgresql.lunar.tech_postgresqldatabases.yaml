@@ -59,6 +59,19 @@ spec:
           spec:
             description: PostgreSQLDatabaseSpec defines the desired state of PostgreSQLDatabase
             properties:
+              extensions:
+                description: Extensions is a list of extensions a given record expects
+                  to have available
+                items:
+                  description: PostgreSQLDatabaseExtension describes which an extension
+                    for a given database should be installed
+                  properties:
+                    extensionName:
+                      type: string
+                  required:
+                  - extensionName
+                  type: object
+                type: array
               host:
                 description: |-
                   Host that the database should be created on. This should be omitted if
