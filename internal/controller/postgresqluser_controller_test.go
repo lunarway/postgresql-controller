@@ -583,7 +583,7 @@ func seededDatabase(t *testing.T, host, databaseName, userName string, managerRo
 		Name:     databaseName,
 		Password: databaseName,
 		User:     userName,
-	}, managerRole)
+	}, managerRole, nil)
 	require.NoErrorf(t, err, "failed to created seeded database '%s'", databaseName)
 
 	db1Conn, err := postgres.Connect(logf.Log, postgres.ConnectionString{

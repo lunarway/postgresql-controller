@@ -222,12 +222,12 @@ POSTGRESQL_CONTROLLER_INTEGRATION_HOST=localhost:5432
 
 .PHONY: test/integration/dependencies/run
 test/integration/dependencies/run:
-	-docker-compose up -d
+	-docker compose up -d
 	-sleep 5
 
 .PHONY: test/integration/dependencies/stop
 test/integration/dependencies/stop:
-	-docker-compose down
+	-docker compose down
 
 .PHONY: test/integration
 test/integration: test/integration/dependencies/run

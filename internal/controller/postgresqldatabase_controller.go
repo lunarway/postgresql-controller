@@ -129,6 +129,7 @@ func (r *PostgreSQLDatabaseReconciler) reconcile(ctx context.Context, reqLogger 
 		}
 	}
 	isShared := database.Spec.IsShared
+	extensions := database.Spec.Extensions
 
 	reqLogger.Info("Resolved all referenced values for PostgreSQLDatabase resource")
 
@@ -140,6 +141,7 @@ func (r *PostgreSQLDatabaseReconciler) reconcile(ctx context.Context, reqLogger 
 			Host:        host,
 			Admin:       *adminCredentials,
 			ManagerRole: r.ManagerRoleName,
+			Extensions:  fromApiExtensions(extensions),
 			Target: postgres.Credentials{
 				Name:     database.Spec.Name,
 				User:     user,
@@ -151,7 +153,18 @@ func (r *PostgreSQLDatabaseReconciler) reconcile(ctx context.Context, reqLogger 
 	if err != nil {
 		return status, fmt.Errorf("ensure database: %w", err)
 	}
+
 	return status, nil
+}
+
+func fromApiExtensions(extensions []postgresqlv1alpha1.PostgreSQLDatabaseExtension) postgres.Extensions {
+	postgresExtensions := make([]postgres.Extension, 0, len(extensions))
+
+	for _, e := range extensions {
+		postgresExtensions = append(postgresExtensions, postgres.NewExtension(e.ExtensionName))
+	}
+
+	return postgresExtensions
 }
 
 type status struct {
@@ -171,6 +184,7 @@ func (s *status) Persist(ctx context.Context, err error, log logr.Logger) {
 	if !ok {
 		return
 	}
+
 	err = s.client.Status().Update(ctx, s.database)
 	if err != nil {
 		log.Error(err, "failed to set status of database", "status", s)
@@ -253,16 +267,20 @@ type EnsureParams struct {
 
 	ManagerRole string
 
+	// Extensions is a list of extensions expected to be enabled. Extensions outside of this list won't be disabled
+	Extensions []postgres.Extension
+
 	// Target contains the credentials for the Postgres database that we intend
 	// to create.
 	Target postgres.Credentials
 }
 
 func (r *PostgreSQLDatabaseReconciler) EnsurePostgreSQLDatabase(ctx context.Context, log logr.Logger, params *EnsureParams) error {
-	err := postgres.Database(log, params.Host, params.Admin, params.Target, params.ManagerRole)
+	err := postgres.Database(log, params.Host, params.Admin, params.Target, params.ManagerRole, params.Extensions)
 	if err != nil {
 		return fmt.Errorf("create database %s on host %s: %w", params.Target.Name, params.Host, err)
 	}
+
 	return nil
 }
 

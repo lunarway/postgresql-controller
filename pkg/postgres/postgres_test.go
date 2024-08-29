@@ -513,7 +513,7 @@ func createServiceDatabase(t *testing.T, log logr.Logger, host, service string) 
 			Name:     service,
 			User:     service,
 			Password: "1234",
-		}, managerRole)
+		}, managerRole, nil)
 	if err != nil {
 		t.Fatalf("Failed to create database: %v", err)
 	}
