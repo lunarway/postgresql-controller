@@ -101,7 +101,7 @@ func Database(log logr.Logger, host string, adminCredentials, serviceCredentials
 	// support services using a shared database with mixed owners of the resources.
 	if serviceCredentials.Shared {
 		// ensures access to existing schemas and tables
-		err = execf(serviceConnection, fmt.Sprintf("GRANT %s TO %s", serviceCredentials.Name, serviceCredentials.User))
+		err = execf(serviceConnection, "GRANT %s TO %s", serviceCredentials.Name, serviceCredentials.User)
 		if err != nil {
 			return fmt.Errorf("grant %s to service user %s: %w", serviceCredentials.Name, serviceCredentials.User, err)
 		}
