@@ -19,7 +19,7 @@ type EnsureUserConfig struct {
 
 func EnsureUser(client *Client, log logr.Logger, config EnsureUserConfig, userName, rolename string) error {
 	users := make(map[string]struct{})
-	log.Info("listing iam policies")
+	log.V(1).Info("listing iam policies")
 	policies, err := client.ListPolicies()
 	if err != nil {
 		return err
@@ -42,7 +42,7 @@ func EnsureUser(client *Client, log logr.Logger, config EnsureUserConfig, userNa
 			// Try to update the document where the user is present to ensure correct roleName.
 			updated := policy.Document.Update(config.Region, config.AccountID, config.RolePrefix, userName, rolename)
 			if updated {
-				log.Info("updating policies for user", "userName", userName, "roleName", rolename)
+				log.V(1).Info("updating policies for user", "userName", userName, "roleName", rolename)
 				err = updatePolicies(client, policies)
 				if err != nil {
 					return err
@@ -55,7 +55,7 @@ func EnsureUser(client *Client, log logr.Logger, config EnsureUserConfig, userNa
 	} else {
 		for _, policy := range policies {
 			if policy.Document.Count() < config.MaxUsersPerPolicy {
-				log.Info("adding user to policy document", "userName", userName, "roleName", rolename)
+			log.V(1).Info("adding user to policy document", "userName", userName, "roleName", rolename)
 				policy.Document.Add(config.Region, config.AccountID, config.RolePrefix, userName, rolename)
 				err = updatePolicies(client, policies)
 				if err != nil {
@@ -69,7 +69,7 @@ func EnsureUser(client *Client, log logr.Logger, config EnsureUserConfig, userNa
 
 	// User could not be handled in an existing policy so we create a new one instead.
 	if !userHandled {
-		log.Info("creating a new policy document because of user", "userName", userName, "roleName", rolename)
+		log.V(1).Info("creating a new policy document because of user", "userName", userName, "roleName", rolename)
 		// TODO : There is a bug where where the new name might exist. This could for instance be the case where a policy i is deleted but i+1 exists. Then len(policies) = i+1 and there is a clash.
 		newPolicy := &Policy{
 			Name:     fmt.Sprintf("%s_%d", config.PolicyBaseName, len(policies)),
