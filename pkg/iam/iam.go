@@ -55,7 +55,7 @@ func EnsureUser(client *Client, log logr.Logger, config EnsureUserConfig, userNa
 	} else {
 		for _, policy := range policies {
 			if policy.Document.Count() < config.MaxUsersPerPolicy {
-			log.V(1).Info("adding user to policy document", "userName", userName, "roleName", rolename)
+				log.V(1).Info("adding user to policy document", "userName", userName, "roleName", rolename)
 				policy.Document.Add(config.Region, config.AccountID, config.RolePrefix, userName, rolename)
 				err = updatePolicies(client, policies)
 				if err != nil {
