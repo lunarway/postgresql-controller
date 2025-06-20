@@ -51,7 +51,7 @@ func (r *PostgreSQLHostCredentialsReconciler) Reconcile(ctx context.Context, req
 		reqLogger.Error(err, "Failed to pick a request ID. Continuing without")
 	}
 	reqLogger = reqLogger.WithValues("requestId", requestID.String())
-	reqLogger.Info("Reconciling PostgreSQLHostCredentials")
+	reqLogger.V(1).Info("Reconciling PostgreSQLHostCredentials")
 
 	result, err := r.reconcile(ctx, reqLogger, req)
 	if err != nil {

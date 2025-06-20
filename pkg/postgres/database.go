@@ -290,7 +290,7 @@ func setDefaultPrivileges(serviceConnection *sql.DB, serviceRole, readRole, read
 }
 
 func revokeAllOnPublic(log logr.Logger, serviceConnection *sql.DB, serviceCredentials Credentials) error {
-	log.Info(fmt.Sprintf("Revoke ALL on role PUBLIC for database '%s'", serviceCredentials.Name))
+	log.V(1).Info(fmt.Sprintf("Revoke ALL on role PUBLIC for database '%s'", serviceCredentials.Name))
 	err := execAsf(serviceConnection, serviceCredentials.User, `
 		REVOKE ALL ON DATABASE %s from PUBLIC;
 		REVOKE ALL ON SCHEMA public from PUBLIC;
@@ -303,13 +303,13 @@ func revokeAllOnPublic(log logr.Logger, serviceConnection *sql.DB, serviceCreden
 
 func grantConnectAndUsage(log logr.Logger, serviceConnection *sql.DB, serviceCredentials Credentials) error {
 	// Grant CONNECT privileges to PUBLIC again to ensure new roles are allowed to connect.
-	log.Info("Grant CONNECT to PUBLIC")
+	log.V(1).Info("Grant CONNECT to PUBLIC")
 	err := execAsf(serviceConnection, serviceCredentials.User, "GRANT CONNECT ON DATABASE %s TO PUBLIC", serviceCredentials.Name)
 	if err != nil {
 		return fmt.Errorf("grant connect to database '%s' to PUBLIC: %w as %s", serviceCredentials.Name, err, serviceCredentials.User)
 	}
 
-	log.Info(fmt.Sprintf("Grant usage on schema '%s' to PUBLIC", serviceCredentials.User))
+	log.V(1).Info(fmt.Sprintf("Grant usage on schema '%s' to PUBLIC", serviceCredentials.User))
 	err = execAsf(serviceConnection, serviceCredentials.User, "GRANT USAGE ON SCHEMA %s TO PUBLIC", serviceCredentials.User)
 	if err != nil {
 		return fmt.Errorf("grant usage on schema '%s' to PUBLIC: %w as %s", serviceCredentials.User, err, serviceCredentials.User)
@@ -331,9 +331,9 @@ func tryExec(log logr.Logger, db *sql.DB, args tryExecReq) error {
 		if !ok || pqError.Code.Name() != args.errorCode {
 			return err
 		}
-		log.Info(fmt.Sprintf("expected err '%s' occured. Ignoring for objectType '%s'", args.errorCode, args.objectType), "errorCode", pqError.Code, "errorName", pqError.Code.Name())
+		log.V(1).Info(fmt.Sprintf("expected err '%s' occured. Ignoring for objectType '%s'", args.errorCode, args.objectType), "errorCode", pqError.Code, "errorName", pqError.Code.Name())
 	} else {
-		log.Info(fmt.Sprintf("%s created", args.objectType))
+		log.V(1).Info(fmt.Sprintf("%s created", args.objectType))
 	}
 	return nil
 }

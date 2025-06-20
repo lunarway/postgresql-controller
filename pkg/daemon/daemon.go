@@ -96,7 +96,7 @@ func (d *Daemon) Loop(stop chan struct{}) {
 			d.config.Sync()
 			syncTimer.Reset(d.config.SyncInterval)
 		case <-syncTimer.C:
-			d.config.Logger.Info("Sync timer asking for sync")
+			d.config.Logger.V(1).Info("Sync timer asking for sync")
 			// request a new sync in the sync buffer. This might be a noop if a sync
 			// is already running.
 			d.askForSync()

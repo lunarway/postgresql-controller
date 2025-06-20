@@ -97,7 +97,7 @@ func (p Privilege) String() string {
 }
 
 func Role(log logr.Logger, db *sql.DB, name string, roles []string, databases []DatabaseSchema) error {
-	log.Info(fmt.Sprintf("Creating role %s", name))
+	log.V(1).Info(fmt.Sprintf("Creating role %s", name))
 	query := fmt.Sprintf("CREATE ROLE %s WITH LOGIN", name)
 	_, err := db.Exec(query)
 	if err != nil {
@@ -105,9 +105,9 @@ func Role(log logr.Logger, db *sql.DB, name string, roles []string, databases []
 		if !ok || pqError.Code.Name() != "duplicate_object" {
 			return fmt.Errorf("create role %s: %w", name, err)
 		}
-		log.Info(fmt.Sprintf("Role %s already exists", name), "errorCode", pqError.Code, "errorName", pqError.Code.Name())
+		log.V(1).Info(fmt.Sprintf("Role %s already exists", name), "errorCode", pqError.Code, "errorName", pqError.Code.Name())
 	} else {
-		log.Info(fmt.Sprintf("Role %s created", name))
+		log.V(1).Info(fmt.Sprintf("Role %s created", name))
 	}
 
 	// grant database access roles to created role
@@ -116,7 +116,7 @@ func Role(log logr.Logger, db *sql.DB, name string, roles []string, databases []
 		return fmt.Errorf("get existing roles: %w", err)
 	}
 	grantableRoles, revokeableRoles := rolesDiff(log, existingRoles, roles, databases)
-	log.Info(fmt.Sprintf("Found %d grantable and %d revokable roles for %s", len(grantableRoles), len(revokeableRoles), name), "grantable", grantableRoles, "revokeable", revokeableRoles)
+	log.V(1).Info(fmt.Sprintf("Found %d grantable and %d revokable roles for %s", len(grantableRoles), len(revokeableRoles), name), "grantable", grantableRoles, "revokeable", revokeableRoles)
 	if len(grantableRoles) != 0 {
 		joinedRoles := strings.Join(grantableRoles, ",")
 		_, err = db.Exec(fmt.Sprintf("GRANT %s TO %s", joinedRoles, name))
