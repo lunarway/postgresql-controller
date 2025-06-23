@@ -74,7 +74,7 @@ func (r *PostgreSQLDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error 
 }
 
 func (r *PostgreSQLDatabaseReconciler) reconcile(ctx context.Context, reqLogger logr.Logger, request reconcile.Request) (status, error) {
-	reqLogger.Info("Reconciling PostgreSQLDatabase")
+	reqLogger.V(1).Info("Reconciling PostgreSQLDatabase")
 	// Fetch the PostgreSQLDatabase instance
 	database := &postgresqlv1alpha1.PostgreSQLDatabase{}
 	err := r.Client.Get(ctx, request.NamespacedName, database)
@@ -92,7 +92,7 @@ func (r *PostgreSQLDatabaseReconciler) reconcile(ctx context.Context, reqLogger 
 		"database", database.Spec.Name,
 		"isShared", database.Spec.IsShared,
 	)
-	reqLogger.Info("Updating PostgreSQLDatabase resource")
+	reqLogger.V(1).Info("Updating PostgreSQLDatabase resource")
 
 	status := status{
 		log:      reqLogger,
