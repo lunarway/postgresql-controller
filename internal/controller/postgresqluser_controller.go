@@ -76,7 +76,7 @@ func (r *PostgreSQLUserReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		reqLogger.Error(err, "Failed to pick a request ID. Continuing without")
 	}
 	reqLogger = reqLogger.WithValues("requestId", requestID.String())
-	reqLogger.Info("Reconciling PostgreSQLUSer")
+	reqLogger.V(1).Info("Reconciling PostgreSQLUSer")
 
 	result, err := r.reconcile(ctx, reqLogger, req)
 	if err != nil {
@@ -120,7 +120,7 @@ func (r *PostgreSQLUserReconciler) reconcile(ctx context.Context, reqLogger logr
 
 	// User instance created or updated
 	reqLogger = reqLogger.WithValues("user", user.Spec.Name, "rolePrefix", r.RolePrefix)
-	reqLogger.Info("Reconciling found PostgreSQLUser resource", "user", user.Spec.Name)
+	reqLogger.V(1).Info("Reconciling found PostgreSQLUser resource", "user", user.Spec.Name)
 
 	awsConfig := &aws.Config{
 		Region:      aws.String(r.AWSRegion),

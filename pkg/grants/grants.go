@@ -97,12 +97,12 @@ func (g *Granter) groupByHosts(log logr.Logger, hosts HostAccess, namespace stri
 
 		// access it not requested to be granted yet
 		if !access.Start.IsZero() && g.Now().Before(access.Start.Time) {
-			reqLogger.Info("Skipping access spec: start time is in the future")
+			reqLogger.V(1).Info("Skipping access spec: start time is in the future")
 			continue
 		}
 		// access request has expired
 		if !access.Stop.IsZero() && g.Now().After(access.Stop.Time) {
-			reqLogger.Info("Skipping access spec: stop time is in the past")
+			reqLogger.V(1).Info("Skipping access spec: stop time is in the past")
 			continue
 		}
 		host, err := g.ResourceResolver(access.Host, namespace)
@@ -116,10 +116,10 @@ func (g *Granter) groupByHosts(log logr.Logger, hosts HostAccess, namespace stri
 		reqLogger = reqLogger.WithValues("host", host)
 		if access.AllDatabases != nil && *access.AllDatabases {
 			if !allDatabasesEnabled {
-				reqLogger.Info("Skipping access spec: allDatabases feature not enabled")
+				reqLogger.V(1).Info("Skipping access spec: allDatabases feature not enabled")
 				continue
 			}
-			reqLogger.Info("Grouping access for all databases on host")
+			reqLogger.V(1).Info("Grouping access for all databases on host")
 			err := g.groupAllDatabasesByHost(reqLogger, hosts, host, namespace, access, privilege)
 			if err != nil {
 				errs = multierr.Append(errs, fmt.Errorf("all databases: %w", &AccessError{
@@ -165,15 +165,15 @@ func (g *Granter) groupAllDatabasesByHost(reqLogger logr.Logger, hosts HostAcces
 		return fmt.Errorf("get all databases: %w", err)
 	}
 	if len(databases) == 0 {
-		reqLogger.WithValues("spec", access, "privilege", privilege, "host", host, "namespace", namespace).Info(fmt.Sprintf("Flag allDatabases results in no privileges granted: no PostgreSQLDatabase resources found on host '%s'", host))
+		reqLogger.WithValues("spec", access, "privilege", privilege, "host", host, "namespace", namespace).V(1).Info(fmt.Sprintf("Flag allDatabases results in no privileges granted: no PostgreSQLDatabase resources found on host '%s'", host))
 		return nil
 	}
-	reqLogger.Info(fmt.Sprintf("Found %d PostgreSQLDatabase resources in namespace '%s'", len(databases), namespace))
+	reqLogger.V(1).Info(fmt.Sprintf("Found %d PostgreSQLDatabase resources in namespace '%s'", len(databases), namespace))
 	var errs error
 	for _, databaseResource := range databases {
 		database := databaseResource.Spec.Name
 		if databaseResource.Status.Phase != lunarwayv1alpha1.PostgreSQLDatabasePhaseRunning {
-			reqLogger.Info(fmt.Sprintf("Skipping resource '%s' as it is not in phase running", database))
+			reqLogger.V(1).Info(fmt.Sprintf("Skipping resource '%s' as it is not in phase running", database))
 			continue
 		}
 		databaseHost, err := g.ResourceResolver(databaseResource.Spec.Host, namespace)
@@ -182,7 +182,7 @@ func (g *Granter) groupAllDatabasesByHost(reqLogger logr.Logger, hosts HostAcces
 			continue
 		}
 		if host != databaseHost {
-			reqLogger.Info(fmt.Sprintf("Skipping resource '%s' as it is on another host (%s)", database, databaseHost))
+			reqLogger.V(1).Info(fmt.Sprintf("Skipping resource '%s' as it is on another host (%s)", database, databaseHost))
 			continue
 		}
 		schema, err := g.ResourceResolver(databaseResource.Spec.User, namespace)
@@ -193,7 +193,7 @@ func (g *Granter) groupAllDatabasesByHost(reqLogger logr.Logger, hosts HostAcces
 		if schema == "" {
 			schema = database
 		}
-		reqLogger.Info(fmt.Sprintf("Resolved database '%s' with schema '%s'", database, schema))
+		reqLogger.V(1).Info(fmt.Sprintf("Resolved database '%s' with schema '%s'", database, schema))
 		hosts[host] = append(hosts[host], ReadWriteAccess{
 			Host: host,
 			Database: postgres.DatabaseSchema{
