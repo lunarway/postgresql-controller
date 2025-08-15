@@ -1,7 +1,7 @@
 version: '2'
 services:
   postgres:
-    image: postgres:17.5
+    image: postgres:17.6
     environment:
       - POSTGRES_USER=admin
       - POSTGRES_PASSWORD=admin
