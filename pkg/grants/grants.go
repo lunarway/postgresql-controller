@@ -17,7 +17,7 @@ type Granter struct {
 	AllDatabasesWriteEnabled bool
 	ExtendedWritesEnabled    bool
 	AllDatabases             func(namespace string) ([]lunarwayv1alpha1.PostgreSQLDatabase, error)
-	AllUsers                 func(namespace string) ([]lunarwayv1alpha1.PostgreSQLUser, error)
+	AllUsers                 func() ([]lunarwayv1alpha1.PostgreSQLUser, error)
 	ResourceResolver         func(resource lunarwayv1alpha1.ResourceVar, namespace string) (string, error)
 
 	StaticRoles     []string

@@ -34,6 +34,9 @@ func (g *Granter) SyncUser(log logr.Logger, namespace, rolePrefix string, user l
 		}
 		log.Error(err, "Some access requests could not be resolved. Continuating with the resolved ones")
 	}
+	if g.AllUsers != nil {
+		g.mergeSiblingAccesses(log, namespace, user.Spec.Name, accesses)
+	}
 	log.Info(fmt.Sprintf("Found access requests for %d hosts", len(accesses)))
 
 	hosts, err := g.connectToHosts(log, accesses)
@@ -111,6 +114,39 @@ func (g *Granter) setRolesOnHosts(log logr.Logger, name string, accesses HostAcc
 		return errs
 	}
 	return nil
+}
+
+func (g *Granter) mergeSiblingAccesses(log logr.Logger, namespace, username string, accesses HostAccess) {
+	allUsers, err := g.AllUsers()
+	if err != nil {
+		log.Error(err, "Failed to list all users for cross-namespace merge; proceeding without")
+		return
+	}
+	for _, sibling := range allUsers {
+		if sibling.Spec.Name != username || sibling.Namespace == namespace {
+			continue
+		}
+		siblingRead := []lunarwayv1alpha1.AccessSpec{}
+		if sibling.Spec.Read != nil {
+			siblingRead = *sibling.Spec.Read
+		}
+		siblingWrite := []lunarwayv1alpha1.WriteAccessSpec{}
+		if sibling.Spec.Write != nil {
+			siblingWrite = *sibling.Spec.Write
+		}
+		siblingAccesses, err := g.groupAccesses(log, sibling.Namespace, siblingRead, siblingWrite)
+		if err != nil {
+			log.Error(err, "Failed to compute sibling accesses", "siblingNamespace", sibling.Namespace)
+			if len(siblingAccesses) == 0 {
+				continue
+			}
+		}
+		for host, siblingList := range siblingAccesses {
+			if _, ok := accesses[host]; ok {
+				accesses[host] = append(accesses[host], siblingList...)
+			}
+		}
+	}
 }
 
 func databaseSchemas(accesses []ReadWriteAccess) []postgres.DatabaseSchema {

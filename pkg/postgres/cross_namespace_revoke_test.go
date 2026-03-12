@@ -12,64 +12,63 @@ import (
 // PostgreSQL host cause each reconciliation to revoke roles granted by the
 // other namespace.
 //
-// Real-world scenario from krvi.yaml:
-//   - krvi in "auth" namespace: allDatabases on auth-rds.hydra.svc.cluster.local.
-//   - krvi in "openbanking" namespace: allDatabases on auth-rds.hydra.svc.cluster.local.
+// Scenario:
+//   - alice in "team-a" namespace: allDatabases on shared-db.example.local.
+//   - alice in "team-b" namespace: allDatabases on shared-db.example.local.
 //
-// When "auth" reconciles, it only knows about auth-namespace databases and
-// revokes roles from openbanking-namespace databases. When "openbanking"
-// reconciles next, it revokes auth-namespace roles. The user sees intermittent
-// access loss.
+// When "team-a" reconciles, it only knows about team-a databases and revokes
+// roles from team-b databases. When "team-b" reconciles next, it revokes
+// team-a roles. The user sees intermittent access loss.
 func TestRolesDiff_CrossNamespaceRevocation(t *testing.T) {
 	logger := test.NewLogger(t)
 
 	// Simulate initial state: both namespaces have been reconciled once.
-	// The PostgreSQL user has roles from both auth and openbanking namespaces.
+	// The PostgreSQL user has roles from both team-a and team-b namespaces.
 	existingRoles := []string{
-		"rds_iam",
-		"hydra_read",       // from auth namespace
-		"consent_read",     // from auth namespace
-		"obie_connect_read", // from openbanking namespace
-		"obie_payment_read", // from openbanking namespace
+		"app_role",
+		"orders_read",   // from team-a namespace
+		"invoices_read", // from team-a namespace
+		"reports_read",  // from team-b namespace
+		"billing_read",  // from team-b namespace
 	}
 
-	// --- Reconciliation from "auth" namespace ---
-	// The auth namespace only knows about its own databases: hydra, consent.
-	authDatabases := []DatabaseSchema{
-		{Name: "hydra", Schema: "hydra", Privileges: PrivilegeRead},
-		{Name: "consent", Schema: "consent", Privileges: PrivilegeRead},
+	// --- Reconciliation from "team-a" namespace ---
+	// team-a only knows about its own databases: orders, invoices.
+	teamADatabases := []DatabaseSchema{
+		{Name: "orders", Schema: "orders", Privileges: PrivilegeRead},
+		{Name: "invoices", Schema: "invoices", Privileges: PrivilegeRead},
 	}
-	staticRoles := []string{"rds_iam"}
+	staticRoles := []string{"app_role"}
 
-	addable, removeable := rolesDiff(logger, existingRoles, staticRoles, authDatabases)
+	addable, removeable := rolesDiff(logger, existingRoles, staticRoles, teamADatabases)
 
-	// BUG: auth reconciliation revokes openbanking roles because they are not
-	// in the auth namespace's expected list.
+	// BUG: team-a reconciliation revokes team-b roles because they are not
+	// in team-a's expected list.
 	assert.Nil(t, addable, "no roles should be added")
-	assert.Equal(t, []string{"obie_connect_read", "obie_payment_read"}, removeable,
-		"BUG REPRODUCED: auth namespace reconciliation revokes openbanking namespace roles")
+	assert.Equal(t, []string{"reports_read", "billing_read"}, removeable,
+		"BUG REPRODUCED: team-a namespace reconciliation revokes team-b namespace roles")
 
-	// --- After auth reconciliation, the user only has auth roles ---
-	rolesAfterAuthReconcile := []string{
-		"rds_iam",
-		"hydra_read",
-		"consent_read",
+	// --- After team-a reconciliation, the user only has team-a roles ---
+	rolesAfterTeamAReconcile := []string{
+		"app_role",
+		"orders_read",
+		"invoices_read",
 	}
 
-	// --- Reconciliation from "openbanking" namespace ---
-	// The openbanking namespace only knows about its own databases: obie_connect, obie_payment.
-	openbankingDatabases := []DatabaseSchema{
-		{Name: "obie_connect", Schema: "obie_connect", Privileges: PrivilegeRead},
-		{Name: "obie_payment", Schema: "obie_payment", Privileges: PrivilegeRead},
+	// --- Reconciliation from "team-b" namespace ---
+	// team-b only knows about its own databases: reports, billing.
+	teamBDatabases := []DatabaseSchema{
+		{Name: "reports", Schema: "reports", Privileges: PrivilegeRead},
+		{Name: "billing", Schema: "billing", Privileges: PrivilegeRead},
 	}
 
-	addable2, removeable2 := rolesDiff(logger, rolesAfterAuthReconcile, staticRoles, openbankingDatabases)
+	addable2, removeable2 := rolesDiff(logger, rolesAfterTeamAReconcile, staticRoles, teamBDatabases)
 
-	// BUG: openbanking reconciliation now revokes auth roles!
-	assert.Equal(t, []string{"obie_connect_read", "obie_payment_read"}, addable2,
-		"openbanking roles should be re-added")
-	assert.Equal(t, []string{"hydra_read", "consent_read"}, removeable2,
-		"BUG REPRODUCED: openbanking namespace reconciliation revokes auth namespace roles")
+	// BUG: team-b reconciliation now revokes team-a roles!
+	assert.Equal(t, []string{"reports_read", "billing_read"}, addable2,
+		"team-b roles should be re-added")
+	assert.Equal(t, []string{"orders_read", "invoices_read"}, removeable2,
+		"BUG REPRODUCED: team-b namespace reconciliation revokes team-a namespace roles")
 }
 
 // TestRolesDiff_CrossNamespaceRevocationCycle demonstrates a full
@@ -77,44 +76,44 @@ func TestRolesDiff_CrossNamespaceRevocation(t *testing.T) {
 // reconciliation loops.
 func TestRolesDiff_CrossNamespaceRevocationCycle(t *testing.T) {
 	logger := test.NewLogger(t)
-	staticRoles := []string{"rds_iam"}
+	staticRoles := []string{"app_role"}
 
-	authDatabases := []DatabaseSchema{
-		{Name: "hydra", Schema: "hydra", Privileges: PrivilegeRead},
+	teamADatabases := []DatabaseSchema{
+		{Name: "orders", Schema: "orders", Privileges: PrivilegeRead},
 	}
-	openbankingDatabases := []DatabaseSchema{
-		{Name: "obie_connect", Schema: "obie_connect", Privileges: PrivilegeRead},
+	teamBDatabases := []DatabaseSchema{
+		{Name: "reports", Schema: "reports", Privileges: PrivilegeRead},
 	}
 
 	// Start: user has no roles.
 	existingRoles := []string{}
 
-	// Cycle 1: auth reconciles first.
-	addable, removeable := rolesDiff(logger, existingRoles, staticRoles, authDatabases)
-	assert.Equal(t, []string{"rds_iam", "hydra_read"}, addable)
+	// Cycle 1: team-a reconciles first.
+	addable, removeable := rolesDiff(logger, existingRoles, staticRoles, teamADatabases)
+	assert.Equal(t, []string{"app_role", "orders_read"}, addable)
 	assert.Nil(t, removeable)
 
-	// Apply: user now has rds_iam + hydra_read.
-	existingRoles = []string{"rds_iam", "hydra_read"}
+	// Apply: user now has app_role + orders_read.
+	existingRoles = []string{"app_role", "orders_read"}
 
-	// Cycle 1: openbanking reconciles second.
-	addable, removeable = rolesDiff(logger, existingRoles, staticRoles, openbankingDatabases)
-	assert.Equal(t, []string{"obie_connect_read"}, addable)
-	// BUG: hydra_read is revoked!
-	assert.Equal(t, []string{"hydra_read"}, removeable,
-		"BUG: openbanking revokes hydra_read granted by auth namespace")
+	// Cycle 1: team-b reconciles second.
+	addable, removeable = rolesDiff(logger, existingRoles, staticRoles, teamBDatabases)
+	assert.Equal(t, []string{"reports_read"}, addable)
+	// BUG: orders_read is revoked!
+	assert.Equal(t, []string{"orders_read"}, removeable,
+		"BUG: team-b revokes orders_read granted by team-a namespace")
 
-	// Apply: user now has rds_iam + obie_connect_read (hydra_read LOST).
-	existingRoles = []string{"rds_iam", "obie_connect_read"}
+	// Apply: user now has app_role + reports_read (orders_read LOST).
+	existingRoles = []string{"app_role", "reports_read"}
 
-	// Cycle 2: auth reconciles again.
-	addable, removeable = rolesDiff(logger, existingRoles, staticRoles, authDatabases)
-	assert.Equal(t, []string{"hydra_read"}, addable)
-	// BUG: obie_connect_read is revoked!
-	assert.Equal(t, []string{"obie_connect_read"}, removeable,
-		"BUG: auth revokes obie_connect_read granted by openbanking namespace")
+	// Cycle 2: team-a reconciles again.
+	addable, removeable = rolesDiff(logger, existingRoles, staticRoles, teamADatabases)
+	assert.Equal(t, []string{"orders_read"}, addable)
+	// BUG: reports_read is revoked!
+	assert.Equal(t, []string{"reports_read"}, removeable,
+		"BUG: team-a revokes reports_read granted by team-b namespace")
 
-	// The user NEVER has both hydra_read AND obie_connect_read at the same
-	// time after the initial reconciliation. Access oscillates depending on
-	// which namespace reconciles last.
+	// The user NEVER has both orders_read AND reports_read at the same time
+	// after the initial reconciliation. Access oscillates depending on which
+	// namespace reconciles last.
 }

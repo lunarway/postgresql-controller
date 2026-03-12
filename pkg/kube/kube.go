@@ -95,3 +95,13 @@ func PostgreSQLDatabases(c client.Client, namespace string) ([]lunarwayv1alpha1.
 	}
 	return databases.Items, nil
 }
+
+// PostgreSQLUsers returns all PostgreSQLUser resources cluster-wide.
+func PostgreSQLUsers(c client.Client) ([]lunarwayv1alpha1.PostgreSQLUser, error) {
+	var users lunarwayv1alpha1.PostgreSQLUserList
+	err := c.List(context.TODO(), &users)
+	if err != nil {
+		return nil, fmt.Errorf("get users: %w", err)
+	}
+	return users.Items, nil
+}

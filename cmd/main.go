@@ -155,6 +155,9 @@ func main() {
 			AllDatabases: func(namespace string) ([]postgresqlv1alpha1.PostgreSQLDatabase, error) {
 				return kube.PostgreSQLDatabases(mgr.GetClient(), namespace)
 			},
+			AllUsers: func() ([]postgresqlv1alpha1.PostgreSQLUser, error) {
+				return kube.PostgreSQLUsers(mgr.GetClient())
+			},
 			ResourceResolver: func(resource postgresqlv1alpha1.ResourceVar, namespace string) (string, error) {
 				return kube.ResourceValue(mgr.GetClient(), resource, namespace)
 			},

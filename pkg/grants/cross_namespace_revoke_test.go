@@ -13,65 +13,65 @@ import (
 )
 
 // TestCrossNamespaceRevocation_KrviScenario reproduces the real-world issue
-// from krvi.yaml where the same user (krvi) has PostgreSQLUser resources in
-// multiple namespaces, and two of them (auth and openbanking) point to the same
-// PostgreSQL host (auth-rds.hydra.svc.cluster.local.).
+// where the same user has PostgreSQLUser resources in multiple namespaces, and
+// two of them (team-a and team-b) point to the same PostgreSQL host
+// (shared-db.example.local.).
 //
 // Each namespace's reconciliation independently computes desired roles from
 // only its own databases. When rolesDiff runs, it revokes any existing roles
 // not in the expected list — including roles granted by the other namespace.
 func TestCrossNamespaceRevocation_KrviScenario(t *testing.T) {
-	sharedHost := "auth-rds.hydra.svc.cluster.local."
+	sharedHost := "shared-db.example.local."
 
-	// Databases known in the "auth" namespace on the shared host.
-	authNamespaceDatabases := []lunarwayv1alpha1.PostgreSQLDatabase{
-		runningDatabase(sharedHost, "hydra"),
-		runningDatabase(sharedHost, "consent"),
+	// Databases known in the "team-a" namespace on the shared host.
+	teamADatabases := []lunarwayv1alpha1.PostgreSQLDatabase{
+		runningDatabase(sharedHost, "orders"),
+		runningDatabase(sharedHost, "invoices"),
 	}
 
-	// Databases known in the "openbanking" namespace on the shared host.
-	openbankingNamespaceDatabases := []lunarwayv1alpha1.PostgreSQLDatabase{
-		runningDatabase(sharedHost, "obie_connect"),
-		runningDatabase(sharedHost, "obie_payment"),
+	// Databases known in the "team-b" namespace on the shared host.
+	teamBDatabases := []lunarwayv1alpha1.PostgreSQLDatabase{
+		runningDatabase(sharedHost, "reports"),
+		runningDatabase(sharedHost, "billing"),
 	}
 
-	// --- Step 1: groupAccesses for auth namespace ---
-	authGranter := newTestGranter(authNamespaceDatabases)
-	authAccesses, err := authGranter.groupAccesses(
-		test.NewLogger(t), "auth",
+	// --- Step 1: groupAccesses for team-a namespace ---
+	teamAGranter := newTestGranter(teamADatabases)
+	teamAAccesses, err := teamAGranter.groupAccesses(
+		test.NewLogger(t), "team-a",
 		[]lunarwayv1alpha1.AccessSpec{
 			{
 				Host:         lunarwayv1alpha1.ResourceVar{Value: sharedHost},
 				AllDatabases: &trueValue,
-				Reason:       "I am a developer in squad Void who maintains Hydra",
+				Reason:       "team-a service account needs read access",
 			},
 		},
 		nil,
 	)
 	require.NoError(t, err)
 
-	authSchemas := databaseSchemas(authAccesses[sharedHost])
-	authRoleNames := schemaRoleNames(authSchemas)
-	assert.ElementsMatch(t, []string{"hydra_read", "consent_read"}, authRoleNames)
+	teamASchemas := databaseSchemas(teamAAccesses[sharedHost])
+	teamARoleNames := schemaRoleNames(teamASchemas)
+	assert.ElementsMatch(t, []string{"orders_read", "invoices_read"}, teamARoleNames)
 
-	// --- Step 2: groupAccesses for openbanking namespace ---
-	obGranter := newTestGranter(openbankingNamespaceDatabases)
-	obAccesses, err := obGranter.groupAccesses(
-		test.NewLogger(t), "openbanking",
+	// --- Step 2: groupAccesses for team-b namespace ---
+	teamBGranter := newTestGranter(teamBDatabases)
+	teamBAccesses, err := teamBGranter.groupAccesses(
+		test.NewLogger(t), "team-b",
 		[]lunarwayv1alpha1.AccessSpec{
 			{
 				Host:         lunarwayv1alpha1.ResourceVar{Value: sharedHost},
 				AllDatabases: &trueValue,
-				Reason:       "I am a developer in squad Void who maintains Hydra",
+				Reason:       "team-b service account needs read access",
 			},
 		},
 		nil,
 	)
 	require.NoError(t, err)
 
-	obSchemas := databaseSchemas(obAccesses[sharedHost])
-	obRoleNames := schemaRoleNames(obSchemas)
-	assert.ElementsMatch(t, []string{"obie_connect_read", "obie_payment_read"}, obRoleNames)
+	teamBSchemas := databaseSchemas(teamBAccesses[sharedHost])
+	teamBRoleNames := schemaRoleNames(teamBSchemas)
+	assert.ElementsMatch(t, []string{"reports_read", "billing_read"}, teamBRoleNames)
 
 	// --- Step 3: Demonstrate the conflict ---
 	// The two namespaces produce completely disjoint role sets for the same
@@ -82,13 +82,13 @@ func TestCrossNamespaceRevocation_KrviScenario(t *testing.T) {
 	// This is the root cause: SyncUser processes one PostgreSQLUser at a time
 	// and has no awareness of other PostgreSQLUser resources for the same
 	// username on the same host in different namespaces.
-	for _, authRole := range authRoleNames {
-		assert.NotContains(t, obRoleNames, authRole,
-			"BUG CONFIRMED: auth role %q is not in openbanking's expected list and WILL be revoked when openbanking reconciles", authRole)
+	for _, teamARole := range teamARoleNames {
+		assert.NotContains(t, teamBRoleNames, teamARole,
+			"BUG CONFIRMED: team-a role %q is not in team-b's expected list and WILL be revoked when team-b reconciles", teamARole)
 	}
-	for _, obRole := range obRoleNames {
-		assert.NotContains(t, authRoleNames, obRole,
-			"BUG CONFIRMED: openbanking role %q is not in auth's expected list and WILL be revoked when auth reconciles", obRole)
+	for _, teamBRole := range teamBRoleNames {
+		assert.NotContains(t, teamARoleNames, teamBRole,
+			"BUG CONFIRMED: team-b role %q is not in team-a's expected list and WILL be revoked when team-a reconciles", teamBRole)
 	}
 }
 
@@ -99,29 +99,28 @@ func TestCrossNamespaceRevocation_SameNamespaceSafe(t *testing.T) {
 	host := "db.host.example.com"
 
 	databases := []lunarwayv1alpha1.PostgreSQLDatabase{
-		runningDatabase(host, "authentication"),
-		runningDatabase(host, "mitid"),
-		runningDatabase(host, "fortnox"),
+		runningDatabase(host, "users"),
+		runningDatabase(host, "products"),
+		runningDatabase(host, "analytics"),
 	}
 
-	// User has allDatabases AND specific database entries on the same host.
-	// This mirrors the prod namespace from krvi.yaml.
+	// User has allDatabases AND a specific database entry on the same host.
 	reads := []lunarwayv1alpha1.AccessSpec{
 		{
 			Host:         lunarwayv1alpha1.ResourceVar{Value: host},
 			AllDatabases: &trueValue,
-			Reason:       "I am a developer in squad Void",
+			Reason:       "service account needs read access to all databases",
 		},
 		{
 			Host:     lunarwayv1alpha1.ResourceVar{Value: host},
-			Database: lunarwayv1alpha1.ResourceVar{Value: "authentication"},
-			Schema:   lunarwayv1alpha1.ResourceVar{Value: "authentication"},
-			Reason:   "I am a developer in squad Void",
+			Database: lunarwayv1alpha1.ResourceVar{Value: "users"},
+			Schema:   lunarwayv1alpha1.ResourceVar{Value: "users"},
+			Reason:   "explicit entry for users database",
 		},
 	}
 
 	granter := newTestGranter(databases)
-	accesses, err := granter.groupAccesses(test.NewLogger(t), "prod", reads, nil)
+	accesses, err := granter.groupAccesses(test.NewLogger(t), "team-a", reads, nil)
 	require.NoError(t, err)
 
 	schemas := databaseSchemas(accesses[host])
@@ -129,9 +128,9 @@ func TestCrossNamespaceRevocation_SameNamespaceSafe(t *testing.T) {
 
 	// All databases should be present. The duplicate from the specific entry
 	// is harmless — rolesDiff deduplicates via contains().
-	assert.Contains(t, roleNames, "authentication_read")
-	assert.Contains(t, roleNames, "mitid_read")
-	assert.Contains(t, roleNames, "fortnox_read")
+	assert.Contains(t, roleNames, "users_read")
+	assert.Contains(t, roleNames, "products_read")
+	assert.Contains(t, roleNames, "analytics_read")
 }
 
 // TestCrossNamespaceRevocation_ExpiredWriteOnlyRevokesWrite verifies that when
@@ -143,15 +142,15 @@ func TestCrossNamespaceRevocation_ExpiredWriteOnlyRevokesWrite(t *testing.T) {
 	now := time.Date(2025, 10, 26, 0, 0, 0, 0, time.UTC)
 
 	databases := []lunarwayv1alpha1.PostgreSQLDatabase{
-		runningDatabase(host, "fortnox"),
-		runningDatabase(host, "other_db"),
+		runningDatabase(host, "orders"),
+		runningDatabase(host, "products"),
 	}
 
 	reads := []lunarwayv1alpha1.AccessSpec{
 		{
 			Host:         lunarwayv1alpha1.ResourceVar{Value: host},
 			AllDatabases: &trueValue,
-			Reason:       "I am a developer in squad Void",
+			Reason:       "service account needs read access",
 		},
 	}
 
@@ -162,9 +161,9 @@ func TestCrossNamespaceRevocation_ExpiredWriteOnlyRevokesWrite(t *testing.T) {
 		{
 			AccessSpec: lunarwayv1alpha1.AccessSpec{
 				Host:     lunarwayv1alpha1.ResourceVar{Value: host},
-				Database: lunarwayv1alpha1.ResourceVar{Value: "fortnox"},
-				Schema:   lunarwayv1alpha1.ResourceVar{Value: "fortnox"},
-				Reason:   "...",
+				Database: lunarwayv1alpha1.ResourceVar{Value: "orders"},
+				Schema:   lunarwayv1alpha1.ResourceVar{Value: "orders"},
+				Reason:   "temporary write access",
 				Start:    &startTime,
 				Stop:     &stopTime,
 			},
@@ -182,19 +181,107 @@ func TestCrossNamespaceRevocation_ExpiredWriteOnlyRevokesWrite(t *testing.T) {
 		},
 	}
 
-	accesses, err := granter.groupAccesses(test.NewLogger(t), "prod", reads, writes)
+	accesses, err := granter.groupAccesses(test.NewLogger(t), "team-a", reads, writes)
 	require.NoError(t, err)
 
 	schemas := databaseSchemas(accesses[host])
 	roleNames := schemaRoleNames(schemas)
 
 	// The expired write should NOT be included.
-	assert.NotContains(t, roleNames, "fortnox_readwrite",
+	assert.NotContains(t, roleNames, "orders_readwrite",
 		"expired write should not be in expected roles")
 
 	// Read access should still be present for all databases.
-	assert.Contains(t, roleNames, "fortnox_read")
-	assert.Contains(t, roleNames, "other_db_read")
+	assert.Contains(t, roleNames, "orders_read")
+	assert.Contains(t, roleNames, "products_read")
+}
+
+// TestCrossNamespaceRevocation_MergeFixPreventsRevocation verifies that
+// mergeSiblingAccesses expands the expected role set to include roles from
+// sibling namespaces, preventing cross-namespace revocations.
+func TestCrossNamespaceRevocation_MergeFixPreventsRevocation(t *testing.T) {
+	sharedHost := "shared-db.example.local."
+
+	teamADatabases := []lunarwayv1alpha1.PostgreSQLDatabase{
+		runningDatabase(sharedHost, "orders"),
+		runningDatabase(sharedHost, "invoices"),
+	}
+	teamBDatabases := []lunarwayv1alpha1.PostgreSQLDatabase{
+		runningDatabase(sharedHost, "reports"),
+		runningDatabase(sharedHost, "billing"),
+	}
+
+	teamAUser := lunarwayv1alpha1.PostgreSQLUser{
+		ObjectMeta: metav1.ObjectMeta{Name: "alice", Namespace: "team-a"},
+		Spec: lunarwayv1alpha1.PostgreSQLUserSpec{
+			Name: "alice",
+			Read: &[]lunarwayv1alpha1.AccessSpec{
+				{
+					Host:         lunarwayv1alpha1.ResourceVar{Value: sharedHost},
+					AllDatabases: &trueValue,
+					Reason:       "team-a service account needs read access",
+				},
+			},
+		},
+	}
+	teamBUser := lunarwayv1alpha1.PostgreSQLUser{
+		ObjectMeta: metav1.ObjectMeta{Name: "alice", Namespace: "team-b"},
+		Spec: lunarwayv1alpha1.PostgreSQLUserSpec{
+			Name: "alice",
+			Read: &[]lunarwayv1alpha1.AccessSpec{
+				{
+					Host:         lunarwayv1alpha1.ResourceVar{Value: sharedHost},
+					AllDatabases: &trueValue,
+					Reason:       "team-b service account needs read access",
+				},
+			},
+		},
+	}
+
+	allUsers := []lunarwayv1alpha1.PostgreSQLUser{teamAUser, teamBUser}
+
+	// Build a granter that knows about all databases across namespaces.
+	granter := Granter{
+		Now:                     time.Now,
+		AllDatabasesReadEnabled: true,
+		AllDatabases: func(namespace string) ([]lunarwayv1alpha1.PostgreSQLDatabase, error) {
+			switch namespace {
+			case "team-a":
+				return teamADatabases, nil
+			case "team-b":
+				return teamBDatabases, nil
+			default:
+				return append(teamADatabases, teamBDatabases...), nil
+			}
+		},
+		AllUsers: func() ([]lunarwayv1alpha1.PostgreSQLUser, error) {
+			return allUsers, nil
+		},
+		ResourceResolver: func(r lunarwayv1alpha1.ResourceVar, ns string) (string, error) {
+			return r.Value, nil
+		},
+	}
+
+	// Compute accesses for the team-a namespace.
+	teamAAccesses, err := granter.groupAccesses(
+		test.NewLogger(t), "team-a",
+		*teamAUser.Spec.Read,
+		nil,
+	)
+	require.NoError(t, err)
+
+	// Apply the merge fix.
+	granter.mergeSiblingAccesses(test.NewLogger(t), "team-a", "alice", teamAAccesses)
+
+	mergedSchemas := databaseSchemas(teamAAccesses[sharedHost])
+	mergedRoleNames := schemaRoleNames(mergedSchemas)
+
+	// After merging, all 4 databases must be present so rolesDiff won't revoke any of them.
+	assert.ElementsMatch(t,
+		[]string{"orders_read", "invoices_read", "reports_read", "billing_read"},
+		mergedRoleNames,
+		"merged accesses must contain roles from both namespaces to prevent revocation",
+	)
 }
 
 // --- Helpers ---
