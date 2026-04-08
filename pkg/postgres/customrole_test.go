@@ -375,9 +375,120 @@ func TestSyncDatabaseGrants_revokesRemovedGrant(t *testing.T) {
 	}))
 	require.True(t, tablePrivilegeGranted(t, targetDB, roleName, schemaName, tableName, "SELECT"))
 
-	// Re-sync with no grants — all privileges should be revoked.
+	// Re-sync with no grants — all privileges and schema USAGE should be revoked.
 	require.NoError(t, postgres.SyncDatabaseGrants(log, targetDB, roleName, nil))
 	assert.False(t, tablePrivilegeGranted(t, targetDB, roleName, schemaName, tableName, "SELECT"), "SELECT should be revoked")
+	assert.False(t, schemaUsageGranted(t, targetDB, roleName, schemaName), "USAGE on schema should be revoked")
+}
+
+func TestSyncDatabaseGrants_partialRevokePreservesSchemaUsage(t *testing.T) {
+	host := test.Integration(t)
+	log := test.SetLogger(t)
+
+	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     host,
+		Database: "postgres",
+		User:     "iam_creator",
+		Password: "iam_creator",
+	})
+	require.NoError(t, err)
+	defer adminDB.Close()
+
+	epoch := time.Now().UnixNano()
+	dbName := fmt.Sprintf("test_%d", epoch)
+	roleName := fmt.Sprintf("custom_role_%d", epoch)
+	schemaName := fmt.Sprintf("schema_%d", epoch)
+	tableA := fmt.Sprintf("table_a_%d", epoch)
+	tableB := fmt.Sprintf("table_b_%d", epoch)
+
+	require.NoError(t, createManagerRole(log, adminDB, "postgres_role_name"))
+	require.NoError(t, postgres.Database(log, host,
+		postgres.Credentials{User: "iam_creator", Password: "iam_creator"},
+		postgres.Credentials{Name: dbName, User: dbName, Password: "test"},
+		"postgres_role_name", nil,
+	))
+
+	targetDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host: host, Database: dbName, User: "iam_creator", Password: "iam_creator",
+	})
+	require.NoError(t, err)
+	defer targetDB.Close()
+
+	dbExec(t, targetDB, fmt.Sprintf("CREATE SCHEMA %s", schemaName))
+	dbExec(t, targetDB, fmt.Sprintf("CREATE TABLE %s.%s (id int)", schemaName, tableA))
+	dbExec(t, targetDB, fmt.Sprintf("CREATE TABLE %s.%s (id int)", schemaName, tableB))
+
+	require.NoError(t, postgres.EnsureCustomRole(log, adminDB, roleName, nil))
+
+	// Grant SELECT on both tables.
+	require.NoError(t, postgres.SyncDatabaseGrants(log, targetDB, roleName, []postgres.CustomRoleGrant{
+		{Schema: schemaName, Privileges: []string{"SELECT"}},
+	}))
+	require.True(t, tablePrivilegeGranted(t, targetDB, roleName, schemaName, tableA, "SELECT"))
+	require.True(t, tablePrivilegeGranted(t, targetDB, roleName, schemaName, tableB, "SELECT"))
+
+	// Re-sync with only tableA — tableB's grant is removed but schema USAGE must remain.
+	require.NoError(t, postgres.SyncDatabaseGrants(log, targetDB, roleName, []postgres.CustomRoleGrant{
+		{Schema: schemaName, Table: tableA, Privileges: []string{"SELECT"}},
+	}))
+	assert.True(t, tablePrivilegeGranted(t, targetDB, roleName, schemaName, tableA, "SELECT"), "tableA SELECT should remain")
+	assert.False(t, tablePrivilegeGranted(t, targetDB, roleName, schemaName, tableB, "SELECT"), "tableB SELECT should be revoked")
+	assert.True(t, schemaUsageGranted(t, targetDB, roleName, schemaName), "USAGE on schema should be preserved")
+}
+
+func TestSyncDatabaseGrants_picksUpNewTable(t *testing.T) {
+	host := test.Integration(t)
+	log := test.SetLogger(t)
+
+	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     host,
+		Database: "postgres",
+		User:     "iam_creator",
+		Password: "iam_creator",
+	})
+	require.NoError(t, err)
+	defer adminDB.Close()
+
+	epoch := time.Now().UnixNano()
+	dbName := fmt.Sprintf("test_%d", epoch)
+	roleName := fmt.Sprintf("custom_role_%d", epoch)
+	schemaName := fmt.Sprintf("schema_%d", epoch)
+	tableA := fmt.Sprintf("table_a_%d", epoch)
+	tableB := fmt.Sprintf("table_b_%d", epoch)
+
+	require.NoError(t, createManagerRole(log, adminDB, "postgres_role_name"))
+	require.NoError(t, postgres.Database(log, host,
+		postgres.Credentials{User: "iam_creator", Password: "iam_creator"},
+		postgres.Credentials{Name: dbName, User: dbName, Password: "test"},
+		"postgres_role_name", nil,
+	))
+
+	targetDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host: host, Database: dbName, User: "iam_creator", Password: "iam_creator",
+	})
+	require.NoError(t, err)
+	defer targetDB.Close()
+
+	dbExec(t, targetDB, fmt.Sprintf("CREATE SCHEMA %s", schemaName))
+	dbExec(t, targetDB, fmt.Sprintf("CREATE TABLE %s.%s (id int)", schemaName, tableA))
+
+	require.NoError(t, postgres.EnsureCustomRole(log, adminDB, roleName, nil))
+
+	// Initial sync: only tableA exists.
+	require.NoError(t, postgres.SyncDatabaseGrants(log, targetDB, roleName, []postgres.CustomRoleGrant{
+		{Schema: schemaName, Privileges: []string{"SELECT"}},
+	}))
+	require.True(t, tablePrivilegeGranted(t, targetDB, roleName, schemaName, tableA, "SELECT"))
+
+	// New table added after initial sync.
+	dbExec(t, targetDB, fmt.Sprintf("CREATE TABLE %s.%s (id int)", schemaName, tableB))
+
+	// Re-sync with same spec — new table should be picked up.
+	require.NoError(t, postgres.SyncDatabaseGrants(log, targetDB, roleName, []postgres.CustomRoleGrant{
+		{Schema: schemaName, Privileges: []string{"SELECT"}},
+	}))
+	assert.True(t, tablePrivilegeGranted(t, targetDB, roleName, schemaName, tableA, "SELECT"), "tableA should retain SELECT")
+	assert.True(t, tablePrivilegeGranted(t, targetDB, roleName, schemaName, tableB, "SELECT"), "tableB added after initial sync should get SELECT")
 }
 
 func TestEnsureCustomRole_revokesRemovedRole(t *testing.T) {
@@ -462,6 +573,23 @@ func grantedRoles(t *testing.T, db *sql.DB, roleName string) []string {
 	}
 	require.NoError(t, rows.Err())
 	return roles
+}
+
+// schemaUsageGranted returns true if roleName has USAGE on schema.
+func schemaUsageGranted(t *testing.T, db *sql.DB, roleName, schema string) bool {
+	t.Helper()
+	var granted bool
+	err := db.QueryRow(`
+		SELECT EXISTS(
+		    SELECT 1
+		    FROM pg_namespace n,
+		         aclexplode(n.nspacl) AS a(grantor, grantee, privilege_type, is_grantable)
+		    WHERE a.grantee = (SELECT oid FROM pg_roles WHERE rolname = $1)
+		      AND n.nspname = $2
+		      AND a.privilege_type = 'USAGE'
+		)`, roleName, schema).Scan(&granted)
+	require.NoError(t, err)
+	return granted
 }
 
 // tablePrivilegeGranted returns true if roleName has the given privilege on schema.table.
