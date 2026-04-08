@@ -48,7 +48,7 @@ type CustomRoleGrant struct {
 	// +optional
 	Table string `json:"table,omitempty"`
 
-	// Privileges is a list of PostgreSQL privilege keywords (e.g. SELECT, INSERT, UPDATE, DELETE)
+	// Privileges is a list of PostgreSQL privilege keywords (SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER)
 	Privileges []string `json:"privileges"`
 }
 

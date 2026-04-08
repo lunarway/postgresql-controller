@@ -30,7 +30,6 @@ var allowedTablePrivileges = map[string]struct{}{
 	"TRUNCATE":   {},
 	"REFERENCES": {},
 	"TRIGGER":    {},
-	"ALL":        {},
 }
 
 // validatePrivileges returns an error if privs is empty or contains any value
@@ -42,10 +41,17 @@ func validatePrivileges(privs []string) error {
 	}
 	for _, p := range privs {
 		if _, ok := allowedTablePrivileges[strings.ToUpper(p)]; !ok {
-			return ctlerrors.NewInvalid(fmt.Errorf("invalid privilege %q: must be one of SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, ALL", p))
+			return ctlerrors.NewInvalid(fmt.Errorf("invalid privilege %q: must be one of SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER", p))
 		}
 	}
 	return nil
+}
+
+// grantKey identifies a single privilege on a specific table.
+type grantKey struct {
+	schema    string
+	table     string
+	privilege string
 }
 
 // EnsureCustomRole creates a PostgreSQL role if it does not exist and
@@ -137,41 +143,203 @@ func currentGrantedRoles(db *sql.DB, roleName string) ([]string, error) {
 	return roles, rows.Err()
 }
 
-// SyncDatabaseGrants synchronises the role's privileges in the currently-connected
-// database to exactly match grants. Schemas where the role previously had USAGE are
-// fully revoked first, then the desired grants are re-applied, so removed privileges
-// and removed grants both converge to the desired state.
+// SyncDatabaseGrants synchronises the role's table privileges in the
+// currently-connected database to exactly match grants. It computes the diff
+// between current and desired (schema, table, privilege) tuples and issues only
+// the necessary GRANT/REVOKE statements, avoiding any access outage window.
 func SyncDatabaseGrants(log logr.Logger, db *sql.DB, roleName string, grants []CustomRoleGrant) error {
-	// Revoke all existing schema/table grants for this role.
+	for _, g := range grants {
+		if err := validatePrivileges(g.Privileges); err != nil {
+			return err
+		}
+	}
+
+	currentGrants, err := currentTableGrants(db, roleName)
+	if err != nil {
+		return err
+	}
+	currentSet := make(map[grantKey]struct{}, len(currentGrants))
+	for _, g := range currentGrants {
+		currentSet[g] = struct{}{}
+	}
+
+	desiredGrants, err := expandGrants(db, grants)
+	if err != nil {
+		return err
+	}
+	desiredSet := make(map[grantKey]struct{}, len(desiredGrants))
+	for _, g := range desiredGrants {
+		desiredSet[g] = struct{}{}
+	}
+
 	currentSchemas, err := currentGrantedSchemas(db, roleName)
 	if err != nil {
 		return err
 	}
-	quotedRole := pq.QuoteIdentifier(roleName)
-	for _, schema := range currentSchemas {
-		quotedSchema := pq.QuoteIdentifier(schema)
-		if _, err := db.Exec(fmt.Sprintf("REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA %s FROM %s", quotedSchema, quotedRole)); err != nil {
-			return fmt.Errorf("revoke table privileges on schema %s from %s: %w", schema, roleName, err)
-		}
-		if _, err := db.Exec(fmt.Sprintf("REVOKE USAGE ON SCHEMA %s FROM %s", quotedSchema, quotedRole)); err != nil {
-			return fmt.Errorf("revoke usage on schema %s from %s: %w", schema, roleName, err)
-		}
-		log.V(1).Info("Revoked schema grants", "schema", schema)
+	currentSchemaSet := make(map[string]struct{}, len(currentSchemas))
+	for _, s := range currentSchemas {
+		currentSchemaSet[s] = struct{}{}
+	}
+	desiredSchemaSet := make(map[string]struct{})
+	for _, g := range desiredGrants {
+		desiredSchemaSet[g.schema] = struct{}{}
 	}
 
-	// Re-apply desired grants.
+	type tableKey struct{ schema, table string }
+
+	// 1. Grant USAGE on schemas not yet accessible.
+	for schema := range desiredSchemaSet {
+		if _, ok := currentSchemaSet[schema]; !ok {
+			if _, err := db.Exec(fmt.Sprintf("GRANT USAGE ON SCHEMA %s TO %s",
+				pq.QuoteIdentifier(schema), pq.QuoteIdentifier(roleName))); err != nil {
+				return fmt.Errorf("grant usage on schema %s to %s: %w", schema, roleName, err)
+			}
+			log.V(1).Info("Granted USAGE on schema", "schema", schema)
+		}
+	}
+
+	// 2. Grant new table privileges, batched per (schema, table).
+	toGrant := make(map[tableKey][]string)
+	for key := range desiredSet {
+		if _, ok := currentSet[key]; !ok {
+			tk := tableKey{key.schema, key.table}
+			toGrant[tk] = append(toGrant[tk], key.privilege)
+		}
+	}
+	for tk, privs := range toGrant {
+		privList := strings.Join(privs, ", ")
+		if _, err := db.Exec(fmt.Sprintf("GRANT %s ON TABLE %s.%s TO %s",
+			privList,
+			pq.QuoteIdentifier(tk.schema),
+			pq.QuoteIdentifier(tk.table),
+			pq.QuoteIdentifier(roleName))); err != nil {
+			return fmt.Errorf("grant %s on %s.%s to %s: %w", privList, tk.schema, tk.table, roleName, err)
+		}
+		log.V(1).Info("Granted privileges", "schema", tk.schema, "table", tk.table, "privileges", privs)
+	}
+
+	// 3. Revoke removed table privileges, batched per (schema, table).
+	toRevoke := make(map[tableKey][]string)
+	for key := range currentSet {
+		if _, ok := desiredSet[key]; !ok {
+			tk := tableKey{key.schema, key.table}
+			toRevoke[tk] = append(toRevoke[tk], key.privilege)
+		}
+	}
+	for tk, privs := range toRevoke {
+		privList := strings.Join(privs, ", ")
+		if _, err := db.Exec(fmt.Sprintf("REVOKE %s ON TABLE %s.%s FROM %s",
+			privList,
+			pq.QuoteIdentifier(tk.schema),
+			pq.QuoteIdentifier(tk.table),
+			pq.QuoteIdentifier(roleName))); err != nil {
+			return fmt.Errorf("revoke %s on %s.%s from %s: %w", privList, tk.schema, tk.table, roleName, err)
+		}
+		log.V(1).Info("Revoked privileges", "schema", tk.schema, "table", tk.table, "privileges", privs)
+	}
+
+	// 4. Revoke USAGE on schemas that no longer have any desired grants.
+	for _, schema := range currentSchemas {
+		if _, ok := desiredSchemaSet[schema]; !ok {
+			if _, err := db.Exec(fmt.Sprintf("REVOKE USAGE ON SCHEMA %s FROM %s",
+				pq.QuoteIdentifier(schema), pq.QuoteIdentifier(roleName))); err != nil {
+				return fmt.Errorf("revoke usage on schema %s from %s: %w", schema, roleName, err)
+			}
+			log.V(1).Info("Revoked USAGE on schema", "schema", schema)
+		}
+	}
+
+	return nil
+}
+
+// currentTableGrants returns all table privileges held by roleName in the
+// currently-connected database. Uses pg_catalog directly so results are not
+// filtered by the current session's role membership.
+func currentTableGrants(db *sql.DB, roleName string) ([]grantKey, error) {
+	rows, err := db.Query(`
+		SELECT n.nspname, c.relname,
+		    CASE a.privilege_type
+		        WHEN 'r' THEN 'SELECT'
+		        WHEN 'w' THEN 'UPDATE'
+		        WHEN 'a' THEN 'INSERT'
+		        WHEN 'd' THEN 'DELETE'
+		        WHEN 'D' THEN 'TRUNCATE'
+		        WHEN 'x' THEN 'REFERENCES'
+		        WHEN 't' THEN 'TRIGGER'
+		    END
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace,
+		    aclexplode(c.relacl) AS a(grantor, grantee, privilege_type, is_grantable)
+		WHERE a.grantee = (SELECT oid FROM pg_roles WHERE rolname = $1)
+		  AND c.relkind = 'r'
+		  AND n.nspname NOT LIKE 'pg_%'
+		  AND n.nspname <> 'information_schema'`, roleName)
+	if err != nil {
+		return nil, fmt.Errorf("query table grants for %s: %w", roleName, err)
+	}
+	defer rows.Close()
+	var grants []grantKey
+	for rows.Next() {
+		var g grantKey
+		if err := rows.Scan(&g.schema, &g.table, &g.privilege); err != nil {
+			return nil, fmt.Errorf("scan table grant: %w", err)
+		}
+		grants = append(grants, g)
+	}
+	return grants, rows.Err()
+}
+
+// resolveTables returns the tables to apply a grant to within schema.
+// If table is empty or "*" it returns all regular tables in the schema.
+func resolveTables(db *sql.DB, schema, table string) ([]string, error) {
+	if table != "" && table != "*" {
+		return []string{table}, nil
+	}
+	rows, err := db.Query(`
+		SELECT tablename FROM pg_tables
+		WHERE schemaname = $1
+		ORDER BY tablename`, schema)
+	if err != nil {
+		return nil, fmt.Errorf("query tables in schema %s: %w", schema, err)
+	}
+	defer rows.Close()
+	var tables []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, fmt.Errorf("scan table name: %w", err)
+		}
+		tables = append(tables, name)
+	}
+	return tables, rows.Err()
+}
+
+// expandGrants resolves all CustomRoleGrant entries to concrete
+// (schema, table, privilege) tuples against the current database.
+func expandGrants(db *sql.DB, grants []CustomRoleGrant) ([]grantKey, error) {
+	var result []grantKey
 	for _, grant := range grants {
 		schemas, err := resolveSchemas(db, grant.Schema)
 		if err != nil {
-			return fmt.Errorf("resolve schemas for grant: %w", err)
+			return nil, fmt.Errorf("resolve schemas: %w", err)
 		}
 		for _, schema := range schemas {
-			if err := applyPrivilegeGrant(log, db, roleName, schema, grant.Table, grant.Privileges); err != nil {
-				return err
+			tables, err := resolveTables(db, schema, grant.Table)
+			if err != nil {
+				return nil, fmt.Errorf("resolve tables in schema %s: %w", schema, err)
+			}
+			for _, table := range tables {
+				for _, priv := range grant.Privileges {
+					result = append(result, grantKey{
+						schema:    schema,
+						table:     table,
+						privilege: strings.ToUpper(priv),
+					})
+				}
 			}
 		}
 	}
-	return nil
+	return result, nil
 }
 
 // currentGrantedSchemas returns the names of schemas on which roleName has USAGE.
@@ -279,44 +447,4 @@ func resolveSchemas(db *sql.DB, schema string) ([]string, error) {
 		schemas = append(schemas, name)
 	}
 	return schemas, rows.Err()
-}
-
-func applyPrivilegeGrant(log logr.Logger, db *sql.DB, roleName, schema, table string, privileges []string) error {
-	if err := validatePrivileges(privileges); err != nil {
-		return err
-	}
-
-	// Normalise keywords to uppercase for clarity; PostgreSQL is case-insensitive
-	// for keywords but this keeps generated SQL consistent.
-	upper := make([]string, len(privileges))
-	for i, p := range privileges {
-		upper[i] = strings.ToUpper(p)
-	}
-	privs := strings.Join(upper, ", ")
-
-	quotedRole := pq.QuoteIdentifier(roleName)
-	quotedSchema := pq.QuoteIdentifier(schema)
-
-	_, err := db.Exec(fmt.Sprintf("GRANT USAGE ON SCHEMA %s TO %s", quotedSchema, quotedRole))
-	if err != nil {
-		return fmt.Errorf("grant usage on schema %s to %s: %w", schema, roleName, err)
-	}
-	log.V(1).Info("Granted USAGE on schema", "schema", schema)
-
-	if table == "" || table == "*" {
-		_, err = db.Exec(fmt.Sprintf("GRANT %s ON ALL TABLES IN SCHEMA %s TO %s", privs, quotedSchema, quotedRole))
-		if err != nil {
-			return fmt.Errorf("grant %s on all tables in schema %s to %s: %w", privs, schema, roleName, err)
-		}
-		log.V(1).Info("Granted privileges on all tables in schema", "privileges", privs, "schema", schema)
-	} else {
-		quotedTable := pq.QuoteIdentifier(table)
-		_, err = db.Exec(fmt.Sprintf("GRANT %s ON TABLE %s.%s TO %s", privs, quotedSchema, quotedTable, quotedRole))
-		if err != nil {
-			return fmt.Errorf("grant %s on table %s.%s to %s: %w", privs, schema, table, roleName, err)
-		}
-		log.V(1).Info("Granted privileges on table", "privileges", privs, "schema", schema, "table", table)
-	}
-
-	return nil
 }
