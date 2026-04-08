@@ -255,18 +255,11 @@ func SyncDatabaseGrants(log logr.Logger, db *sql.DB, roleName string, grants []C
 // currentTableGrants returns all table privileges held by roleName in the
 // currently-connected database. Uses pg_catalog directly so results are not
 // filtered by the current session's role membership.
+// aclexplode returns privilege_type as full text names (SELECT, UPDATE, …),
+// so they are selected as-is without any CASE conversion.
 func currentTableGrants(db *sql.DB, roleName string) ([]grantKey, error) {
 	rows, err := db.Query(`
-		SELECT n.nspname, c.relname,
-		    CASE a.privilege_type
-		        WHEN 'r' THEN 'SELECT'
-		        WHEN 'w' THEN 'UPDATE'
-		        WHEN 'a' THEN 'INSERT'
-		        WHEN 'd' THEN 'DELETE'
-		        WHEN 'D' THEN 'TRUNCATE'
-		        WHEN 'x' THEN 'REFERENCES'
-		        WHEN 't' THEN 'TRIGGER'
-		    END
+		SELECT n.nspname, c.relname, a.privilege_type
 		FROM pg_class c
 		JOIN pg_namespace n ON n.oid = c.relnamespace,
 		    aclexplode(c.relacl) AS a(grantor, grantee, privilege_type, is_grantable)
