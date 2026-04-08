@@ -26,10 +26,6 @@ type CustomRoleSpec struct {
 	// RoleName is the name of the PostgreSQL role to create
 	RoleName string `json:"roleName"`
 
-	// HostCredentials is the name of the PostgreSQLHostCredentials resource
-	// providing admin credentials for the target PostgreSQL instance
-	HostCredentials string `json:"hostCredentials"`
-
 	// GrantRoles is a list of existing PostgreSQL roles to grant to this role
 	// (e.g. pg_monitor, pg_read_all_data, or another CustomRole's roleName).
 	// These are applied at the server level.

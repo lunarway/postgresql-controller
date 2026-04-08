@@ -85,16 +85,10 @@ spec:
                   - privileges
                   type: object
                 type: array
-              hostCredentials:
-                description: |-
-                  HostCredentials is the name of the PostgreSQLHostCredentials resource
-                  providing admin credentials for the target PostgreSQL instance
-                type: string
               roleName:
                 description: RoleName is the name of the PostgreSQL role to create
                 type: string
             required:
-            - hostCredentials
             - roleName
             type: object
           status:

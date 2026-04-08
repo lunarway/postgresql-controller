@@ -7,6 +7,8 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/lib/pq"
+
+	ctlerrors "go.lunarway.com/postgresql-controller/pkg/errors"
 )
 
 // CustomRoleGrant defines schema/table privileges to apply to a role within a database.
@@ -36,7 +38,7 @@ var allowedTablePrivileges = map[string]struct{}{
 func validatePrivileges(privs []string) error {
 	for _, p := range privs {
 		if _, ok := allowedTablePrivileges[strings.ToUpper(p)]; !ok {
-			return fmt.Errorf("invalid privilege %q: must be one of SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, ALL", p)
+			return ctlerrors.NewInvalid(fmt.Errorf("invalid privilege %q: must be one of SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, ALL", p))
 		}
 	}
 	return nil
