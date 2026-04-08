@@ -16,6 +16,8 @@ rules:
   - postgresql.lunar.tech
   resources:
   - postgresqldatabases
+  - postgresqlserviceusers
+  - postgresqlusers
   verbs:
   - create
   - delete
@@ -28,6 +30,9 @@ rules:
   - postgresql.lunar.tech
   resources:
   - postgresqldatabases/status
+  - postgresqlhostcredentials/status
+  - postgresqlserviceusers/status
+  - postgresqlusers/status
   verbs:
   - get
   - patch
@@ -44,65 +49,7 @@ rules:
   - postgresql.lunar.tech
   resources:
   - postgresqlhostcredentials/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - postgresql.lunar.tech
-  resources:
-  - postgresqlhostcredentials/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - postgresql.lunar.tech
-  resources:
-  - postgresqlserviceusers
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - postgresql.lunar.tech
-  resources:
   - postgresqlserviceusers/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - postgresql.lunar.tech
-  resources:
-  - postgresqlserviceusers/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - postgresql.lunar.tech
-  resources:
-  - postgresqlusers
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - postgresql.lunar.tech
-  resources:
   - postgresqlusers/finalizers
   verbs:
-  - update
-- apiGroups:
-  - postgresql.lunar.tech
-  resources:
-  - postgresqlusers/status
-  verbs:
-  - get
-  - patch
   - update
