@@ -274,6 +274,232 @@ func TestApplyDatabaseGrants_idempotent(t *testing.T) {
 	require.NoError(t, postgres.SyncDatabaseGrants(log, targetDB, roleName, grants), "second call should be idempotent")
 }
 
+func TestSyncDatabaseGrants_grantCombinations(t *testing.T) {
+	host := test.Integration(t)
+	log := test.SetLogger(t)
+
+	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     host,
+		Database: "postgres",
+		User:     "iam_creator",
+		Password: "iam_creator",
+	})
+	require.NoError(t, err)
+	defer adminDB.Close()
+
+	epoch := time.Now().UnixNano()
+	dbName := fmt.Sprintf("test_%d", epoch)
+	sA := fmt.Sprintf("schema_a_%d", epoch)
+	sB := fmt.Sprintf("schema_b_%d", epoch)
+	sC := fmt.Sprintf("schema_c_%d", epoch)
+	tX := fmt.Sprintf("table_x_%d", epoch)
+	tY := fmt.Sprintf("table_y_%d", epoch)
+
+	require.NoError(t, createManagerRole(log, adminDB, "postgres_role_name"))
+	require.NoError(t, postgres.Database(log, host,
+		postgres.Credentials{User: "iam_creator", Password: "iam_creator"},
+		postgres.Credentials{Name: dbName, User: dbName, Password: "test"},
+		"postgres_role_name", nil,
+	))
+
+	targetDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     host,
+		Database: dbName,
+		User:     "iam_creator",
+		Password: "iam_creator",
+	})
+	require.NoError(t, err)
+	defer targetDB.Close()
+
+	for _, schema := range []string{sA, sB, sC} {
+		dbExec(t, targetDB, fmt.Sprintf("CREATE SCHEMA %s", schema))
+		for _, table := range []string{tX, tY} {
+			dbExec(t, targetDB, fmt.Sprintf("CREATE TABLE %s.%s (id int)", schema, table))
+		}
+	}
+
+	type check struct {
+		schema, table, privilege string
+		want                     bool
+	}
+
+	cases := []struct {
+		name   string
+		grants []postgres.CustomRoleGrant
+		checks []check
+	}{
+		{
+			name:   "specific schema specific table",
+			grants: []postgres.CustomRoleGrant{{Schema: sA, Table: tX, Privileges: []string{"SELECT"}}},
+			checks: []check{
+				{sA, tX, "SELECT", true},
+				{sA, tY, "SELECT", false},
+				{sB, tX, "SELECT", false},
+				{sB, tY, "SELECT", false},
+				{sC, tX, "SELECT", false},
+			},
+		},
+		{
+			name:   "specific schema all tables",
+			grants: []postgres.CustomRoleGrant{{Schema: sA, Privileges: []string{"SELECT"}}},
+			checks: []check{
+				{sA, tX, "SELECT", true},
+				{sA, tY, "SELECT", true},
+				{sB, tX, "SELECT", false},
+				{sB, tY, "SELECT", false},
+				{sC, tX, "SELECT", false},
+			},
+		},
+		{
+			name:   "wildcard schema specific table",
+			grants: []postgres.CustomRoleGrant{{Table: tX, Privileges: []string{"SELECT"}}},
+			checks: []check{
+				{sA, tX, "SELECT", true},
+				{sB, tX, "SELECT", true},
+				{sC, tX, "SELECT", true},
+				{sA, tY, "SELECT", false},
+				{sB, tY, "SELECT", false},
+				{sC, tY, "SELECT", false},
+			},
+		},
+		{
+			name:   "wildcard schema wildcard table",
+			grants: []postgres.CustomRoleGrant{{Privileges: []string{"SELECT"}}},
+			checks: []check{
+				{sA, tX, "SELECT", true},
+				{sA, tY, "SELECT", true},
+				{sB, tX, "SELECT", true},
+				{sB, tY, "SELECT", true},
+				{sC, tX, "SELECT", true},
+				{sC, tY, "SELECT", true},
+			},
+		},
+		{
+			name: "multiple explicit schemas specific table",
+			grants: []postgres.CustomRoleGrant{
+				{Schema: sA, Table: tX, Privileges: []string{"SELECT"}},
+				{Schema: sB, Table: tX, Privileges: []string{"SELECT"}},
+			},
+			checks: []check{
+				{sA, tX, "SELECT", true},
+				{sB, tX, "SELECT", true},
+				{sA, tY, "SELECT", false},
+				{sB, tY, "SELECT", false},
+				{sC, tX, "SELECT", false},
+				{sC, tY, "SELECT", false},
+			},
+		},
+		{
+			name: "multiple explicit schemas all tables",
+			grants: []postgres.CustomRoleGrant{
+				{Schema: sA, Privileges: []string{"SELECT"}},
+				{Schema: sB, Privileges: []string{"SELECT"}},
+			},
+			checks: []check{
+				{sA, tX, "SELECT", true},
+				{sA, tY, "SELECT", true},
+				{sB, tX, "SELECT", true},
+				{sB, tY, "SELECT", true},
+				{sC, tX, "SELECT", false},
+				{sC, tY, "SELECT", false},
+			},
+		},
+		{
+			name: "single schema multiple specific tables",
+			grants: []postgres.CustomRoleGrant{
+				{Schema: sA, Table: tX, Privileges: []string{"SELECT"}},
+				{Schema: sA, Table: tY, Privileges: []string{"SELECT"}},
+			},
+			checks: []check{
+				{sA, tX, "SELECT", true},
+				{sA, tY, "SELECT", true},
+				{sB, tX, "SELECT", false},
+				{sB, tY, "SELECT", false},
+			},
+		},
+		{
+			name: "multiple schemas multiple specific tables",
+			grants: []postgres.CustomRoleGrant{
+				{Schema: sA, Table: tX, Privileges: []string{"SELECT"}},
+				{Schema: sA, Table: tY, Privileges: []string{"SELECT"}},
+				{Schema: sB, Table: tX, Privileges: []string{"SELECT"}},
+				{Schema: sB, Table: tY, Privileges: []string{"SELECT"}},
+			},
+			checks: []check{
+				{sA, tX, "SELECT", true},
+				{sA, tY, "SELECT", true},
+				{sB, tX, "SELECT", true},
+				{sB, tY, "SELECT", true},
+				{sC, tX, "SELECT", false},
+				{sC, tY, "SELECT", false},
+			},
+		},
+		{
+			name: "mixed specific and wildcard tables across schemas",
+			grants: []postgres.CustomRoleGrant{
+				{Schema: sA, Table: tX, Privileges: []string{"SELECT"}},
+				{Schema: sB, Privileges: []string{"SELECT"}},
+			},
+			checks: []check{
+				{sA, tX, "SELECT", true},
+				{sA, tY, "SELECT", false},
+				{sB, tX, "SELECT", true},
+				{sB, tY, "SELECT", true},
+				{sC, tX, "SELECT", false},
+				{sC, tY, "SELECT", false},
+			},
+		},
+		{
+			name: "multiple privileges on specific table",
+			grants: []postgres.CustomRoleGrant{
+				{Schema: sA, Table: tX, Privileges: []string{"SELECT", "INSERT", "DELETE"}},
+			},
+			checks: []check{
+				{sA, tX, "SELECT", true},
+				{sA, tX, "INSERT", true},
+				{sA, tX, "DELETE", true},
+				{sA, tX, "UPDATE", false},
+				{sA, tY, "SELECT", false},
+				{sB, tX, "SELECT", false},
+			},
+		},
+		{
+			name: "different privileges per schema",
+			grants: []postgres.CustomRoleGrant{
+				{Schema: sA, Privileges: []string{"SELECT"}},
+				{Schema: sB, Privileges: []string{"INSERT", "UPDATE"}},
+			},
+			checks: []check{
+				{sA, tX, "SELECT", true},
+				{sA, tY, "SELECT", true},
+				{sA, tX, "INSERT", false},
+				{sB, tX, "INSERT", true},
+				{sB, tY, "UPDATE", true},
+				{sB, tX, "SELECT", false},
+				{sC, tX, "SELECT", false},
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			roleName := fmt.Sprintf("custom_role_%d", time.Now().UnixNano())
+			require.NoError(t, postgres.EnsureCustomRole(log, adminDB, roleName, nil))
+
+			require.NoError(t, postgres.SyncDatabaseGrants(log, targetDB, roleName, tc.grants))
+
+			for _, c := range tc.checks {
+				got := tablePrivilegeGranted(t, targetDB, roleName, c.schema, c.table, c.privilege)
+				if c.want {
+					assert.Truef(t, got, "expected %s on %s.%s to be granted", c.privilege, c.schema, c.table)
+				} else {
+					assert.Falsef(t, got, "expected %s on %s.%s NOT to be granted", c.privilege, c.schema, c.table)
+				}
+			}
+		})
+	}
+}
+
 func TestSyncDatabaseGrants_revokesRemovedPrivilege(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
