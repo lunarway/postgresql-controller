@@ -19,13 +19,36 @@ type CustomRoleGrant struct {
 	Privileges []string
 }
 
+// allowedTablePrivileges is the set of valid PostgreSQL table-level privilege keywords.
+var allowedTablePrivileges = map[string]struct{}{
+	"SELECT":     {},
+	"INSERT":     {},
+	"UPDATE":     {},
+	"DELETE":     {},
+	"TRUNCATE":   {},
+	"REFERENCES": {},
+	"TRIGGER":    {},
+	"ALL":        {},
+}
+
+// validatePrivileges returns an error if any value in privs is not a recognised
+// PostgreSQL table-level privilege keyword. Comparison is case-insensitive.
+func validatePrivileges(privs []string) error {
+	for _, p := range privs {
+		if _, ok := allowedTablePrivileges[strings.ToUpper(p)]; !ok {
+			return fmt.Errorf("invalid privilege %q: must be one of SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, ALL", p)
+		}
+	}
+	return nil
+}
+
 // EnsureCustomRole creates a PostgreSQL role if it does not exist and applies
 // server-level role grants. The role is created with NOLOGIN.
 func EnsureCustomRole(log logr.Logger, db *sql.DB, roleName string, grantRoles []string) error {
 	log = log.WithValues("role", roleName)
 	log.V(1).Info("Ensuring custom role")
 
-	_, err := db.Exec(fmt.Sprintf("CREATE ROLE %s NOLOGIN", roleName))
+	_, err := db.Exec(fmt.Sprintf("CREATE ROLE %s NOLOGIN", pq.QuoteIdentifier(roleName)))
 	if err != nil {
 		pqError, ok := err.(*pq.Error)
 		if !ok || pqError.Code.Name() != "duplicate_object" {
@@ -40,10 +63,14 @@ func EnsureCustomRole(log logr.Logger, db *sql.DB, roleName string, grantRoles [
 		return nil
 	}
 
-	joined := strings.Join(grantRoles, ", ")
-	_, err = db.Exec(fmt.Sprintf("GRANT %s TO %s", joined, roleName))
+	quotedRoles := make([]string, len(grantRoles))
+	for i, r := range grantRoles {
+		quotedRoles[i] = pq.QuoteIdentifier(r)
+	}
+	joined := strings.Join(quotedRoles, ", ")
+	_, err = db.Exec(fmt.Sprintf("GRANT %s TO %s", joined, pq.QuoteIdentifier(roleName)))
 	if err != nil {
-		return fmt.Errorf("grant roles %s to %s: %w", joined, roleName, err)
+		return fmt.Errorf("grant roles %s to %s: %w", strings.Join(grantRoles, ", "), roleName, err)
 	}
 	log.V(1).Info("Granted roles", "roles", grantRoles)
 
@@ -122,22 +149,36 @@ func resolveSchemas(db *sql.DB, schema string) ([]string, error) {
 }
 
 func applyPrivilegeGrant(log logr.Logger, db *sql.DB, roleName, schema, table string, privileges []string) error {
-	privs := strings.Join(privileges, ", ")
+	if err := validatePrivileges(privileges); err != nil {
+		return err
+	}
 
-	_, err := db.Exec(fmt.Sprintf("GRANT USAGE ON SCHEMA %s TO %s", schema, roleName))
+	// Normalise keywords to uppercase for clarity; PostgreSQL is case-insensitive
+	// for keywords but this keeps generated SQL consistent.
+	upper := make([]string, len(privileges))
+	for i, p := range privileges {
+		upper[i] = strings.ToUpper(p)
+	}
+	privs := strings.Join(upper, ", ")
+
+	quotedRole := pq.QuoteIdentifier(roleName)
+	quotedSchema := pq.QuoteIdentifier(schema)
+
+	_, err := db.Exec(fmt.Sprintf("GRANT USAGE ON SCHEMA %s TO %s", quotedSchema, quotedRole))
 	if err != nil {
 		return fmt.Errorf("grant usage on schema %s to %s: %w", schema, roleName, err)
 	}
 	log.V(1).Info("Granted USAGE on schema", "schema", schema)
 
 	if table == "" || table == "*" {
-		_, err = db.Exec(fmt.Sprintf("GRANT %s ON ALL TABLES IN SCHEMA %s TO %s", privs, schema, roleName))
+		_, err = db.Exec(fmt.Sprintf("GRANT %s ON ALL TABLES IN SCHEMA %s TO %s", privs, quotedSchema, quotedRole))
 		if err != nil {
 			return fmt.Errorf("grant %s on all tables in schema %s to %s: %w", privs, schema, roleName, err)
 		}
 		log.V(1).Info("Granted privileges on all tables in schema", "privileges", privs, "schema", schema)
 	} else {
-		_, err = db.Exec(fmt.Sprintf("GRANT %s ON TABLE %s.%s TO %s", privs, schema, table, roleName))
+		quotedTable := pq.QuoteIdentifier(table)
+		_, err = db.Exec(fmt.Sprintf("GRANT %s ON TABLE %s.%s TO %s", privs, quotedSchema, quotedTable, quotedRole))
 		if err != nil {
 			return fmt.Errorf("grant %s on table %s.%s to %s: %w", privs, schema, table, roleName, err)
 		}

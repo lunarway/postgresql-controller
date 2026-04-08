@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
@@ -33,7 +34,6 @@ import (
 
 	postgresqlv1alpha1 "go.lunarway.com/postgresql-controller/api/v1alpha1"
 	ctlerrors "go.lunarway.com/postgresql-controller/pkg/errors"
-	"go.lunarway.com/postgresql-controller/pkg/kube"
 	"go.lunarway.com/postgresql-controller/pkg/postgres"
 )
 
@@ -61,7 +61,7 @@ func (r *CustomRoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	reqLogger = reqLogger.WithValues("requestId", requestID.String())
 
 	err = r.reconcile(ctx, reqLogger, req)
-	return requeueStrategy(reqLogger, err)
+	return customRoleRequeueStrategy(reqLogger, err)
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -109,53 +109,55 @@ func (r *CustomRoleReconciler) reconcile(ctx context.Context, reqLogger logr.Log
 	reqLogger = reqLogger.WithValues("roleName", customRole.Spec.RoleName)
 	reqLogger.V(1).Info("Reconciling CustomRole resource")
 
-	host, adminCredentials, err := r.resolveHostCredentials(ctx, req.Namespace, customRole.Spec.HostCredentials)
-	if err != nil {
-		r.persistStatus(ctx, customRole, err)
-		return fmt.Errorf("resolve host credentials: %w", err)
+	grants := toPostgresGrants(customRole.Spec.Grants)
+
+	for host, creds := range r.HostCredentials {
+		if err := r.reconcileOnHost(reqLogger, host, creds, customRole.Spec.RoleName, customRole.Spec.GrantRoles, grants); err != nil {
+			r.persistStatus(ctx, customRole, err)
+			return fmt.Errorf("reconcile on host %s: %w", host, err)
+		}
 	}
-	reqLogger = reqLogger.WithValues("host", host)
+
+	r.persistStatus(ctx, customRole, nil)
+	return nil
+}
+
+func (r *CustomRoleReconciler) reconcileOnHost(log logr.Logger, host string, creds postgres.Credentials, roleName string, grantRoles []string, grants []postgres.CustomRoleGrant) error {
+	log = log.WithValues("host", host)
 
 	// Connect to the postgres maintenance database for server-level operations.
 	adminConnStr := postgres.ConnectionString{
 		Host:     host,
 		Database: "postgres",
-		User:     adminCredentials.User,
-		Password: adminCredentials.Password,
-		Params:   adminCredentials.Params,
+		User:     creds.User,
+		Password: creds.Password,
+		Params:   creds.Params,
 	}
-	adminDB, err := postgres.Connect(reqLogger, adminConnStr)
+	adminDB, err := postgres.Connect(log, adminConnStr)
 	if err != nil {
-		r.persistStatus(ctx, customRole, err)
 		return fmt.Errorf("connect to host: %w", err)
 	}
 	defer adminDB.Close()
 
 	// Create the role and apply server-level role grants.
-	if err := postgres.EnsureCustomRole(reqLogger, adminDB, customRole.Spec.RoleName, customRole.Spec.GrantRoles); err != nil {
-		r.persistStatus(ctx, customRole, err)
+	if err := postgres.EnsureCustomRole(log, adminDB, roleName, grantRoles); err != nil {
 		return fmt.Errorf("ensure role: %w", err)
 	}
 
-	// Apply per-database grants across all user databases.
-	if len(customRole.Spec.Grants) > 0 {
+	// Apply per-database grants across all user databases on this host.
+	if len(grants) > 0 {
 		databases, err := postgres.UserDatabases(adminDB)
 		if err != nil {
-			r.persistStatus(ctx, customRole, err)
 			return fmt.Errorf("list databases: %w", err)
 		}
 
-		grants := toPostgresGrants(customRole.Spec.Grants)
-
 		for _, dbName := range databases {
-			if err := r.applyGrantsOnDatabase(reqLogger, host, *adminCredentials, customRole.Spec.RoleName, dbName, grants); err != nil {
-				r.persistStatus(ctx, customRole, err)
+			if err := r.applyGrantsOnDatabase(log, host, creds, roleName, dbName, grants); err != nil {
 				return fmt.Errorf("apply grants on database %s: %w", dbName, err)
 			}
 		}
 	}
 
-	r.persistStatus(ctx, customRole, nil)
 	return nil
 }
 
@@ -192,39 +194,6 @@ func (r *CustomRoleReconciler) applyGrantsOnDatabase(log logr.Logger, host strin
 	return postgres.ApplyDatabaseGrants(log, db, roleName, grants)
 }
 
-func (r *CustomRoleReconciler) resolveHostCredentials(ctx context.Context, namespace, hostCredentialsName string) (string, *postgres.Credentials, error) {
-	var hostCreds postgresqlv1alpha1.PostgreSQLHostCredentials
-	err := r.Client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: hostCredentialsName}, &hostCreds)
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			return "", nil, ctlerrors.NewTemporary(fmt.Errorf("PostgreSQLHostCredentials %s/%s not found", namespace, hostCredentialsName))
-		}
-		return "", nil, fmt.Errorf("get PostgreSQLHostCredentials %s/%s: %w", namespace, hostCredentialsName, err)
-	}
-
-	user, err := kube.ResourceValue(r.Client, hostCreds.Spec.User, hostCreds.Namespace)
-	if err != nil {
-		return "", nil, fmt.Errorf("resolve user: %w", err)
-	}
-
-	password, err := kube.ResourceValue(r.Client, hostCreds.Spec.Password, hostCreds.Namespace)
-	if err != nil {
-		return "", nil, fmt.Errorf("resolve password: %w", err)
-	}
-
-	host, err := kube.ResourceValue(r.Client, hostCreds.Spec.Host, hostCreds.Namespace)
-	if err != nil {
-		return "", nil, fmt.Errorf("resolve host: %w", err)
-	}
-
-	return host, &postgres.Credentials{
-		Name:     user,
-		User:     user,
-		Password: password,
-		Params:   hostCreds.Spec.Params,
-	}, nil
-}
-
 func (r *CustomRoleReconciler) persistStatus(ctx context.Context, customRole *postgresqlv1alpha1.CustomRole, reconcileErr error) {
 	var phase postgresqlv1alpha1.CustomRolePhase
 	var errorMessage string
@@ -251,4 +220,23 @@ func (r *CustomRoleReconciler) persistStatus(ctx context.Context, customRole *po
 	if err := r.Client.Status().Update(ctx, customRole); err != nil {
 		r.Log.Error(err, "failed to update CustomRole status")
 	}
+}
+
+func customRoleRequeueStrategy(log logr.Logger, err error) (ctrl.Result, error) {
+	if err == nil {
+		return ctrl.Result{}, nil
+	}
+
+	if ctlerrors.IsInvalid(err) {
+		log.Info("Dropping CustomRole from queue as it is invalid", "error", err)
+		return reconcile.Result{}, nil
+	}
+
+	if ctlerrors.IsTemporary(err) {
+		log.Info("Failed to reconcile CustomRole object, attempting again shortly", "error", err)
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	log.Info("Failed to reconcile CustomRole object due to unknown error", "error", err)
+	return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 }
