@@ -27,9 +27,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	postgresqlv1alpha1 "go.lunarway.com/postgresql-controller/api/v1alpha1"
@@ -46,8 +50,11 @@ type CustomRoleReconciler struct {
 	HostCredentials map[string]postgres.Credentials
 }
 
+const customRoleFinalizer = "customrole.postgresql.lunar.tech/finalizer"
+
 //+kubebuilder:rbac:groups=postgresql.lunar.tech,resources=customroles,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=postgresql.lunar.tech,resources=customroles/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=postgresql.lunar.tech,resources=customroles/finalizers,verbs=update
 //+kubebuilder:rbac:groups=postgresql.lunar.tech,resources=postgresqldatabases,verbs=list;watch
 //+kubebuilder:rbac:groups="",resources=secrets;configmaps,verbs=get;list
 
@@ -71,6 +78,12 @@ func (r *CustomRoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&postgresqlv1alpha1.PostgreSQLDatabase{},
 			handler.EnqueueRequestsFromMapFunc(r.mapDatabaseToCustomRoles),
+			builder.WithPredicates(predicate.Funcs{
+				CreateFunc:  func(_ event.CreateEvent) bool { return true },
+				UpdateFunc:  func(_ event.UpdateEvent) bool { return false },
+				DeleteFunc:  func(_ event.DeleteEvent) bool { return false },
+				GenericFunc: func(_ event.GenericEvent) bool { return false },
+			}),
 		).
 		Complete(r)
 }
@@ -106,13 +119,40 @@ func (r *CustomRoleReconciler) reconcile(ctx context.Context, reqLogger logr.Log
 		return err
 	}
 
-	reqLogger = reqLogger.WithValues("roleName", customRole.Spec.RoleName)
+	roleName := customRole.Name
+	reqLogger = reqLogger.WithValues("roleName", roleName)
+
+	// Handle deletion: clean up the PostgreSQL role and its grants before
+	// allowing Kubernetes to remove the object.
+	if !customRole.DeletionTimestamp.IsZero() {
+		if controllerutil.ContainsFinalizer(customRole, customRoleFinalizer) {
+			reqLogger.V(1).Info("Cleaning up CustomRole before deletion")
+			if err := r.cleanupRole(ctx, reqLogger, roleName); err != nil {
+				return fmt.Errorf("cleanup role: %w", err)
+			}
+			controllerutil.RemoveFinalizer(customRole, customRoleFinalizer)
+			if err := r.Update(ctx, customRole); err != nil {
+				return fmt.Errorf("remove finalizer: %w", err)
+			}
+		}
+		return nil
+	}
+
+	// Ensure the finalizer is present so we can clean up on deletion.
+	if !controllerutil.ContainsFinalizer(customRole, customRoleFinalizer) {
+		controllerutil.AddFinalizer(customRole, customRoleFinalizer)
+		if err := r.Update(ctx, customRole); err != nil {
+			return fmt.Errorf("add finalizer: %w", err)
+		}
+		return nil
+	}
+
 	reqLogger.V(1).Info("Reconciling CustomRole resource")
 
 	grants := toPostgresGrants(customRole.Spec.Grants)
 
 	for host, creds := range r.HostCredentials {
-		if err := r.reconcileOnHost(reqLogger, host, creds, customRole.Spec.RoleName, customRole.Spec.GrantRoles, grants); err != nil {
+		if err := r.reconcileOnHost(reqLogger, host, creds, roleName, customRole.Spec.GrantRoles, grants); err != nil {
 			r.persistStatus(ctx, customRole, err)
 			return fmt.Errorf("reconcile on host %s: %w", host, err)
 		}
@@ -120,6 +160,57 @@ func (r *CustomRoleReconciler) reconcile(ctx context.Context, reqLogger logr.Log
 
 	r.persistStatus(ctx, customRole, nil)
 	return nil
+}
+
+func (r *CustomRoleReconciler) cleanupRole(_ context.Context, log logr.Logger, roleName string) error {
+	for host, creds := range r.HostCredentials {
+		if err := r.cleanupRoleOnHost(log, host, creds, roleName); err != nil {
+			return fmt.Errorf("cleanup on host %s: %w", host, err)
+		}
+	}
+	return nil
+}
+
+func (r *CustomRoleReconciler) cleanupRoleOnHost(log logr.Logger, host string, creds postgres.Credentials, roleName string) error {
+	adminConnStr := postgres.ConnectionString{
+		Host:     host,
+		Database: "postgres",
+		User:     creds.User,
+		Password: creds.Password,
+		Params:   creds.Params,
+	}
+	adminDB, err := postgres.Connect(log, adminConnStr)
+	if err != nil {
+		return fmt.Errorf("connect to host: %w", err)
+	}
+	defer adminDB.Close()
+
+	databases, err := postgres.UserDatabases(adminDB)
+	if err != nil {
+		return fmt.Errorf("list databases: %w", err)
+	}
+	for _, dbName := range databases {
+		connStr := postgres.ConnectionString{
+			Host:     host,
+			Database: dbName,
+			User:     creds.User,
+			Password: creds.Password,
+			Params:   creds.Params,
+		}
+		db, err := postgres.Connect(log, connStr)
+		if err != nil {
+			return fmt.Errorf("connect to %s: %w", dbName, err)
+		}
+		revokeErr := postgres.RevokeAllDatabaseGrants(log, db, roleName)
+		if closeErr := db.Close(); closeErr != nil {
+			log.Error(closeErr, "failed to close database connection", "database", dbName)
+		}
+		if revokeErr != nil {
+			return fmt.Errorf("revoke grants in database %s: %w", dbName, revokeErr)
+		}
+	}
+
+	return postgres.DropCustomRole(log, adminDB, roleName)
 }
 
 func (r *CustomRoleReconciler) reconcileOnHost(log logr.Logger, host string, creds postgres.Credentials, roleName string, grantRoles []string, grants []postgres.CustomRoleGrant) error {
@@ -144,17 +235,14 @@ func (r *CustomRoleReconciler) reconcileOnHost(log logr.Logger, host string, cre
 		return fmt.Errorf("ensure role: %w", err)
 	}
 
-	// Apply per-database grants across all user databases on this host.
-	if len(grants) > 0 {
-		databases, err := postgres.UserDatabases(adminDB)
-		if err != nil {
-			return fmt.Errorf("list databases: %w", err)
-		}
-
-		for _, dbName := range databases {
-			if err := r.applyGrantsOnDatabase(log, host, creds, roleName, dbName, grants); err != nil {
-				return fmt.Errorf("apply grants on database %s: %w", dbName, err)
-			}
+	// Sync per-database grants across all user databases on this host.
+	databases, err := postgres.UserDatabases(adminDB)
+	if err != nil {
+		return fmt.Errorf("list databases: %w", err)
+	}
+	for _, dbName := range databases {
+		if err := r.syncGrantsOnDatabase(log, host, creds, roleName, dbName, grants); err != nil {
+			return fmt.Errorf("sync grants on database %s: %w", dbName, err)
 		}
 	}
 
@@ -173,7 +261,7 @@ func toPostgresGrants(grants []postgresqlv1alpha1.CustomRoleGrant) []postgres.Cu
 	return result
 }
 
-func (r *CustomRoleReconciler) applyGrantsOnDatabase(log logr.Logger, host string, adminCredentials postgres.Credentials, roleName, dbName string, grants []postgres.CustomRoleGrant) error {
+func (r *CustomRoleReconciler) syncGrantsOnDatabase(log logr.Logger, host string, adminCredentials postgres.Credentials, roleName, dbName string, grants []postgres.CustomRoleGrant) error {
 	connStr := postgres.ConnectionString{
 		Host:     host,
 		Database: dbName,
@@ -191,7 +279,7 @@ func (r *CustomRoleReconciler) applyGrantsOnDatabase(log logr.Logger, host strin
 		}
 	}()
 
-	return postgres.ApplyDatabaseGrants(log, db, roleName, grants)
+	return postgres.SyncDatabaseGrants(log, db, roleName, grants)
 }
 
 func (r *CustomRoleReconciler) persistStatus(ctx context.Context, customRole *postgresqlv1alpha1.CustomRole, reconcileErr error) {

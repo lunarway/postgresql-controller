@@ -33,9 +33,13 @@ var allowedTablePrivileges = map[string]struct{}{
 	"ALL":        {},
 }
 
-// validatePrivileges returns an error if any value in privs is not a recognised
-// PostgreSQL table-level privilege keyword. Comparison is case-insensitive.
+// validatePrivileges returns an error if privs is empty or contains any value
+// that is not a recognised PostgreSQL table-level privilege keyword.
+// Comparison is case-insensitive.
 func validatePrivileges(privs []string) error {
+	if len(privs) == 0 {
+		return ctlerrors.NewInvalid(fmt.Errorf("privileges must not be empty"))
+	}
 	for _, p := range privs {
 		if _, ok := allowedTablePrivileges[strings.ToUpper(p)]; !ok {
 			return ctlerrors.NewInvalid(fmt.Errorf("invalid privilege %q: must be one of SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, ALL", p))
@@ -44,8 +48,10 @@ func validatePrivileges(privs []string) error {
 	return nil
 }
 
-// EnsureCustomRole creates a PostgreSQL role if it does not exist and applies
-// server-level role grants. The role is created with NOLOGIN.
+// EnsureCustomRole creates a PostgreSQL role if it does not exist and
+// synchronises server-level role grants to exactly match grantRoles:
+// roles no longer in the list are revoked and missing ones are granted.
+// The role is created with NOLOGIN.
 func EnsureCustomRole(log logr.Logger, db *sql.DB, roleName string, grantRoles []string) error {
 	log = log.WithValues("role", roleName)
 	log.V(1).Info("Ensuring custom role")
@@ -61,32 +67,99 @@ func EnsureCustomRole(log logr.Logger, db *sql.DB, roleName string, grantRoles [
 		log.V(1).Info("Role created")
 	}
 
-	if len(grantRoles) == 0 {
+	current, err := currentGrantedRoles(db, roleName)
+	if err != nil {
+		return fmt.Errorf("query granted roles for %s: %w", roleName, err)
+	}
+
+	desiredSet := make(map[string]struct{}, len(grantRoles))
+	for _, r := range grantRoles {
+		desiredSet[r] = struct{}{}
+	}
+
+	// Revoke roles no longer in the desired set.
+	for _, r := range current {
+		if _, ok := desiredSet[r]; !ok {
+			_, err := db.Exec(fmt.Sprintf("REVOKE %s FROM %s", pq.QuoteIdentifier(r), pq.QuoteIdentifier(roleName)))
+			if err != nil {
+				return fmt.Errorf("revoke role %s from %s: %w", r, roleName, err)
+			}
+			log.V(1).Info("Revoked role", "role", r)
+		}
+	}
+
+	// Grant roles not yet present.
+	currentSet := make(map[string]struct{}, len(current))
+	for _, r := range current {
+		currentSet[r] = struct{}{}
+	}
+	var toGrant []string
+	for _, r := range grantRoles {
+		if _, ok := currentSet[r]; !ok {
+			toGrant = append(toGrant, r)
+		}
+	}
+	if len(toGrant) == 0 {
 		return nil
 	}
-
-	quotedRoles := make([]string, len(grantRoles))
-	for i, r := range grantRoles {
+	quotedRoles := make([]string, len(toGrant))
+	for i, r := range toGrant {
 		quotedRoles[i] = pq.QuoteIdentifier(r)
 	}
-	joined := strings.Join(quotedRoles, ", ")
-	_, err = db.Exec(fmt.Sprintf("GRANT %s TO %s", joined, pq.QuoteIdentifier(roleName)))
+	_, err = db.Exec(fmt.Sprintf("GRANT %s TO %s", strings.Join(quotedRoles, ", "), pq.QuoteIdentifier(roleName)))
 	if err != nil {
-		return fmt.Errorf("grant roles %s to %s: %w", strings.Join(grantRoles, ", "), roleName, err)
+		return fmt.Errorf("grant roles %s to %s: %w", strings.Join(toGrant, ", "), roleName, err)
 	}
-	log.V(1).Info("Granted roles", "roles", grantRoles)
-
+	log.V(1).Info("Granted roles", "roles", toGrant)
 	return nil
 }
 
-// ApplyDatabaseGrants applies schema/table privilege grants to a role within the
-// already-connected database. Empty or "*" for Schema means all user-defined schemas;
-// empty or "*" for Table means all tables in the schema.
-func ApplyDatabaseGrants(log logr.Logger, db *sql.DB, roleName string, grants []CustomRoleGrant) error {
-	if len(grants) == 0 {
-		return nil
+// currentGrantedRoles returns the names of roles currently granted to roleName.
+func currentGrantedRoles(db *sql.DB, roleName string) ([]string, error) {
+	rows, err := db.Query(`
+		SELECT r.rolname
+		FROM pg_auth_members m
+		JOIN pg_roles r ON r.oid = m.roleid
+		JOIN pg_roles u ON u.oid = m.member
+		WHERE u.rolname = $1`, roleName)
+	if err != nil {
+		return nil, fmt.Errorf("query granted roles: %w", err)
+	}
+	defer rows.Close()
+	var roles []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, fmt.Errorf("scan role name: %w", err)
+		}
+		roles = append(roles, name)
+	}
+	return roles, rows.Err()
+}
+
+// SyncDatabaseGrants synchronises the role's privileges in the currently-connected
+// database to exactly match grants. Schemas where the role previously had USAGE are
+// fully revoked first, then the desired grants are re-applied, so removed privileges
+// and removed grants both converge to the desired state.
+func SyncDatabaseGrants(log logr.Logger, db *sql.DB, roleName string, grants []CustomRoleGrant) error {
+	// Revoke all existing schema/table grants for this role.
+	currentSchemas, err := currentGrantedSchemas(db, roleName)
+	if err != nil {
+		return err
+	}
+	quotedRole := pq.QuoteIdentifier(roleName)
+	for _, schema := range currentSchemas {
+		quotedSchema := pq.QuoteIdentifier(schema)
+		if _, err := db.Exec(fmt.Sprintf("REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA %s FROM %s", quotedSchema, quotedRole)); err != nil {
+			return fmt.Errorf("revoke table privileges on schema %s from %s: %w", schema, roleName, err)
+		}
+		if _, err := db.Exec(fmt.Sprintf("REVOKE USAGE ON SCHEMA %s FROM %s", quotedSchema, quotedRole)); err != nil {
+			return fmt.Errorf("revoke usage on schema %s from %s: %w", schema, roleName, err)
+		}
+		log.V(1).Info("Revoked schema grants", "schema", schema)
 	}
 
+	// Re-apply desired grants.
 	for _, grant := range grants {
 		schemas, err := resolveSchemas(db, grant.Schema)
 		if err != nil {
@@ -98,6 +171,64 @@ func ApplyDatabaseGrants(log logr.Logger, db *sql.DB, roleName string, grants []
 			}
 		}
 	}
+	return nil
+}
+
+// currentGrantedSchemas returns the names of schemas on which roleName has USAGE.
+func currentGrantedSchemas(db *sql.DB, roleName string) ([]string, error) {
+	rows, err := db.Query(`
+		SELECT DISTINCT n.nspname
+		FROM pg_namespace n,
+		     aclexplode(COALESCE(n.nspacl, acldefault('n', n.nspowner))) AS a
+		WHERE a.grantee = (SELECT oid FROM pg_roles WHERE rolname = $1)
+		  AND a.privilege_type = 'USAGE'
+		  AND n.nspname NOT LIKE 'pg_%'
+		  AND n.nspname <> 'information_schema'`, roleName)
+	if err != nil {
+		return nil, fmt.Errorf("query granted schemas for %s: %w", roleName, err)
+	}
+	defer rows.Close()
+	var schemas []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, fmt.Errorf("scan schema name: %w", err)
+		}
+		schemas = append(schemas, name)
+	}
+	return schemas, rows.Err()
+}
+
+// RevokeAllDatabaseGrants revokes all schema USAGE and table privileges that
+// roleName holds in the currently-connected database. It is used during CR
+// deletion to clean up before the role is dropped.
+func RevokeAllDatabaseGrants(log logr.Logger, db *sql.DB, roleName string) error {
+	schemas, err := currentGrantedSchemas(db, roleName)
+	if err != nil {
+		return err
+	}
+	quotedRole := pq.QuoteIdentifier(roleName)
+	for _, schema := range schemas {
+		quotedSchema := pq.QuoteIdentifier(schema)
+		if _, err := db.Exec(fmt.Sprintf("REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA %s FROM %s", quotedSchema, quotedRole)); err != nil {
+			return fmt.Errorf("revoke table privileges on schema %s from %s: %w", schema, roleName, err)
+		}
+		if _, err := db.Exec(fmt.Sprintf("REVOKE USAGE ON SCHEMA %s FROM %s", quotedSchema, quotedRole)); err != nil {
+			return fmt.Errorf("revoke usage on schema %s from %s: %w", schema, roleName, err)
+		}
+		log.V(1).Info("Revoked schema grants", "schema", schema)
+	}
+	return nil
+}
+
+// DropCustomRole drops the PostgreSQL role. All database-level grants must be
+// revoked (via RevokeAllDatabaseGrants) on every database before calling this.
+func DropCustomRole(log logr.Logger, db *sql.DB, roleName string) error {
+	log = log.WithValues("role", roleName)
+	if _, err := db.Exec(fmt.Sprintf("DROP ROLE IF EXISTS %s", pq.QuoteIdentifier(roleName))); err != nil {
+		return fmt.Errorf("drop role %s: %w", roleName, err)
+	}
+	log.V(1).Info("Dropped role")
 	return nil
 }
 

@@ -117,7 +117,7 @@ func TestApplyDatabaseGrants_specificSchemaAllTables(t *testing.T) {
 	// Create the role and apply grants
 	require.NoError(t, postgres.EnsureCustomRole(log, adminDB, roleName, nil))
 
-	err = postgres.ApplyDatabaseGrants(log, targetDB, roleName, []postgres.CustomRoleGrant{
+	err = postgres.SyncDatabaseGrants(log, targetDB, roleName, []postgres.CustomRoleGrant{
 		{Schema: schemaName, Privileges: []string{"SELECT"}},
 	})
 	require.NoError(t, err)
@@ -167,7 +167,7 @@ func TestApplyDatabaseGrants_specificTable(t *testing.T) {
 
 	require.NoError(t, postgres.EnsureCustomRole(log, adminDB, roleName, nil))
 
-	err = postgres.ApplyDatabaseGrants(log, targetDB, roleName, []postgres.CustomRoleGrant{
+	err = postgres.SyncDatabaseGrants(log, targetDB, roleName, []postgres.CustomRoleGrant{
 		{Schema: schemaName, Table: tableName, Privileges: []string{"SELECT"}},
 	})
 	require.NoError(t, err)
@@ -220,7 +220,7 @@ func TestApplyDatabaseGrants_allSchemasAllTables(t *testing.T) {
 	require.NoError(t, postgres.EnsureCustomRole(log, adminDB, roleName, nil))
 
 	// Empty schema = all schemas
-	err = postgres.ApplyDatabaseGrants(log, targetDB, roleName, []postgres.CustomRoleGrant{
+	err = postgres.SyncDatabaseGrants(log, targetDB, roleName, []postgres.CustomRoleGrant{
 		{Privileges: []string{"SELECT"}},
 	})
 	require.NoError(t, err)
@@ -270,8 +270,138 @@ func TestApplyDatabaseGrants_idempotent(t *testing.T) {
 	require.NoError(t, postgres.EnsureCustomRole(log, adminDB, roleName, nil))
 
 	grants := []postgres.CustomRoleGrant{{Schema: schemaName, Privileges: []string{"SELECT"}}}
-	require.NoError(t, postgres.ApplyDatabaseGrants(log, targetDB, roleName, grants))
-	require.NoError(t, postgres.ApplyDatabaseGrants(log, targetDB, roleName, grants), "second call should be idempotent")
+	require.NoError(t, postgres.SyncDatabaseGrants(log, targetDB, roleName, grants))
+	require.NoError(t, postgres.SyncDatabaseGrants(log, targetDB, roleName, grants), "second call should be idempotent")
+}
+
+func TestSyncDatabaseGrants_revokesRemovedPrivilege(t *testing.T) {
+	host := test.Integration(t)
+	log := test.SetLogger(t)
+
+	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     host,
+		Database: "postgres",
+		User:     "iam_creator",
+		Password: "iam_creator",
+	})
+	require.NoError(t, err)
+	defer adminDB.Close()
+
+	epoch := time.Now().UnixNano()
+	dbName := fmt.Sprintf("test_%d", epoch)
+	roleName := fmt.Sprintf("custom_role_%d", epoch)
+	schemaName := fmt.Sprintf("schema_%d", epoch)
+	tableName := fmt.Sprintf("table_%d", epoch)
+
+	require.NoError(t, createManagerRole(log, adminDB, "postgres_role_name"))
+	require.NoError(t, postgres.Database(log, host,
+		postgres.Credentials{User: "iam_creator", Password: "iam_creator"},
+		postgres.Credentials{Name: dbName, User: dbName, Password: "test"},
+		"postgres_role_name", nil,
+	))
+
+	targetDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     host,
+		Database: dbName,
+		User:     "iam_creator",
+		Password: "iam_creator",
+	})
+	require.NoError(t, err)
+	defer targetDB.Close()
+
+	dbExec(t, targetDB, fmt.Sprintf("CREATE SCHEMA %s", schemaName))
+	dbExec(t, targetDB, fmt.Sprintf("CREATE TABLE %s.%s (id int)", schemaName, tableName))
+
+	require.NoError(t, postgres.EnsureCustomRole(log, adminDB, roleName, nil))
+
+	// Apply SELECT and DELETE.
+	require.NoError(t, postgres.SyncDatabaseGrants(log, targetDB, roleName, []postgres.CustomRoleGrant{
+		{Schema: schemaName, Table: tableName, Privileges: []string{"SELECT", "DELETE"}},
+	}))
+	require.True(t, tablePrivilegeGranted(t, targetDB, roleName, schemaName, tableName, "SELECT"))
+	require.True(t, tablePrivilegeGranted(t, targetDB, roleName, schemaName, tableName, "DELETE"))
+
+	// Re-sync with only SELECT — DELETE should be revoked.
+	require.NoError(t, postgres.SyncDatabaseGrants(log, targetDB, roleName, []postgres.CustomRoleGrant{
+		{Schema: schemaName, Table: tableName, Privileges: []string{"SELECT"}},
+	}))
+	assert.True(t, tablePrivilegeGranted(t, targetDB, roleName, schemaName, tableName, "SELECT"), "SELECT should remain")
+	assert.False(t, tablePrivilegeGranted(t, targetDB, roleName, schemaName, tableName, "DELETE"), "DELETE should be revoked")
+}
+
+func TestSyncDatabaseGrants_revokesRemovedGrant(t *testing.T) {
+	host := test.Integration(t)
+	log := test.SetLogger(t)
+
+	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     host,
+		Database: "postgres",
+		User:     "iam_creator",
+		Password: "iam_creator",
+	})
+	require.NoError(t, err)
+	defer adminDB.Close()
+
+	epoch := time.Now().UnixNano()
+	dbName := fmt.Sprintf("test_%d", epoch)
+	roleName := fmt.Sprintf("custom_role_%d", epoch)
+	schemaName := fmt.Sprintf("schema_%d", epoch)
+	tableName := fmt.Sprintf("table_%d", epoch)
+
+	require.NoError(t, createManagerRole(log, adminDB, "postgres_role_name"))
+	require.NoError(t, postgres.Database(log, host,
+		postgres.Credentials{User: "iam_creator", Password: "iam_creator"},
+		postgres.Credentials{Name: dbName, User: dbName, Password: "test"},
+		"postgres_role_name", nil,
+	))
+
+	targetDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     host,
+		Database: dbName,
+		User:     "iam_creator",
+		Password: "iam_creator",
+	})
+	require.NoError(t, err)
+	defer targetDB.Close()
+
+	dbExec(t, targetDB, fmt.Sprintf("CREATE SCHEMA %s", schemaName))
+	dbExec(t, targetDB, fmt.Sprintf("CREATE TABLE %s.%s (id int)", schemaName, tableName))
+
+	require.NoError(t, postgres.EnsureCustomRole(log, adminDB, roleName, nil))
+
+	// Apply a grant on the schema.
+	require.NoError(t, postgres.SyncDatabaseGrants(log, targetDB, roleName, []postgres.CustomRoleGrant{
+		{Schema: schemaName, Privileges: []string{"SELECT"}},
+	}))
+	require.True(t, tablePrivilegeGranted(t, targetDB, roleName, schemaName, tableName, "SELECT"))
+
+	// Re-sync with no grants — all privileges should be revoked.
+	require.NoError(t, postgres.SyncDatabaseGrants(log, targetDB, roleName, nil))
+	assert.False(t, tablePrivilegeGranted(t, targetDB, roleName, schemaName, tableName, "SELECT"), "SELECT should be revoked")
+}
+
+func TestEnsureCustomRole_revokesRemovedRole(t *testing.T) {
+	host := test.Integration(t)
+	log := test.SetLogger(t)
+
+	db, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     host,
+		Database: "postgres",
+		User:     "iam_creator",
+		Password: "iam_creator",
+	})
+	require.NoError(t, err)
+	defer db.Close()
+
+	roleName := fmt.Sprintf("custom_role_%d", time.Now().UnixNano())
+
+	// Grant pg_monitor.
+	require.NoError(t, postgres.EnsureCustomRole(log, db, roleName, []string{"pg_monitor"}))
+	require.Contains(t, grantedRoles(t, db, roleName), "pg_monitor")
+
+	// Re-sync with empty list — pg_monitor should be revoked.
+	require.NoError(t, postgres.EnsureCustomRole(log, db, roleName, nil))
+	assert.NotContains(t, grantedRoles(t, db, roleName), "pg_monitor", "pg_monitor should be revoked")
 }
 
 func TestUserDatabases(t *testing.T) {

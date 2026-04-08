@@ -23,11 +23,8 @@ import (
 // CustomRoleSpec defines the desired state of CustomRole
 // +k8s:openapi-gen=true
 type CustomRoleSpec struct {
-	// RoleName is the name of the PostgreSQL role to create
-	RoleName string `json:"roleName"`
-
 	// GrantRoles is a list of existing PostgreSQL roles to grant to this role
-	// (e.g. pg_monitor, pg_read_all_data, or another CustomRole's roleName).
+	// (e.g. pg_monitor, pg_read_all_data, or another CustomRole's name).
 	// These are applied at the server level.
 	// +optional
 	GrantRoles []string `json:"grantRoles,omitempty"`
@@ -85,7 +82,7 @@ type CustomRoleStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Role",type="string",JSONPath=".spec.roleName"
+// +kubebuilder:printcolumn:name="Role",type="string",JSONPath=".metadata.name"
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.phase"
 // +kubebuilder:printcolumn:name="Error",type="string",JSONPath=".status.error"
 

@@ -15,7 +15,7 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.roleName
+    - jsonPath: .metadata.name
       name: Role
       type: string
     - jsonPath: .status.phase
@@ -52,7 +52,7 @@ spec:
               grantRoles:
                 description: |-
                   GrantRoles is a list of existing PostgreSQL roles to grant to this role
-                  (e.g. pg_monitor, pg_read_all_data, or another CustomRole's roleName).
+                  (e.g. pg_monitor, pg_read_all_data, or another CustomRole's name).
                   These are applied at the server level.
                 items:
                   type: string
@@ -85,11 +85,6 @@ spec:
                   - privileges
                   type: object
                 type: array
-              roleName:
-                description: RoleName is the name of the PostgreSQL role to create
-                type: string
-            required:
-            - roleName
             type: object
           status:
             description: CustomRoleStatus defines the observed state of CustomRole
