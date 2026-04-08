@@ -227,7 +227,16 @@ func SyncDatabaseGrants(log logr.Logger, db *sql.DB, roleName string, grants []C
 		}
 	}
 	for tk, privs := range toRevoke {
-		privList := strings.Join(privs, ", ")
+		var validPrivs []string
+		for _, p := range privs {
+			if _, ok := allowedTablePrivileges[p]; ok {
+				validPrivs = append(validPrivs, p)
+			}
+		}
+		if len(validPrivs) == 0 {
+			continue
+		}
+		privList := strings.Join(validPrivs, ", ")
 		if _, err := db.Exec(fmt.Sprintf("REVOKE %s ON TABLE %s.%s FROM %s",
 			privList,
 			pq.QuoteIdentifier(tk.schema),
@@ -235,7 +244,7 @@ func SyncDatabaseGrants(log logr.Logger, db *sql.DB, roleName string, grants []C
 			pq.QuoteIdentifier(roleName))); err != nil {
 			return fmt.Errorf("revoke %s on %s.%s from %s: %w", privList, tk.schema, tk.table, roleName, err)
 		}
-		log.V(1).Info("Revoked privileges", "schema", tk.schema, "table", tk.table, "privileges", privs)
+		log.V(1).Info("Revoked privileges", "schema", tk.schema, "table", tk.table, "privileges", validPrivs)
 	}
 
 	// 4. Revoke USAGE on schemas that no longer have any desired grants.

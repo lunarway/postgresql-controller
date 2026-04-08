@@ -79,8 +79,19 @@ func (r *CustomRoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&postgresqlv1alpha1.PostgreSQLDatabase{},
 			handler.EnqueueRequestsFromMapFunc(r.mapDatabaseToCustomRoles),
 			builder.WithPredicates(predicate.Funcs{
-				CreateFunc:  func(_ event.CreateEvent) bool { return true },
-				UpdateFunc:  func(_ event.UpdateEvent) bool { return false },
+				CreateFunc: func(_ event.CreateEvent) bool { return true },
+				// Fire when a database transitions to Running so that any grants that
+				// were skipped (because the database did not yet exist on the server
+				// when the CreateFunc fired) are applied as soon as it is ready.
+				UpdateFunc: func(e event.UpdateEvent) bool {
+					oldDB, ok1 := e.ObjectOld.(*postgresqlv1alpha1.PostgreSQLDatabase)
+					newDB, ok2 := e.ObjectNew.(*postgresqlv1alpha1.PostgreSQLDatabase)
+					if !ok1 || !ok2 {
+						return false
+					}
+					return oldDB.Status.Phase != postgresqlv1alpha1.PostgreSQLDatabasePhaseRunning &&
+						newDB.Status.Phase == postgresqlv1alpha1.PostgreSQLDatabasePhaseRunning
+				},
 				DeleteFunc:  func(_ event.DeleteEvent) bool { return false },
 				GenericFunc: func(_ event.GenericEvent) bool { return false },
 			}),
