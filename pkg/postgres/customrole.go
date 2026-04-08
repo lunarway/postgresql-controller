@@ -163,7 +163,7 @@ func SyncDatabaseGrants(log logr.Logger, db *sql.DB, roleName string, grants []C
 		currentSet[g] = struct{}{}
 	}
 
-	desiredGrants, err := expandGrants(db, grants)
+	desiredGrants, err := expandGrants(log, db, grants)
 	if err != nil {
 		return err
 	}
@@ -284,8 +284,17 @@ func currentTableGrants(db *sql.DB, roleName string) ([]grantKey, error) {
 
 // resolveTables returns the tables to apply a grant to within schema.
 // If table is empty or "*" it returns all regular tables in the schema.
+// For a concrete table name it checks existence; returns nil (not an error)
+// if the table is not present in this database so callers can skip it.
 func resolveTables(db *sql.DB, schema, table string) ([]string, error) {
 	if table != "" && table != "*" {
+		var exists bool
+		if err := db.QueryRow(`SELECT EXISTS(SELECT 1 FROM pg_tables WHERE schemaname = $1 AND tablename = $2)`, schema, table).Scan(&exists); err != nil {
+			return nil, fmt.Errorf("check table %s.%s existence: %w", schema, table, err)
+		}
+		if !exists {
+			return nil, nil
+		}
 		return []string{table}, nil
 	}
 	rows, err := db.Query(`
@@ -309,17 +318,28 @@ func resolveTables(db *sql.DB, schema, table string) ([]string, error) {
 
 // expandGrants resolves all CustomRoleGrant entries to concrete
 // (schema, table, privilege) tuples against the current database.
-func expandGrants(db *sql.DB, grants []CustomRoleGrant) ([]grantKey, error) {
+// Missing schemas or tables are skipped with a warning log rather than
+// causing an error, so that a grant targeting objects absent from one
+// database does not block processing of other databases.
+func expandGrants(log logr.Logger, db *sql.DB, grants []CustomRoleGrant) ([]grantKey, error) {
 	var result []grantKey
 	for _, grant := range grants {
 		schemas, err := resolveSchemas(db, grant.Schema)
 		if err != nil {
 			return nil, fmt.Errorf("resolve schemas: %w", err)
 		}
+		if len(schemas) == 0 {
+			log.V(1).Info("Schema not found in this database, skipping grant", "schema", grant.Schema)
+			continue
+		}
 		for _, schema := range schemas {
 			tables, err := resolveTables(db, schema, grant.Table)
 			if err != nil {
 				return nil, fmt.Errorf("resolve tables in schema %s: %w", schema, err)
+			}
+			if len(tables) == 0 && grant.Table != "" && grant.Table != "*" {
+				log.V(1).Info("Table not found in this database, skipping grant", "schema", schema, "table", grant.Table)
+				continue
 			}
 			for _, table := range tables {
 				for _, priv := range grant.Privileges {
@@ -418,8 +438,17 @@ func UserDatabases(db *sql.DB) ([]string, error) {
 
 // resolveSchemas returns the schemas to apply a grant to. If schema is empty or
 // "*" it returns all user-defined schemas in the current database.
+// For a concrete schema name it checks existence; returns nil (not an error)
+// if the schema is not present in this database so callers can skip it.
 func resolveSchemas(db *sql.DB, schema string) ([]string, error) {
 	if schema != "" && schema != "*" {
+		var exists bool
+		if err := db.QueryRow(`SELECT EXISTS(SELECT 1 FROM pg_catalog.pg_namespace WHERE nspname = $1)`, schema).Scan(&exists); err != nil {
+			return nil, fmt.Errorf("check schema %s existence: %w", schema, err)
+		}
+		if !exists {
+			return nil, nil
+		}
 		return []string{schema}, nil
 	}
 	rows, err := db.Query(`

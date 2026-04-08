@@ -771,6 +771,66 @@ func TestUserDatabases(t *testing.T) {
 	assert.NotContains(t, databases, "postgres", "postgres maintenance database should be excluded")
 }
 
+func TestSyncDatabaseGrants_skipsMissingSchemaAndTable(t *testing.T) {
+	host := test.Integration(t)
+	log := test.SetLogger(t)
+
+	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host:     host,
+		Database: "postgres",
+		User:     "iam_creator",
+		Password: "iam_creator",
+	})
+	require.NoError(t, err)
+	defer adminDB.Close()
+
+	epoch := time.Now().UnixNano()
+	dbName := fmt.Sprintf("test_%d", epoch)
+	roleName := fmt.Sprintf("custom_role_%d", epoch)
+	schemaName := fmt.Sprintf("schema_%d", epoch)
+	tableName := fmt.Sprintf("table_%d", epoch)
+
+	require.NoError(t, createManagerRole(log, adminDB, "postgres_role_name"))
+	require.NoError(t, postgres.Database(log, host,
+		postgres.Credentials{User: "iam_creator", Password: "iam_creator"},
+		postgres.Credentials{Name: dbName, User: dbName, Password: "test"},
+		"postgres_role_name", nil,
+	))
+
+	targetDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host: host, Database: dbName, User: "iam_creator", Password: "iam_creator",
+	})
+	require.NoError(t, err)
+	defer targetDB.Close()
+
+	dbExec(t, targetDB, fmt.Sprintf("CREATE SCHEMA %s", schemaName))
+	dbExec(t, targetDB, fmt.Sprintf("CREATE TABLE %s.%s (id int)", schemaName, tableName))
+
+	require.NoError(t, postgres.EnsureCustomRole(log, adminDB, roleName, nil))
+
+	// Reference a schema that does not exist — should not error, just skip.
+	err = postgres.SyncDatabaseGrants(log, targetDB, roleName, []postgres.CustomRoleGrant{
+		{Schema: "nonexistent_schema", Table: tableName, Privileges: []string{"SELECT"}},
+	})
+	require.NoError(t, err, "missing schema should be silently skipped")
+	assert.False(t, tablePrivilegeGranted(t, targetDB, roleName, schemaName, tableName, "SELECT"), "no grant should be applied")
+
+	// Reference a table that does not exist in an existing schema — should not error, just skip.
+	err = postgres.SyncDatabaseGrants(log, targetDB, roleName, []postgres.CustomRoleGrant{
+		{Schema: schemaName, Table: "nonexistent_table", Privileges: []string{"SELECT"}},
+	})
+	require.NoError(t, err, "missing table should be silently skipped")
+	assert.False(t, tablePrivilegeGranted(t, targetDB, roleName, schemaName, tableName, "SELECT"), "no grant should be applied")
+
+	// Existing objects still work alongside missing ones in the same spec.
+	err = postgres.SyncDatabaseGrants(log, targetDB, roleName, []postgres.CustomRoleGrant{
+		{Schema: schemaName, Table: tableName, Privileges: []string{"SELECT"}},
+		{Schema: "nonexistent_schema", Table: tableName, Privileges: []string{"SELECT"}},
+	})
+	require.NoError(t, err, "mixed existent/non-existent should not error")
+	assert.True(t, tablePrivilegeGranted(t, targetDB, roleName, schemaName, tableName, "SELECT"), "existing table should still be granted")
+}
+
 // roleExists returns true if a role with the given name exists in pg_roles.
 func roleExists(t *testing.T, db *sql.DB, roleName string) bool {
 	t.Helper()
