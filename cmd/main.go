@@ -189,6 +189,14 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "PostgreSQLServiceUser")
 		os.Exit(1)
 	}
+	if err = (&controller.CustomRoleReconciler{
+		Client:          mgr.GetClient(),
+		Log:             ctrl.Log.WithName("controllers").WithName("CustomRole"),
+		HostCredentials: config.HostCredentials,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "CustomRole")
+		os.Exit(1)
+	}
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

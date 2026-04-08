@@ -15,6 +15,7 @@ rules:
 - apiGroups:
   - postgresql.lunar.tech
   resources:
+  - customroles
   - postgresqldatabases
   - postgresqlserviceusers
   - postgresqlusers
@@ -29,6 +30,7 @@ rules:
 - apiGroups:
   - postgresql.lunar.tech
   resources:
+  - customroles/status
   - postgresqldatabases/status
   - postgresqlhostcredentials/status
   - postgresqlserviceusers/status
