@@ -1,0 +1,13 @@
+apiVersion: postgresql.lunar.tech/v1alpha1
+kind: CustomRole
+metadata:
+  name: reporting
+spec:
+  grantRoles:
+    - pg_monitor
+  grants:
+    - schema: public
+      privileges: [SELECT]
+    - schema: audit
+      table: events
+      privileges: [SELECT, INSERT]
