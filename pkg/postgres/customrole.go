@@ -365,8 +365,9 @@ func currentGrantedSchemas(db *sql.DB, roleName string) ([]string, error) {
 	rows, err := db.Query(`
 		SELECT DISTINCT n.nspname
 		FROM pg_namespace n,
-		     aclexplode(COALESCE(n.nspacl, acldefault('n', n.nspowner))) AS a
-		WHERE a.grantee = (SELECT oid FROM pg_roles WHERE rolname = $1)
+		     aclexplode(n.nspacl) AS a
+		WHERE n.nspacl IS NOT NULL
+		  AND a.grantee = (SELECT oid FROM pg_roles WHERE rolname = $1)
 		  AND a.privilege_type = 'USAGE'
 		  AND n.nspname NOT LIKE 'pg_%'
 		  AND n.nspname <> 'information_schema'`, roleName)

@@ -207,8 +207,7 @@ Valid privilege keywords: `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `TRUNCATE`, `R
 
 ### Examples
 
-<details>
-<summary>Read-only role across all schemas and tables</summary>
+#### Read-only role across all schemas and tables
 
 Grants `SELECT` on every table in every user-defined schema in every database on the host. Useful for read-only reporting or analytics access.
 
@@ -222,10 +221,7 @@ spec:
     - privileges: [SELECT]
 ```
 
-</details>
-
-<details>
-<summary>Read-only role using pg_read_all_data (PostgreSQL 14+)</summary>
+#### Read-only role using pg_read_all_data (PostgreSQL 14+)
 
 Uses the built-in `pg_read_all_data` server role, which grants `SELECT` on all tables, views, and sequences. No per-database grants are required.
 
@@ -239,10 +235,7 @@ spec:
     - pg_read_all_data
 ```
 
-</details>
-
-<details>
-<summary>Write role on a specific schema</summary>
+#### Write role on a specific schema
 
 Grants full DML access (`SELECT`, `INSERT`, `UPDATE`, `DELETE`) on all tables in the `orders` schema only. Useful for a service that owns a single schema.
 
@@ -257,10 +250,7 @@ spec:
       privileges: [SELECT, INSERT, UPDATE, DELETE]
 ```
 
-</details>
-
-<details>
-<summary>Targeted grant on a single table</summary>
+#### Targeted grant on a single table
 
 Grants `SELECT` on the `audit_log` table in the `public` schema only. Tables absent from a given database are automatically skipped.
 
@@ -276,10 +266,7 @@ spec:
       privileges: [SELECT]
 ```
 
-</details>
-
-<details>
-<summary>Role combining server-level membership and table grants</summary>
+#### Role combining server-level membership and table grants
 
 Grants `pg_monitor` for server monitoring and also grants `SELECT` on all tables in the `metrics` schema for application-level metrics queries.
 
@@ -295,8 +282,6 @@ spec:
     - schema: metrics
       privileges: [SELECT]
 ```
-
-</details>
 
 ### Deletion
 
