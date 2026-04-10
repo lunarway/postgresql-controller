@@ -1,0 +1,110 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.1
+  name: customroles.postgresql.lunar.tech
+spec:
+  group: postgresql.lunar.tech
+  names:
+    kind: CustomRole
+    listKind: CustomRoleList
+    plural: customroles
+    singular: customrole
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .metadata.name
+      name: Role
+      type: string
+    - jsonPath: .status.phase
+      name: Status
+      type: string
+    - jsonPath: .status.error
+      name: Error
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: CustomRole is the Schema for the customroles API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: CustomRoleSpec defines the desired state of CustomRole
+            properties:
+              grantRoles:
+                description: |-
+                  GrantRoles is a list of existing PostgreSQL roles to grant to this role
+                  (e.g. pg_monitor, pg_read_all_data, or another CustomRole's name).
+                  These are applied at the server level.
+                items:
+                  type: string
+                type: array
+              grants:
+                description: |-
+                  Grants is a list of schema/table privilege grants applied to every database
+                  on the host. Reconciled whenever a new PostgreSQLDatabase is created.
+                items:
+                  description: CustomRoleGrant defines schema/table privileges to
+                    grant to the role.
+                  properties:
+                    privileges:
+                      description: Privileges is a list of PostgreSQL privilege keywords
+                        (e.g. SELECT, INSERT, UPDATE, DELETE)
+                      items:
+                        type: string
+                      type: array
+                    schema:
+                      description: |-
+                        Schema is the schema to grant privileges on.
+                        Use "*" or omit to target all user-defined schemas.
+                      type: string
+                    table:
+                      description: |-
+                        Table is the table to grant privileges on within Schema.
+                        Use "*" or omit to target all tables in the schema.
+                      type: string
+                  required:
+                  - privileges
+                  type: object
+                type: array
+            type: object
+          status:
+            description: CustomRoleStatus defines the observed state of CustomRole
+            properties:
+              error:
+                description: Error contains the error message when Phase is Failed
+                  or Invalid
+                type: string
+              phase:
+                description: Phase is the current phase of the CustomRole resource
+                type: string
+              phaseUpdated:
+                description: PhaseUpdated is the time when the phase last changed
+                format: date-time
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

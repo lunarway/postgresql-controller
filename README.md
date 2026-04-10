@@ -153,6 +153,148 @@ A policy will also be added to AWS IAM for the specific user allowing it to conn
 }
 ```
 
+## Custom Roles
+
+The CRD `CustomRole` provisions a PostgreSQL role (with `NOLOGIN`) and keeps its server-level role memberships and per-database table privileges in sync across every host the controller manages.
+
+The resource name becomes the PostgreSQL role name.
+
+```yaml
+apiVersion: postgresql.lunar.tech/v1alpha1
+kind: CustomRole
+metadata:
+  name: reporting
+spec:
+  grantRoles:
+    - pg_read_all_data
+  grants:
+    - schema: public
+      privileges: [SELECT]
+```
+
+The controller reconciles the role on every reconcile loop:
+
+1. Creates the role if it does not exist (idempotent).
+2. Grants or revokes server-level roles (`grantRoles`) so the current membership exactly matches the spec.
+3. For every user database on the host, grants or revokes table privileges (`grants`) so they exactly match the spec. Schema `USAGE` is managed automatically.
+
+Grants that reference a schema or table absent from a particular database are silently skipped for that database, so a single `CustomRole` can safely target objects that only exist in some databases.
+
+The controller also watches `PostgreSQLDatabase` resources and re-reconciles all `CustomRole` objects in the same namespace whenever a database transitions to the `Running` phase. This ensures grants are applied to a freshly provisioned database as soon as it is ready.
+
+### `grantRoles`
+
+`grantRoles` is a list of existing PostgreSQL roles to grant to this role at the server level. Common examples are built-in PostgreSQL roles such as `pg_monitor` or `pg_read_all_data`, or another `CustomRole` name to build a role hierarchy.
+
+```yaml
+spec:
+  grantRoles:
+    - pg_monitor
+    - pg_read_all_data
+```
+
+### `grants`
+
+`grants` is a list of table privilege entries applied to every database on the host. Each entry has three fields:
+
+| Field | Description |
+|-------|-------------|
+| `schema` | Schema to target. Use `"*"` or omit to target all user-defined schemas. |
+| `table` | Table to target within the schema. Use `"*"` or omit to target all tables. |
+| `privileges` | Non-empty list of PostgreSQL table-level privilege keywords. |
+
+Valid privilege keywords: `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `TRUNCATE`, `REFERENCES`, `TRIGGER`.
+
+### Examples
+
+#### Read-only role across all schemas and tables
+
+Grants `SELECT` on every table in every user-defined schema in every database on the host. Useful for read-only reporting or analytics access.
+
+```yaml
+apiVersion: postgresql.lunar.tech/v1alpha1
+kind: CustomRole
+metadata:
+  name: readonly
+spec:
+  grants:
+    - privileges: [SELECT]
+```
+
+#### Read-only role using pg_read_all_data (PostgreSQL 14+)
+
+Uses the built-in `pg_read_all_data` server role, which grants `SELECT` on all tables, views, and sequences. No per-database grants are required.
+
+```yaml
+apiVersion: postgresql.lunar.tech/v1alpha1
+kind: CustomRole
+metadata:
+  name: readonly
+spec:
+  grantRoles:
+    - pg_read_all_data
+```
+
+#### Write role on a specific schema
+
+Grants full DML access (`SELECT`, `INSERT`, `UPDATE`, `DELETE`) on all tables in the `orders` schema only. Useful for a service that owns a single schema.
+
+```yaml
+apiVersion: postgresql.lunar.tech/v1alpha1
+kind: CustomRole
+metadata:
+  name: orders-writer
+spec:
+  grants:
+    - schema: orders
+      privileges: [SELECT, INSERT, UPDATE, DELETE]
+```
+
+#### Targeted grant on a single table
+
+Grants `SELECT` on the `audit_log` table in the `public` schema only. Tables absent from a given database are automatically skipped.
+
+```yaml
+apiVersion: postgresql.lunar.tech/v1alpha1
+kind: CustomRole
+metadata:
+  name: audit-reader
+spec:
+  grants:
+    - schema: public
+      table: audit_log
+      privileges: [SELECT]
+```
+
+#### Role combining server-level membership and table grants
+
+Grants `pg_monitor` for server monitoring and also grants `SELECT` on all tables in the `metrics` schema for application-level metrics queries.
+
+```yaml
+apiVersion: postgresql.lunar.tech/v1alpha1
+kind: CustomRole
+metadata:
+  name: monitoring
+spec:
+  grantRoles:
+    - pg_monitor
+  grants:
+    - schema: metrics
+      privileges: [SELECT]
+```
+
+### Deletion
+
+When a `CustomRole` resource is deleted the controller revokes all table privileges and schema `USAGE` grants it holds in every database, then drops the PostgreSQL role. The resource uses a Kubernetes finalizer to ensure this cleanup completes before the object is removed.
+
+### Status
+
+| Phase | Meaning |
+|-------|---------|
+| `Running` | Role and all grants are in sync. |
+| `Failed` | A transient error occurred; the controller will retry. |
+| `Invalid` | The spec is invalid (e.g. unknown privilege keyword); the resource will not be retried until the spec changes. |
+
 # Development
 
 This project uses the [Operator SDK framework](https://github.com/operator-framework/operator-sdk) and its associated CLI.  
