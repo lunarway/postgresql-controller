@@ -420,11 +420,11 @@ func DropCustomRole(log logr.Logger, db *sql.DB, roleName string) error {
 }
 
 // UserDatabases returns the names of all non-template databases on the server,
-// excluding the postgres maintenance database.
+// excluding system databases (postgres, rdsadmin) and template databases.
 func UserDatabases(db *sql.DB) ([]string, error) {
 	rows, err := db.Query(`
 		SELECT datname FROM pg_database
-		WHERE datistemplate = false AND datname <> 'postgres'
+		WHERE datistemplate = false AND datname NOT IN ('postgres', 'rdsadmin')
 		ORDER BY datname`)
 	if err != nil {
 		return nil, fmt.Errorf("query databases: %w", err)
