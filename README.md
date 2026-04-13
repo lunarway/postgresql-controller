@@ -195,7 +195,7 @@ spec:
 
 ### `grants`
 
-`grants` is a list of table privilege entries applied to every database on the host. Each entry has three fields:
+`grants` is a list of table privilege entries applied to every user database on the host. System databases (`postgres`, `rdsadmin`, and template databases) are excluded. Each entry has three fields:
 
 | Field | Description |
 |-------|-------------|

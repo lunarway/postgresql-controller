@@ -769,6 +769,7 @@ func TestUserDatabases(t *testing.T) {
 
 	assert.Contains(t, databases, dbName, "created database should appear in list")
 	assert.NotContains(t, databases, "postgres", "postgres maintenance database should be excluded")
+	assert.NotContains(t, databases, "rdsadmin", "RDS internal database should be excluded")
 }
 
 func TestSyncDatabaseGrants_skipsMissingSchemaAndTable(t *testing.T) {
