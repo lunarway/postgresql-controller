@@ -432,6 +432,7 @@ func RevokeAllDatabaseGrants(log logr.Logger, db *sql.DB, roleName string) error
 			}
 			log.Info("Skipping schema USAGE revoke: permission denied", "schema", schema, "role", roleName)
 		}
+		log.Info("Revoked schema grants", "schema", schema)
 	}
 	return nil
 }
