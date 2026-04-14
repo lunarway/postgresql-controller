@@ -832,6 +832,144 @@ func TestSyncDatabaseGrants_skipsMissingSchemaAndTable(t *testing.T) {
 	assert.True(t, tablePrivilegeGranted(t, targetDB, roleName, schemaName, tableName, "SELECT"), "existing table should still be granted")
 }
 
+// TestSyncDatabaseGrants_omittedSchemaAndTable_dbNamedSchema mimics a
+// production-like setup where:
+//   - The database is created via postgres.Database() (db-named schema)
+//   - Tables exist only in the db-named schema, not in public
+//   - The grant spec omits both schema and table (= wildcard all)
+//
+// Regression test for the hypothesis that omitted schema+table resolves to
+// zero matches instead of defaulting to all.
+func TestSyncDatabaseGrants_omittedSchemaAndTable_dbNamedSchema(t *testing.T) {
+	host := test.Integration(t)
+	log := test.SetLogger(t)
+
+	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host: host, Database: "postgres", User: "iam_creator", Password: "iam_creator",
+	})
+	require.NoError(t, err)
+	defer adminDB.Close()
+
+	epoch := time.Now().UnixNano()
+	dbName := fmt.Sprintf("test_%d", epoch)
+	roleName := fmt.Sprintf("custom_role_%d", epoch)
+	tableName := fmt.Sprintf("tbl_%d", epoch)
+
+	// Create database the production way — this creates a db-named schema.
+	require.NoError(t, createManagerRole(log, adminDB, "postgres_role_name"))
+	require.NoError(t, postgres.Database(log, host,
+		postgres.Credentials{User: "iam_creator", Password: "iam_creator"},
+		postgres.Credentials{Name: dbName, User: dbName, Password: "test"},
+		"postgres_role_name", nil,
+	))
+
+	targetDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host: host, Database: dbName, User: "iam_creator", Password: "iam_creator",
+	})
+	require.NoError(t, err)
+	defer targetDB.Close()
+
+	// Create a table in the db-named schema (mimicking what an application does).
+	dbExec(t, targetDB, fmt.Sprintf("CREATE TABLE %s.%s (id int)", dbName, tableName))
+
+	// Verify public schema has no tables.
+	var publicTableCount int
+	require.NoError(t, targetDB.QueryRow(
+		"SELECT count(*) FROM pg_tables WHERE schemaname = 'public'",
+	).Scan(&publicTableCount))
+	require.Equal(t, 0, publicTableCount, "public schema should have no tables")
+
+	// Create the custom role and apply grants with both schema and table omitted.
+	require.NoError(t, postgres.EnsureCustomRole(log, adminDB, roleName, nil))
+
+	err = postgres.SyncDatabaseGrants(log, targetDB, roleName, []postgres.CustomRoleGrant{
+		{Privileges: []string{"SELECT"}},
+	})
+	require.NoError(t, err)
+
+	assert.True(t, schemaUsageGranted(t, targetDB, roleName, dbName),
+		"USAGE should be granted on the db-named schema")
+	assert.True(t, tablePrivilegeGranted(t, targetDB, roleName, dbName, tableName, "SELECT"),
+		"SELECT should be granted on the table in the db-named schema")
+}
+
+// TestSyncDatabaseGrants_skipsPermissionDenied verifies that when the
+// controller user does not have permission to grant on a table (e.g. it is
+// owned by another role), the grant is skipped with a warning rather than
+// failing the entire reconciliation. Tables the controller does own should
+// still be granted normally.
+func TestSyncDatabaseGrants_skipsPermissionDenied(t *testing.T) {
+	host := test.Integration(t)
+	log := test.SetLogger(t)
+
+	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host: host, Database: "postgres", User: "iam_creator", Password: "iam_creator",
+	})
+	require.NoError(t, err)
+	defer adminDB.Close()
+
+	epoch := time.Now().UnixNano()
+	dbName := fmt.Sprintf("test_%d", epoch)
+	roleName := fmt.Sprintf("custom_role_%d", epoch)
+	controllerUser := fmt.Sprintf("controller_%d", epoch)
+	otherOwner := fmt.Sprintf("other_%d", epoch)
+	schemaName := fmt.Sprintf("schema_%d", epoch)
+	ownedTable := fmt.Sprintf("owned_%d", epoch)
+	unownedTable := fmt.Sprintf("unowned_%d", epoch)
+
+	// Set up the database.
+	require.NoError(t, createManagerRole(log, adminDB, "postgres_role_name"))
+	require.NoError(t, postgres.Database(log, host,
+		postgres.Credentials{User: "iam_creator", Password: "iam_creator"},
+		postgres.Credentials{Name: dbName, User: dbName, Password: "test"},
+		"postgres_role_name", nil,
+	))
+
+	targetDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host: host, Database: dbName, User: "iam_creator", Password: "iam_creator",
+	})
+	require.NoError(t, err)
+	defer targetDB.Close()
+
+	// Create non-superuser roles: one acts as the controller, the other owns an inaccessible table.
+	dbExec(t, adminDB, fmt.Sprintf("CREATE ROLE %s LOGIN PASSWORD '%s'", controllerUser, controllerUser))
+	dbExec(t, adminDB, fmt.Sprintf("CREATE ROLE %s LOGIN PASSWORD '%s'", otherOwner, otherOwner))
+
+	// Create schema owned by the controller so it can grant USAGE.
+	dbExec(t, targetDB, fmt.Sprintf("CREATE SCHEMA %s AUTHORIZATION %s", schemaName, controllerUser))
+
+	// Create two tables: one owned by the controller, one by another role.
+	dbExec(t, targetDB, fmt.Sprintf("CREATE TABLE %s.%s (id int)", schemaName, ownedTable))
+	dbExec(t, targetDB, fmt.Sprintf("CREATE TABLE %s.%s (id int)", schemaName, unownedTable))
+	dbExec(t, targetDB, fmt.Sprintf("ALTER TABLE %s.%s OWNER TO %s", schemaName, ownedTable, controllerUser))
+	dbExec(t, targetDB, fmt.Sprintf("ALTER TABLE %s.%s OWNER TO %s", schemaName, unownedTable, otherOwner))
+
+	// Create the custom role on the admin database.
+	require.NoError(t, postgres.EnsureCustomRole(log, adminDB, roleName, nil))
+
+	// Connect as the controller — it owns the schema and one table but not the other.
+	controllerDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host: host, Database: dbName, User: controllerUser, Password: controllerUser,
+	})
+	require.NoError(t, err)
+	defer controllerDB.Close()
+
+	// SyncDatabaseGrants should skip the unowned table and succeed on the owned one.
+	err = postgres.SyncDatabaseGrants(log, controllerDB, roleName, []postgres.CustomRoleGrant{
+		{Schema: schemaName, Table: ownedTable, Privileges: []string{"SELECT"}},
+		{Schema: schemaName, Table: unownedTable, Privileges: []string{"SELECT"}},
+	})
+	require.NoError(t, err, "permission denied should be skipped, not returned as error")
+
+	// Verify owned table got the grant.
+	assert.True(t, tablePrivilegeGranted(t, targetDB, roleName, schemaName, ownedTable, "SELECT"),
+		"privilege should be granted on the owned table")
+
+	// Verify unowned table was skipped.
+	assert.False(t, tablePrivilegeGranted(t, targetDB, roleName, schemaName, unownedTable, "SELECT"),
+		"privilege should not have been granted on the unowned table")
+}
+
 // roleExists returns true if a role with the given name exists in pg_roles.
 func roleExists(t *testing.T, db *sql.DB, roleName string) bool {
 	t.Helper()
