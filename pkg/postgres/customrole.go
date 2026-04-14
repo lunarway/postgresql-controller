@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -10,6 +11,12 @@ import (
 
 	ctlerrors "go.lunarway.com/postgresql-controller/pkg/errors"
 )
+
+// isPermissionDenied returns true if err is a PostgreSQL insufficient_privilege error (SQLSTATE 42501).
+func isPermissionDenied(err error) bool {
+	var pqErr *pq.Error
+	return errors.As(err, &pqErr) && pqErr.Code == "42501"
+}
 
 // CustomRoleGrant defines schema/table privileges to apply to a role within a database.
 type CustomRoleGrant struct {
@@ -192,6 +199,10 @@ func SyncDatabaseGrants(log logr.Logger, db *sql.DB, roleName string, grants []C
 		if _, ok := currentSchemaSet[schema]; !ok {
 			if _, err := db.Exec(fmt.Sprintf("GRANT USAGE ON SCHEMA %s TO %s",
 				pq.QuoteIdentifier(schema), pq.QuoteIdentifier(roleName))); err != nil {
+				if isPermissionDenied(err) {
+					log.Info("Skipping schema USAGE grant: permission denied", "schema", schema, "role", roleName)
+					continue
+				}
 				return fmt.Errorf("grant usage on schema %s to %s: %w", schema, roleName, err)
 			}
 			log.Info("Granted USAGE on schema", "schema", schema)
@@ -213,6 +224,10 @@ func SyncDatabaseGrants(log logr.Logger, db *sql.DB, roleName string, grants []C
 			pq.QuoteIdentifier(tk.schema),
 			pq.QuoteIdentifier(tk.table),
 			pq.QuoteIdentifier(roleName))); err != nil {
+			if isPermissionDenied(err) {
+				log.Info("Skipping table grant: permission denied", "schema", tk.schema, "table", tk.table, "privileges", privs, "role", roleName)
+				continue
+			}
 			return fmt.Errorf("grant %s on %s.%s to %s: %w", privList, tk.schema, tk.table, roleName, err)
 		}
 		log.Info("Granted privileges", "schema", tk.schema, "table", tk.table, "privileges", privs)
@@ -238,6 +253,10 @@ func SyncDatabaseGrants(log logr.Logger, db *sql.DB, roleName string, grants []C
 			pq.QuoteIdentifier(tk.schema),
 			pq.QuoteIdentifier(tk.table),
 			pq.QuoteIdentifier(roleName))); err != nil {
+			if isPermissionDenied(err) {
+				log.Info("Skipping table revoke: permission denied", "schema", tk.schema, "table", tk.table, "privileges", privs, "role", roleName)
+				continue
+			}
 			return fmt.Errorf("revoke %s on %s.%s from %s: %w", privList, tk.schema, tk.table, roleName, err)
 		}
 		log.Info("Revoked privileges", "schema", tk.schema, "table", tk.table, "privileges", privs)
@@ -248,6 +267,10 @@ func SyncDatabaseGrants(log logr.Logger, db *sql.DB, roleName string, grants []C
 		if _, ok := desiredSchemaSet[schema]; !ok {
 			if _, err := db.Exec(fmt.Sprintf("REVOKE USAGE ON SCHEMA %s FROM %s",
 				pq.QuoteIdentifier(schema), pq.QuoteIdentifier(roleName))); err != nil {
+				if isPermissionDenied(err) {
+					log.Info("Skipping schema USAGE revoke: permission denied", "schema", schema, "role", roleName)
+					continue
+				}
 				return fmt.Errorf("revoke usage on schema %s from %s: %w", schema, roleName, err)
 			}
 			log.Info("Revoked USAGE on schema", "schema", schema)
@@ -398,10 +421,16 @@ func RevokeAllDatabaseGrants(log logr.Logger, db *sql.DB, roleName string) error
 	for _, schema := range schemas {
 		quotedSchema := pq.QuoteIdentifier(schema)
 		if _, err := db.Exec(fmt.Sprintf("REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA %s FROM %s", quotedSchema, quotedRole)); err != nil {
-			return fmt.Errorf("revoke table privileges on schema %s from %s: %w", schema, roleName, err)
+			if !isPermissionDenied(err) {
+				return fmt.Errorf("revoke table privileges on schema %s from %s: %w", schema, roleName, err)
+			}
+			log.Info("Skipping bulk table revoke: permission denied", "schema", schema, "role", roleName)
 		}
 		if _, err := db.Exec(fmt.Sprintf("REVOKE USAGE ON SCHEMA %s FROM %s", quotedSchema, quotedRole)); err != nil {
-			return fmt.Errorf("revoke usage on schema %s from %s: %w", schema, roleName, err)
+			if !isPermissionDenied(err) {
+				return fmt.Errorf("revoke usage on schema %s from %s: %w", schema, roleName, err)
+			}
+			log.Info("Skipping schema USAGE revoke: permission denied", "schema", schema, "role", roleName)
 		}
 		log.Info("Revoked schema grants", "schema", schema)
 	}
