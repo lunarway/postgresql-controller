@@ -60,7 +60,7 @@ type grantKey struct {
 // The role is created with NOLOGIN.
 func EnsureCustomRole(log logr.Logger, db *sql.DB, roleName string, grantRoles []string) error {
 	log = log.WithValues("role", roleName)
-	log.V(1).Info("Ensuring custom role")
+	log.Info("Ensuring custom role")
 
 	_, err := db.Exec(fmt.Sprintf("CREATE ROLE %s NOLOGIN", pq.QuoteIdentifier(roleName)))
 	if err != nil {
@@ -68,9 +68,9 @@ func EnsureCustomRole(log logr.Logger, db *sql.DB, roleName string, grantRoles [
 		if !ok || pqError.Code.Name() != "duplicate_object" {
 			return fmt.Errorf("create role %s: %w", roleName, err)
 		}
-		log.V(1).Info("Role already exists", "errorCode", pqError.Code, "errorName", pqError.Code.Name())
+		log.Info("Role already exists", "errorCode", pqError.Code, "errorName", pqError.Code.Name())
 	} else {
-		log.V(1).Info("Role created")
+		log.Info("Role created")
 	}
 
 	current, err := currentGrantedRoles(db, roleName)
@@ -90,7 +90,7 @@ func EnsureCustomRole(log logr.Logger, db *sql.DB, roleName string, grantRoles [
 			if err != nil {
 				return fmt.Errorf("revoke role %s from %s: %w", r, roleName, err)
 			}
-			log.V(1).Info("Revoked role", "role", r)
+			log.Info("Revoked role", "role", r)
 		}
 	}
 
@@ -116,7 +116,7 @@ func EnsureCustomRole(log logr.Logger, db *sql.DB, roleName string, grantRoles [
 	if err != nil {
 		return fmt.Errorf("grant roles %s to %s: %w", strings.Join(toGrant, ", "), roleName, err)
 	}
-	log.V(1).Info("Granted roles", "roles", toGrant)
+	log.Info("Granted roles", "roles", toGrant)
 	return nil
 }
 
@@ -194,7 +194,7 @@ func SyncDatabaseGrants(log logr.Logger, db *sql.DB, roleName string, grants []C
 				pq.QuoteIdentifier(schema), pq.QuoteIdentifier(roleName))); err != nil {
 				return fmt.Errorf("grant usage on schema %s to %s: %w", schema, roleName, err)
 			}
-			log.V(1).Info("Granted USAGE on schema", "schema", schema)
+			log.Info("Granted USAGE on schema", "schema", schema)
 		}
 	}
 
@@ -215,7 +215,7 @@ func SyncDatabaseGrants(log logr.Logger, db *sql.DB, roleName string, grants []C
 			pq.QuoteIdentifier(roleName))); err != nil {
 			return fmt.Errorf("grant %s on %s.%s to %s: %w", privList, tk.schema, tk.table, roleName, err)
 		}
-		log.V(1).Info("Granted privileges", "schema", tk.schema, "table", tk.table, "privileges", privs)
+		log.Info("Granted privileges", "schema", tk.schema, "table", tk.table, "privileges", privs)
 	}
 
 	// 3. Revoke removed table privileges, batched per (schema, table).
@@ -240,7 +240,7 @@ func SyncDatabaseGrants(log logr.Logger, db *sql.DB, roleName string, grants []C
 			pq.QuoteIdentifier(roleName))); err != nil {
 			return fmt.Errorf("revoke %s on %s.%s from %s: %w", privList, tk.schema, tk.table, roleName, err)
 		}
-		log.V(1).Info("Revoked privileges", "schema", tk.schema, "table", tk.table, "privileges", privs)
+		log.Info("Revoked privileges", "schema", tk.schema, "table", tk.table, "privileges", privs)
 	}
 
 	// 4. Revoke USAGE on schemas that no longer have any desired grants.
@@ -250,7 +250,7 @@ func SyncDatabaseGrants(log logr.Logger, db *sql.DB, roleName string, grants []C
 				pq.QuoteIdentifier(schema), pq.QuoteIdentifier(roleName))); err != nil {
 				return fmt.Errorf("revoke usage on schema %s from %s: %w", schema, roleName, err)
 			}
-			log.V(1).Info("Revoked USAGE on schema", "schema", schema)
+			log.Info("Revoked USAGE on schema", "schema", schema)
 		}
 	}
 
@@ -334,7 +334,7 @@ func expandGrants(log logr.Logger, db *sql.DB, grants []CustomRoleGrant) ([]gran
 			return nil, fmt.Errorf("resolve schemas: %w", err)
 		}
 		if len(schemas) == 0 {
-			log.V(1).Info("Schema not found in this database, skipping grant", "schema", grant.Schema)
+			log.Info("Schema not found in this database, skipping grant", "schema", grant.Schema)
 			continue
 		}
 		for _, schema := range schemas {
@@ -343,7 +343,7 @@ func expandGrants(log logr.Logger, db *sql.DB, grants []CustomRoleGrant) ([]gran
 				return nil, fmt.Errorf("resolve tables in schema %s: %w", schema, err)
 			}
 			if len(tables) == 0 && grant.Table != "" && grant.Table != "*" {
-				log.V(1).Info("Table not found in this database, skipping grant", "schema", schema, "table", grant.Table)
+				log.Info("Table not found in this database, skipping grant", "schema", schema, "table", grant.Table)
 				continue
 			}
 			for _, table := range tables {
@@ -403,7 +403,7 @@ func RevokeAllDatabaseGrants(log logr.Logger, db *sql.DB, roleName string) error
 		if _, err := db.Exec(fmt.Sprintf("REVOKE USAGE ON SCHEMA %s FROM %s", quotedSchema, quotedRole)); err != nil {
 			return fmt.Errorf("revoke usage on schema %s from %s: %w", schema, roleName, err)
 		}
-		log.V(1).Info("Revoked schema grants", "schema", schema)
+		log.Info("Revoked schema grants", "schema", schema)
 	}
 	return nil
 }
@@ -415,7 +415,7 @@ func DropCustomRole(log logr.Logger, db *sql.DB, roleName string) error {
 	if _, err := db.Exec(fmt.Sprintf("DROP ROLE IF EXISTS %s", pq.QuoteIdentifier(roleName))); err != nil {
 		return fmt.Errorf("drop role %s: %w", roleName, err)
 	}
-	log.V(1).Info("Dropped role")
+	log.Info("Dropped role")
 	return nil
 }
 
