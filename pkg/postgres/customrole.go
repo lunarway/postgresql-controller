@@ -421,20 +421,17 @@ func RevokeAllDatabaseGrants(log logr.Logger, db *sql.DB, roleName string) error
 	for _, schema := range schemas {
 		quotedSchema := pq.QuoteIdentifier(schema)
 		if _, err := db.Exec(fmt.Sprintf("REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA %s FROM %s", quotedSchema, quotedRole)); err != nil {
-			if isPermissionDenied(err) {
-				log.Info("Skipping bulk table revoke: permission denied", "schema", schema, "role", roleName)
-				continue
+			if !isPermissionDenied(err) {
+				return fmt.Errorf("revoke table privileges on schema %s from %s: %w", schema, roleName, err)
 			}
-			return fmt.Errorf("revoke table privileges on schema %s from %s: %w", schema, roleName, err)
+			log.Info("Skipping bulk table revoke: permission denied", "schema", schema, "role", roleName)
 		}
 		if _, err := db.Exec(fmt.Sprintf("REVOKE USAGE ON SCHEMA %s FROM %s", quotedSchema, quotedRole)); err != nil {
-			if isPermissionDenied(err) {
-				log.Info("Skipping schema USAGE revoke: permission denied", "schema", schema, "role", roleName)
-				continue
+			if !isPermissionDenied(err) {
+				return fmt.Errorf("revoke usage on schema %s from %s: %w", schema, roleName, err)
 			}
-			return fmt.Errorf("revoke usage on schema %s from %s: %w", schema, roleName, err)
+			log.Info("Skipping schema USAGE revoke: permission denied", "schema", schema, "role", roleName)
 		}
-		log.Info("Revoked schema grants", "schema", schema)
 	}
 	return nil
 }
