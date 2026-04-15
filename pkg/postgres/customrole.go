@@ -154,6 +154,10 @@ func currentGrantedRoles(db *sql.DB, roleName string) ([]string, error) {
 // currently-connected database to exactly match grants. It computes the diff
 // between current and desired (schema, table, privilege) tuples and issues only
 // the necessary GRANT/REVOKE statements, avoiding any access outage window.
+//
+// GRANT/REVOKE statements are executed with SET ROLE to the object owner so
+// that they succeed even when the controller's connection role (e.g.
+// iam_creator) does not directly own the objects.
 func SyncDatabaseGrants(log logr.Logger, db *sql.DB, roleName string, grants []CustomRoleGrant) error {
 	for _, g := range grants {
 		if err := validatePrivileges(g.Privileges); err != nil {
@@ -192,12 +196,28 @@ func SyncDatabaseGrants(log logr.Logger, db *sql.DB, roleName string, grants []C
 		desiredSchemaSet[g.schema] = struct{}{}
 	}
 
+	// Look up object owners so we can SET ROLE before GRANT/REVOKE.
+	schemaOwners, err := schemaOwnerMap(db)
+	if err != nil {
+		return err
+	}
+	tblOwners, err := tableOwnerMap(db)
+	if err != nil {
+		return err
+	}
+
 	type tableKey struct{ schema, table string }
 
 	// 1. Grant USAGE on schemas not yet accessible.
 	for schema := range desiredSchemaSet {
 		if _, ok := currentSchemaSet[schema]; !ok {
-			if _, err := db.Exec(fmt.Sprintf("GRANT USAGE ON SCHEMA %s TO %s",
+			owner, ok := schemaOwners[schema]
+			if !ok {
+				log.Info("Skipping schema USAGE grant: owner not found", "schema", schema, "role", roleName)
+				continue
+			}
+			if _, err := db.Exec(fmt.Sprintf("SET ROLE %s; GRANT USAGE ON SCHEMA %s TO %s; RESET ROLE",
+				pq.QuoteIdentifier(owner),
 				pq.QuoteIdentifier(schema), pq.QuoteIdentifier(roleName))); err != nil {
 				if isPermissionDenied(err) {
 					log.Info("Skipping schema USAGE grant: permission denied", "schema", schema, "role", roleName)
@@ -218,8 +238,14 @@ func SyncDatabaseGrants(log logr.Logger, db *sql.DB, roleName string, grants []C
 		}
 	}
 	for tk, privs := range toGrant {
+		owner := tblOwners[tk.schema][tk.table]
+		if owner == "" {
+			log.Info("Skipping table grant: owner not found", "schema", tk.schema, "table", tk.table, "privileges", privs, "role", roleName)
+			continue
+		}
 		privList := strings.Join(privs, ", ")
-		if _, err := db.Exec(fmt.Sprintf("GRANT %s ON TABLE %s.%s TO %s",
+		if _, err := db.Exec(fmt.Sprintf("SET ROLE %s; GRANT %s ON TABLE %s.%s TO %s; RESET ROLE",
+			pq.QuoteIdentifier(owner),
 			privList,
 			pq.QuoteIdentifier(tk.schema),
 			pq.QuoteIdentifier(tk.table),
@@ -247,8 +273,14 @@ func SyncDatabaseGrants(log logr.Logger, db *sql.DB, roleName string, grants []C
 				log.Info("Revoking unrecognized privilege type from database catalog", "privilege", p, "schema", tk.schema, "table", tk.table)
 			}
 		}
+		owner := tblOwners[tk.schema][tk.table]
+		if owner == "" {
+			log.Info("Skipping table revoke: owner not found", "schema", tk.schema, "table", tk.table, "privileges", privs, "role", roleName)
+			continue
+		}
 		privList := strings.Join(privs, ", ")
-		if _, err := db.Exec(fmt.Sprintf("REVOKE %s ON TABLE %s.%s FROM %s",
+		if _, err := db.Exec(fmt.Sprintf("SET ROLE %s; REVOKE %s ON TABLE %s.%s FROM %s; RESET ROLE",
+			pq.QuoteIdentifier(owner),
 			privList,
 			pq.QuoteIdentifier(tk.schema),
 			pq.QuoteIdentifier(tk.table),
@@ -265,7 +297,13 @@ func SyncDatabaseGrants(log logr.Logger, db *sql.DB, roleName string, grants []C
 	// 4. Revoke USAGE on schemas that no longer have any desired grants.
 	for _, schema := range currentSchemas {
 		if _, ok := desiredSchemaSet[schema]; !ok {
-			if _, err := db.Exec(fmt.Sprintf("REVOKE USAGE ON SCHEMA %s FROM %s",
+			owner, ok := schemaOwners[schema]
+			if !ok {
+				log.Info("Skipping schema USAGE revoke: owner not found", "schema", schema, "role", roleName)
+				continue
+			}
+			if _, err := db.Exec(fmt.Sprintf("SET ROLE %s; REVOKE USAGE ON SCHEMA %s FROM %s; RESET ROLE",
+				pq.QuoteIdentifier(owner),
 				pq.QuoteIdentifier(schema), pq.QuoteIdentifier(roleName))); err != nil {
 				if isPermissionDenied(err) {
 					log.Info("Skipping schema USAGE revoke: permission denied", "schema", schema, "role", roleName)
@@ -278,6 +316,53 @@ func SyncDatabaseGrants(log logr.Logger, db *sql.DB, roleName string, grants []C
 	}
 
 	return nil
+}
+
+// schemaOwnerMap returns a map of schema name to its owner role name for all
+// user-defined schemas in the currently-connected database.
+func schemaOwnerMap(db *sql.DB) (map[string]string, error) {
+	rows, err := db.Query(`
+		SELECT n.nspname, r.rolname
+		FROM pg_namespace n
+		JOIN pg_roles r ON r.oid = n.nspowner
+		WHERE n.nspname NOT LIKE 'pg_%' AND n.nspname <> 'information_schema'`)
+	if err != nil {
+		return nil, fmt.Errorf("query schema owners: %w", err)
+	}
+	defer rows.Close()
+	owners := make(map[string]string)
+	for rows.Next() {
+		var schema, owner string
+		if err := rows.Scan(&schema, &owner); err != nil {
+			return nil, fmt.Errorf("scan schema owner: %w", err)
+		}
+		owners[schema] = owner
+	}
+	return owners, rows.Err()
+}
+
+// tableOwnerMap returns a nested map of schema -> table -> owner role name
+// for all user-defined tables in the currently-connected database.
+func tableOwnerMap(db *sql.DB) (map[string]map[string]string, error) {
+	rows, err := db.Query(`
+		SELECT schemaname, tablename, tableowner FROM pg_tables
+		WHERE schemaname NOT LIKE 'pg_%' AND schemaname <> 'information_schema'`)
+	if err != nil {
+		return nil, fmt.Errorf("query table owners: %w", err)
+	}
+	defer rows.Close()
+	owners := make(map[string]map[string]string)
+	for rows.Next() {
+		var schema, table, owner string
+		if err := rows.Scan(&schema, &table, &owner); err != nil {
+			return nil, fmt.Errorf("scan table owner: %w", err)
+		}
+		if owners[schema] == nil {
+			owners[schema] = make(map[string]string)
+		}
+		owners[schema][table] = owner
+	}
+	return owners, rows.Err()
 }
 
 // currentTableGrants returns all table privileges held by roleName in the
@@ -417,16 +502,28 @@ func RevokeAllDatabaseGrants(log logr.Logger, db *sql.DB, roleName string) error
 	if err != nil {
 		return err
 	}
+	schemaOwners, err := schemaOwnerMap(db)
+	if err != nil {
+		return err
+	}
 	quotedRole := pq.QuoteIdentifier(roleName)
 	for _, schema := range schemas {
+		owner, ok := schemaOwners[schema]
+		if !ok {
+			log.Info("Skipping schema revoke: owner not found", "schema", schema, "role", roleName)
+			continue
+		}
+		quotedOwner := pq.QuoteIdentifier(owner)
 		quotedSchema := pq.QuoteIdentifier(schema)
-		if _, err := db.Exec(fmt.Sprintf("REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA %s FROM %s", quotedSchema, quotedRole)); err != nil {
+		if _, err := db.Exec(fmt.Sprintf("SET ROLE %s; REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA %s FROM %s; RESET ROLE",
+			quotedOwner, quotedSchema, quotedRole)); err != nil {
 			if !isPermissionDenied(err) {
 				return fmt.Errorf("revoke table privileges on schema %s from %s: %w", schema, roleName, err)
 			}
 			log.Info("Skipping bulk table revoke: permission denied", "schema", schema, "role", roleName)
 		}
-		if _, err := db.Exec(fmt.Sprintf("REVOKE USAGE ON SCHEMA %s FROM %s", quotedSchema, quotedRole)); err != nil {
+		if _, err := db.Exec(fmt.Sprintf("SET ROLE %s; REVOKE USAGE ON SCHEMA %s FROM %s; RESET ROLE",
+			quotedOwner, quotedSchema, quotedRole)); err != nil {
 			if !isPermissionDenied(err) {
 				return fmt.Errorf("revoke usage on schema %s from %s: %w", schema, roleName, err)
 			}
