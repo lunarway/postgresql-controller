@@ -1109,7 +1109,9 @@ func TestRevokeAllDatabaseGrants_viaSetRole(t *testing.T) {
 
 	dbExec(t, adminDB, fmt.Sprintf("CREATE ROLE %s LOGIN PASSWORD '%s'", serviceUser, serviceUser))
 	dbExec(t, adminDB, fmt.Sprintf("CREATE ROLE %s LOGIN PASSWORD '%s'", controllerUser, controllerUser))
-	dbExec(t, adminDB, fmt.Sprintf("GRANT %s TO %s", serviceUser, controllerUser))
+	// Grant membership with SET but NOT INHERIT, mirroring production where
+	// the controller can SET ROLE but does not inherit ownership privileges.
+	dbExec(t, adminDB, fmt.Sprintf("GRANT %s TO %s WITH SET TRUE, INHERIT FALSE", serviceUser, controllerUser))
 	dbExec(t, targetDB, fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO %s", dbName, controllerUser))
 
 	// Create schema and table owned by the service user.

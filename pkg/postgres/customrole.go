@@ -506,24 +506,46 @@ func RevokeAllDatabaseGrants(log logr.Logger, db *sql.DB, roleName string) error
 	if err != nil {
 		return err
 	}
+	tblOwners, err := tableOwnerMap(db)
+	if err != nil {
+		return err
+	}
 	quotedRole := pq.QuoteIdentifier(roleName)
 	for _, schema := range schemas {
-		owner, ok := schemaOwners[schema]
-		if !ok {
-			log.Info("Skipping schema revoke: owner not found", "schema", schema, "role", roleName)
+		quotedSchema := pq.QuoteIdentifier(schema)
+
+		// Collect unique table owners for this schema so the bulk revoke
+		// covers tables regardless of which role owns them.
+		owners := make(map[string]struct{})
+		for _, owner := range tblOwners[schema] {
+			owners[owner] = struct{}{}
+		}
+		if owner, ok := schemaOwners[schema]; ok {
+			owners[owner] = struct{}{}
+		}
+
+		if len(owners) == 0 {
+			log.Info("Skipping schema revoke: no owners found", "schema", schema, "role", roleName)
 			continue
 		}
-		quotedOwner := pq.QuoteIdentifier(owner)
-		quotedSchema := pq.QuoteIdentifier(schema)
-		if _, err := db.Exec(fmt.Sprintf("SET ROLE %s; REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA %s FROM %s; RESET ROLE",
-			quotedOwner, quotedSchema, quotedRole)); err != nil {
-			if !isPermissionDenied(err) {
-				return fmt.Errorf("revoke table privileges on schema %s from %s: %w", schema, roleName, err)
+
+		for owner := range owners {
+			quotedOwner := pq.QuoteIdentifier(owner)
+			if _, err := db.Exec(fmt.Sprintf("SET ROLE %s; REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA %s FROM %s; RESET ROLE",
+				quotedOwner, quotedSchema, quotedRole)); err != nil {
+				if !isPermissionDenied(err) {
+					return fmt.Errorf("revoke table privileges on schema %s from %s: %w", schema, roleName, err)
+				}
+				log.Info("Skipping bulk table revoke: permission denied", "schema", schema, "owner", owner, "role", roleName)
 			}
-			log.Info("Skipping bulk table revoke: permission denied", "schema", schema, "role", roleName)
+		}
+
+		schemaOwner, ok := schemaOwners[schema]
+		if !ok {
+			continue
 		}
 		if _, err := db.Exec(fmt.Sprintf("SET ROLE %s; REVOKE USAGE ON SCHEMA %s FROM %s; RESET ROLE",
-			quotedOwner, quotedSchema, quotedRole)); err != nil {
+			pq.QuoteIdentifier(schemaOwner), quotedSchema, quotedRole)); err != nil {
 			if !isPermissionDenied(err) {
 				return fmt.Errorf("revoke usage on schema %s from %s: %w", schema, roleName, err)
 			}
