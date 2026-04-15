@@ -970,6 +970,185 @@ func TestSyncDatabaseGrants_skipsPermissionDenied(t *testing.T) {
 		"privilege should not have been granted on the unowned table")
 }
 
+// TestSyncDatabaseGrants_grantsViaSetRoleToTableOwner verifies that when the
+// controller connects as a user that does NOT own the tables but IS a member of
+// the table-owning role, GRANT and REVOKE succeed via SET ROLE.
+// This mirrors production: iam_creator (rds_superuser member) must SET ROLE to
+// the service user to modify grants on service-owned tables.
+func TestSyncDatabaseGrants_grantsViaSetRoleToTableOwner(t *testing.T) {
+	host := test.Integration(t)
+	log := test.SetLogger(t)
+
+	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host: host, Database: "postgres", User: "iam_creator", Password: "iam_creator",
+	})
+	require.NoError(t, err)
+	defer adminDB.Close()
+
+	epoch := time.Now().UnixNano()
+	dbName := fmt.Sprintf("test_%d", epoch)
+	roleName := fmt.Sprintf("custom_role_%d", epoch)
+	serviceUser := fmt.Sprintf("svc_%d", epoch)
+	controllerUser := fmt.Sprintf("ctrl_%d", epoch)
+	schemaName := fmt.Sprintf("schema_%d", epoch)
+	tableA := fmt.Sprintf("table_a_%d", epoch)
+	tableB := fmt.Sprintf("table_b_%d", epoch)
+
+	// Create the database.
+	require.NoError(t, createManagerRole(log, adminDB, "postgres_role_name"))
+	require.NoError(t, postgres.Database(log, host,
+		postgres.Credentials{User: "iam_creator", Password: "iam_creator"},
+		postgres.Credentials{Name: dbName, User: dbName, Password: "test"},
+		"postgres_role_name", nil,
+	))
+
+	targetDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host: host, Database: dbName, User: "iam_creator", Password: "iam_creator",
+	})
+	require.NoError(t, err)
+	defer targetDB.Close()
+
+	// Create a service user that owns the schema and tables, and a controller
+	// user that is a member of the service user (like rds_superuser → service user).
+	dbExec(t, adminDB, fmt.Sprintf("CREATE ROLE %s LOGIN PASSWORD '%s'", serviceUser, serviceUser))
+	dbExec(t, adminDB, fmt.Sprintf("CREATE ROLE %s LOGIN PASSWORD '%s'", controllerUser, controllerUser))
+	// Grant membership with SET but NOT INHERIT. This mirrors production where
+	// iam_creator (rds_superuser) can SET ROLE to service users but does not
+	// inherit their ownership privileges. Without SET ROLE in the code, GRANT
+	// on service-owned objects will fail with permission denied.
+	dbExec(t, adminDB, fmt.Sprintf("GRANT %s TO %s WITH SET TRUE, INHERIT FALSE", serviceUser, controllerUser))
+	// Grant CONNECT so the controller can connect to the database.
+	dbExec(t, targetDB, fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO %s", dbName, controllerUser))
+
+	// Create schema and tables owned by the service user.
+	dbExec(t, targetDB, fmt.Sprintf("CREATE SCHEMA %s AUTHORIZATION %s", schemaName, serviceUser))
+	serviceDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host: host, Database: dbName, User: serviceUser, Password: serviceUser,
+	})
+	require.NoError(t, err)
+	defer serviceDB.Close()
+	dbExec(t, serviceDB, fmt.Sprintf("CREATE TABLE %s.%s (id int)", schemaName, tableA))
+	dbExec(t, serviceDB, fmt.Sprintf("CREATE TABLE %s.%s (id int)", schemaName, tableB))
+
+	// Verify the tables are owned by the service user, not the controller.
+	var owner string
+	require.NoError(t, targetDB.QueryRow(
+		"SELECT tableowner FROM pg_tables WHERE schemaname = $1 AND tablename = $2",
+		schemaName, tableA).Scan(&owner))
+	require.Equal(t, serviceUser, owner, "table should be owned by service user")
+
+	// Create the custom role.
+	require.NoError(t, postgres.EnsureCustomRole(log, adminDB, roleName, nil))
+
+	// Connect as the controller user (member of service user, but not the table owner).
+	controllerDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host: host, Database: dbName, User: controllerUser, Password: controllerUser,
+	})
+	require.NoError(t, err)
+	defer controllerDB.Close()
+
+	// SyncDatabaseGrants should succeed via SET ROLE to the table owner.
+	err = postgres.SyncDatabaseGrants(log, controllerDB, roleName, []postgres.CustomRoleGrant{
+		{Schema: schemaName, Privileges: []string{"SELECT"}},
+	})
+	require.NoError(t, err, "grant should succeed via SET ROLE to table owner")
+
+	// Verify the grants were actually applied (check from adminDB to avoid any session effects).
+	assert.True(t, tablePrivilegeGranted(t, targetDB, roleName, schemaName, tableA, "SELECT"),
+		"SELECT should be granted on tableA owned by service user")
+	assert.True(t, tablePrivilegeGranted(t, targetDB, roleName, schemaName, tableB, "SELECT"),
+		"SELECT should be granted on tableB owned by service user")
+	assert.True(t, schemaUsageGranted(t, targetDB, roleName, schemaName),
+		"USAGE should be granted on schema owned by service user")
+
+	// Verify revoke also works via SET ROLE: sync with no grants.
+	err = postgres.SyncDatabaseGrants(log, controllerDB, roleName, nil)
+	require.NoError(t, err, "revoke should succeed via SET ROLE to table owner")
+
+	assert.False(t, tablePrivilegeGranted(t, targetDB, roleName, schemaName, tableA, "SELECT"),
+		"SELECT should be revoked from tableA")
+	assert.False(t, tablePrivilegeGranted(t, targetDB, roleName, schemaName, tableB, "SELECT"),
+		"SELECT should be revoked from tableB")
+	assert.False(t, schemaUsageGranted(t, targetDB, roleName, schemaName),
+		"USAGE on schema should be revoked")
+}
+
+// TestRevokeAllDatabaseGrants_viaSetRole verifies that RevokeAllDatabaseGrants
+// succeeds when the connection user is a member of the table owner, relying on
+// SET ROLE to perform the revocations.
+func TestRevokeAllDatabaseGrants_viaSetRole(t *testing.T) {
+	host := test.Integration(t)
+	log := test.SetLogger(t)
+
+	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host: host, Database: "postgres", User: "iam_creator", Password: "iam_creator",
+	})
+	require.NoError(t, err)
+	defer adminDB.Close()
+
+	epoch := time.Now().UnixNano()
+	dbName := fmt.Sprintf("test_%d", epoch)
+	roleName := fmt.Sprintf("custom_role_%d", epoch)
+	serviceUser := fmt.Sprintf("svc_%d", epoch)
+	controllerUser := fmt.Sprintf("ctrl_%d", epoch)
+	schemaName := fmt.Sprintf("schema_%d", epoch)
+	tableName := fmt.Sprintf("table_%d", epoch)
+
+	require.NoError(t, createManagerRole(log, adminDB, "postgres_role_name"))
+	require.NoError(t, postgres.Database(log, host,
+		postgres.Credentials{User: "iam_creator", Password: "iam_creator"},
+		postgres.Credentials{Name: dbName, User: dbName, Password: "test"},
+		"postgres_role_name", nil,
+	))
+
+	targetDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host: host, Database: dbName, User: "iam_creator", Password: "iam_creator",
+	})
+	require.NoError(t, err)
+	defer targetDB.Close()
+
+	dbExec(t, adminDB, fmt.Sprintf("CREATE ROLE %s LOGIN PASSWORD '%s'", serviceUser, serviceUser))
+	dbExec(t, adminDB, fmt.Sprintf("CREATE ROLE %s LOGIN PASSWORD '%s'", controllerUser, controllerUser))
+	// Grant membership with SET but NOT INHERIT, mirroring production where
+	// the controller can SET ROLE but does not inherit ownership privileges.
+	dbExec(t, adminDB, fmt.Sprintf("GRANT %s TO %s WITH SET TRUE, INHERIT FALSE", serviceUser, controllerUser))
+	dbExec(t, targetDB, fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO %s", dbName, controllerUser))
+
+	// Create schema and table owned by the service user.
+	dbExec(t, targetDB, fmt.Sprintf("CREATE SCHEMA %s AUTHORIZATION %s", schemaName, serviceUser))
+	serviceDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host: host, Database: dbName, User: serviceUser, Password: serviceUser,
+	})
+	require.NoError(t, err)
+	defer serviceDB.Close()
+	dbExec(t, serviceDB, fmt.Sprintf("CREATE TABLE %s.%s (id int)", schemaName, tableName))
+
+	// Create custom role and grant privileges via SET ROLE.
+	require.NoError(t, postgres.EnsureCustomRole(log, adminDB, roleName, nil))
+
+	controllerDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host: host, Database: dbName, User: controllerUser, Password: controllerUser,
+	})
+	require.NoError(t, err)
+	defer controllerDB.Close()
+
+	err = postgres.SyncDatabaseGrants(log, controllerDB, roleName, []postgres.CustomRoleGrant{
+		{Schema: schemaName, Privileges: []string{"SELECT"}},
+	})
+	require.NoError(t, err)
+	require.True(t, tablePrivilegeGranted(t, targetDB, roleName, schemaName, tableName, "SELECT"),
+		"precondition: grant should be in place before revoke test")
+
+	// RevokeAllDatabaseGrants should succeed via SET ROLE.
+	err = postgres.RevokeAllDatabaseGrants(log, controllerDB, roleName)
+	require.NoError(t, err, "RevokeAllDatabaseGrants should succeed via SET ROLE")
+
+	assert.False(t, tablePrivilegeGranted(t, targetDB, roleName, schemaName, tableName, "SELECT"),
+		"SELECT should be revoked")
+	assert.False(t, schemaUsageGranted(t, targetDB, roleName, schemaName),
+		"USAGE should be revoked")
+}
+
 // roleExists returns true if a role with the given name exists in pg_roles.
 func roleExists(t *testing.T, db *sql.DB, roleName string) bool {
 	t.Helper()
