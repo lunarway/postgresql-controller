@@ -49,6 +49,57 @@ spec:
           spec:
             description: CustomRoleSpec defines the desired state of CustomRole
             properties:
+              databases:
+                description: |-
+                  Databases restricts which databases the grants and functions are applied to.
+                  If omitted, they are applied to every user database on the host.
+                  Use this to target specific databases (e.g. ["postgres"]) for
+                  admin-level utilities.
+                items:
+                  type: string
+                type: array
+              functions:
+                description: |-
+                  Functions is a list of SECURITY DEFINER functions to create and grant
+                  EXECUTE on to this role. Each function is created in the public schema
+                  with LANGUAGE plpgsql, SECURITY DEFINER, and SET search_path = pg_catalog
+                  hardcoded. The body should contain only the PL/pgSQL statements (the
+                  BEGIN/END block is added automatically).
+                items:
+                  description: "CustomRoleFunction defines a SECURITY DEFINER function
+                    to create and grant to the role.\nThe controller creates the function
+                    in the public schema using plpgsql with\nSECURITY DEFINER and
+                    SET search_path = pg_catalog. The body is wrapped in\nBEGIN ...
+                    END automatically.\n\nExample:\n\n\tfunctions:\n\t- name: my_function\n\t
+                    \ args: \"input_val text\"\n\t  returns: void\n\t  body: |\n\t
+                    \   EXECUTE format('ALTER ROLE %I SET some_setting = %L', input_val,
+                    'value');"
+                  properties:
+                    args:
+                      description: |-
+                        Args is the function argument list (e.g. "role_name text", "id integer, name text").
+                        Omit for functions that take no arguments.
+                      type: string
+                    body:
+                      description: |-
+                        Body contains the PL/pgSQL statements for the function.
+                        Do not include BEGIN/END — they are added automatically.
+                        Use fully qualified names for tables and schemas (e.g. myschema.mytable)
+                        because search_path is set to pg_catalog.
+                      type: string
+                    name:
+                      description: Name is the function name.
+                      type: string
+                    returns:
+                      description: Returns is the return type (e.g. "void", "boolean",
+                        "TABLE(plan text)").
+                      type: string
+                  required:
+                  - body
+                  - name
+                  - returns
+                  type: object
+                type: array
               grantRoles:
                 description: |-
                   GrantRoles is a list of existing PostgreSQL roles to grant to this role
@@ -59,15 +110,15 @@ spec:
                 type: array
               grants:
                 description: |-
-                  Grants is a list of schema/table privilege grants applied to every database
-                  on the host. Reconciled whenever a new PostgreSQLDatabase is created.
+                  Grants is a list of schema/table privilege grants applied to the target
+                  databases. Reconciled whenever a new PostgreSQLDatabase is created.
                 items:
                   description: CustomRoleGrant defines schema/table privileges to
                     grant to the role.
                   properties:
                     privileges:
                       description: Privileges is a list of PostgreSQL privilege keywords
-                        (e.g. SELECT, INSERT, UPDATE, DELETE)
+                        (SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER)
                       items:
                         type: string
                       type: array

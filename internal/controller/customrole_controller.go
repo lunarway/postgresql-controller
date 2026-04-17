@@ -161,9 +161,10 @@ func (r *CustomRoleReconciler) reconcile(ctx context.Context, reqLogger logr.Log
 	reqLogger.V(1).Info("Reconciling CustomRole resource")
 
 	grants := toPostgresGrants(customRole.Spec.Grants)
+	functions := toPostgresFunctions(customRole.Spec.Functions)
 
 	for host, creds := range r.HostCredentials {
-		if err := r.reconcileOnHost(reqLogger, host, creds, roleName, customRole.Spec.GrantRoles, grants); err != nil {
+		if err := r.reconcileOnHost(reqLogger, host, creds, roleName, customRole.Spec.GrantRoles, customRole.Spec.Databases, grants, functions); err != nil {
 			r.persistStatus(ctx, customRole, err)
 			return fmt.Errorf("reconcile on host %s: %w", host, err)
 		}
@@ -212,6 +213,11 @@ func (r *CustomRoleReconciler) cleanupRoleOnHost(log logr.Logger, host string, c
 		if err != nil {
 			return fmt.Errorf("connect to %s: %w", dbName, err)
 		}
+		dropErr := postgres.DropManagedFunctions(log, db, roleName)
+		if dropErr != nil {
+			db.Close()
+			return fmt.Errorf("drop functions in database %s: %w", dbName, dropErr)
+		}
 		revokeErr := postgres.RevokeAllDatabaseGrants(log, db, roleName)
 		if closeErr := db.Close(); closeErr != nil {
 			log.Error(closeErr, "failed to close database connection", "database", dbName)
@@ -221,10 +227,15 @@ func (r *CustomRoleReconciler) cleanupRoleOnHost(log logr.Logger, host string, c
 		}
 	}
 
+	// Drop functions scoped to the postgres database.
+	if err := postgres.DropManagedFunctions(log, adminDB, roleName); err != nil {
+		return fmt.Errorf("drop functions in postgres database: %w", err)
+	}
+
 	return postgres.DropCustomRole(log, adminDB, roleName)
 }
 
-func (r *CustomRoleReconciler) reconcileOnHost(log logr.Logger, host string, creds postgres.Credentials, roleName string, grantRoles []string, grants []postgres.CustomRoleGrant) error {
+func (r *CustomRoleReconciler) reconcileOnHost(log logr.Logger, host string, creds postgres.Credentials, roleName string, grantRoles []string, targetDatabases []string, grants []postgres.CustomRoleGrant, functions []postgres.CustomRoleFunction) error {
 	log = log.WithValues("host", host)
 
 	// Connect to the postgres maintenance database for server-level operations.
@@ -246,18 +257,60 @@ func (r *CustomRoleReconciler) reconcileOnHost(log logr.Logger, host string, cre
 		return fmt.Errorf("ensure role: %w", err)
 	}
 
-	// Sync per-database grants across all user databases on this host.
-	databases, err := postgres.UserDatabases(adminDB)
-	if err != nil {
-		return fmt.Errorf("list databases: %w", err)
+	// Determine which databases to apply grants and functions to.
+	// If targetDatabases is set, use exactly those (may include "postgres").
+	// Otherwise, apply to all user databases.
+	var databases []string
+	if len(targetDatabases) > 0 {
+		databases = targetDatabases
+	} else {
+		databases, err = postgres.UserDatabases(adminDB)
+		if err != nil {
+			return fmt.Errorf("list databases: %w", err)
+		}
 	}
+
 	for _, dbName := range databases {
+		if dbName == "postgres" {
+			// Reuse the existing admin connection for the postgres database.
+			if err := postgres.SyncDatabaseGrants(log, adminDB, roleName, grants); err != nil {
+				return fmt.Errorf("sync grants on database postgres: %w", err)
+			}
+			if err := postgres.SyncDatabaseFunctions(log, adminDB, roleName, functions); err != nil {
+				return fmt.Errorf("sync functions on database postgres: %w", err)
+			}
+			continue
+		}
 		if err := r.syncGrantsOnDatabase(log, host, creds, roleName, dbName, grants); err != nil {
 			return fmt.Errorf("sync grants on database %s: %w", dbName, err)
+		}
+		if err := r.syncFunctionsOnDatabase(log, host, creds, roleName, dbName, functions); err != nil {
+			return fmt.Errorf("sync functions on database %s: %w", dbName, err)
 		}
 	}
 
 	return nil
+}
+
+func (r *CustomRoleReconciler) syncFunctionsOnDatabase(log logr.Logger, host string, adminCredentials postgres.Credentials, roleName, dbName string, functions []postgres.CustomRoleFunction) error {
+	connStr := postgres.ConnectionString{
+		Host:     host,
+		Database: dbName,
+		User:     adminCredentials.User,
+		Password: adminCredentials.Password,
+		Params:   adminCredentials.Params,
+	}
+	db, err := postgres.Connect(log, connStr)
+	if err != nil {
+		return fmt.Errorf("connect to %s: %w", connStr, err)
+	}
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Error(err, "failed to close database connection", "database", dbName)
+		}
+	}()
+
+	return postgres.SyncDatabaseFunctions(log, db, roleName, functions)
 }
 
 func toPostgresGrants(grants []postgresqlv1alpha1.CustomRoleGrant) []postgres.CustomRoleGrant {
@@ -267,6 +320,19 @@ func toPostgresGrants(grants []postgresqlv1alpha1.CustomRoleGrant) []postgres.Cu
 			Schema:     g.Schema,
 			Table:      g.Table,
 			Privileges: g.Privileges,
+		}
+	}
+	return result
+}
+
+func toPostgresFunctions(functions []postgresqlv1alpha1.CustomRoleFunction) []postgres.CustomRoleFunction {
+	result := make([]postgres.CustomRoleFunction, len(functions))
+	for i, f := range functions {
+		result[i] = postgres.CustomRoleFunction{
+			Name:    f.Name,
+			Args:    f.Args,
+			Returns: f.Returns,
+			Body:    f.Body,
 		}
 	}
 	return result

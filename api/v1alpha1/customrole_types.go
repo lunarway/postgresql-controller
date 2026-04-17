@@ -29,10 +29,25 @@ type CustomRoleSpec struct {
 	// +optional
 	GrantRoles []string `json:"grantRoles,omitempty"`
 
-	// Grants is a list of schema/table privilege grants applied to every database
-	// on the host. Reconciled whenever a new PostgreSQLDatabase is created.
+	// Databases restricts which databases the grants and functions are applied to.
+	// If omitted, they are applied to every user database on the host.
+	// Use this to target specific databases (e.g. ["postgres"]) for
+	// admin-level utilities.
+	// +optional
+	Databases []string `json:"databases,omitempty"`
+
+	// Grants is a list of schema/table privilege grants applied to the target
+	// databases. Reconciled whenever a new PostgreSQLDatabase is created.
 	// +optional
 	Grants []CustomRoleGrant `json:"grants,omitempty"`
+
+	// Functions is a list of SECURITY DEFINER functions to create and grant
+	// EXECUTE on to this role. Each function is created in the public schema
+	// with LANGUAGE plpgsql, SECURITY DEFINER, and SET search_path = pg_catalog
+	// hardcoded. The body should contain only the PL/pgSQL statements (the
+	// BEGIN/END block is added automatically).
+	// +optional
+	Functions []CustomRoleFunction `json:"functions,omitempty"`
 }
 
 // CustomRoleGrant defines schema/table privileges to grant to the role.
@@ -50,6 +65,40 @@ type CustomRoleGrant struct {
 
 	// Privileges is a list of PostgreSQL privilege keywords (SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER)
 	Privileges []string `json:"privileges"`
+}
+
+// CustomRoleFunction defines a SECURITY DEFINER function to create and grant to the role.
+// The controller creates the function in the public schema using plpgsql with
+// SECURITY DEFINER and SET search_path = pg_catalog. The body is wrapped in
+// BEGIN ... END automatically.
+//
+// Example:
+//
+//	functions:
+//	- name: my_function
+//	  args: "input_val text"
+//	  returns: void
+//	  body: |
+//	    EXECUTE format('ALTER ROLE %I SET some_setting = %L', input_val, 'value');
+//
+// +k8s:openapi-gen=true
+type CustomRoleFunction struct {
+	// Name is the function name.
+	Name string `json:"name"`
+
+	// Args is the function argument list (e.g. "role_name text", "id integer, name text").
+	// Omit for functions that take no arguments.
+	// +optional
+	Args string `json:"args,omitempty"`
+
+	// Returns is the return type (e.g. "void", "boolean", "TABLE(plan text)").
+	Returns string `json:"returns"`
+
+	// Body contains the PL/pgSQL statements for the function.
+	// Do not include BEGIN/END — they are added automatically.
+	// Use fully qualified names for tables and schemas (e.g. myschema.mytable)
+	// because search_path is set to pg_catalog.
+	Body string `json:"body"`
 }
 
 // CustomRolePhase represents the current phase of a CustomRole resource

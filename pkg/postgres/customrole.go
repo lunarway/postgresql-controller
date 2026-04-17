@@ -18,6 +18,18 @@ func isPermissionDenied(err error) bool {
 	return errors.As(err, &pqErr) && pqErr.Code == "42501"
 }
 
+// CustomRoleFunction defines a SECURITY DEFINER function to create in a database.
+type CustomRoleFunction struct {
+	// Name is the function name (created in the public schema).
+	Name string
+	// Args is the argument list (e.g. "role_name text"). Empty means no arguments.
+	Args string
+	// Returns is the return type (e.g. "void", "boolean", "TABLE(plan text)").
+	Returns string
+	// Body is the PL/pgSQL statements (without BEGIN/END).
+	Body string
+}
+
 // CustomRoleGrant defines schema/table privileges to apply to a role within a database.
 type CustomRoleGrant struct {
 	// Schema is the schema to grant privileges on. Empty or "*" means all user-defined schemas.
@@ -588,6 +600,140 @@ func UserDatabases(db *sql.DB) ([]string, error) {
 		names = append(names, name)
 	}
 	return names, rows.Err()
+}
+
+// managedFunctionPrefix returns the prefix used to name functions managed by
+// this role. Hyphens in the role name are replaced with underscores and a
+// double underscore separates the role prefix from the user-supplied name.
+// Example: role "vault-admin", func "disable_pgaudit" → "vault_admin__disable_pgaudit"
+func managedFunctionPrefix(roleName string) string {
+	return strings.ReplaceAll(roleName, "-", "_") + "__"
+}
+
+// managedFunctionName returns the full PostgreSQL function name for a managed function.
+func managedFunctionName(roleName, funcName string) string {
+	return managedFunctionPrefix(roleName) + funcName
+}
+
+// managedFunctionKey identifies a managed function by name and identity arguments.
+type managedFunctionKey struct {
+	name         string
+	identityArgs string
+}
+
+// managedFunctions returns all functions in the public schema whose name starts
+// with the managed prefix for roleName.
+func managedFunctions(db *sql.DB, roleName string) ([]managedFunctionKey, error) {
+	prefix := managedFunctionPrefix(roleName)
+	rows, err := db.Query(`
+		SELECT p.proname, pg_get_function_identity_arguments(p.oid)
+		FROM pg_proc p
+		JOIN pg_namespace n ON n.oid = p.pronamespace
+		WHERE n.nspname = 'public'
+		  AND starts_with(p.proname, $1)`, prefix)
+	if err != nil {
+		return nil, fmt.Errorf("query managed functions for %s: %w", roleName, err)
+	}
+	defer rows.Close()
+	var funcs []managedFunctionKey
+	for rows.Next() {
+		var f managedFunctionKey
+		if err := rows.Scan(&f.name, &f.identityArgs); err != nil {
+			return nil, fmt.Errorf("scan managed function: %w", err)
+		}
+		funcs = append(funcs, f)
+	}
+	return funcs, rows.Err()
+}
+
+// SyncDatabaseFunctions reconciles SECURITY DEFINER functions in the
+// currently-connected database. For each desired function it executes CREATE OR
+// REPLACE and grants EXECUTE to roleName. Functions are named with a role-based
+// prefix (<rolename>__<funcname>) so they can be identified for cleanup.
+// Functions with the managed prefix that are no longer in the desired set are dropped.
+func SyncDatabaseFunctions(log logr.Logger, db *sql.DB, roleName string, functions []CustomRoleFunction) error {
+	for _, f := range functions {
+		if err := validateFunction(f); err != nil {
+			return err
+		}
+	}
+
+	quotedRole := pq.QuoteIdentifier(roleName)
+
+	// Create or replace desired functions.
+	desiredNames := make(map[string]struct{})
+	for _, f := range functions {
+		pgName := managedFunctionName(roleName, f.Name)
+		qualifiedName := fmt.Sprintf("public.%s(%s)", pq.QuoteIdentifier(pgName), f.Args)
+
+		createSQL := fmt.Sprintf(
+			"CREATE OR REPLACE FUNCTION public.%s(%s) RETURNS %s LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $$ BEGIN %s END; $$",
+			pq.QuoteIdentifier(pgName), f.Args, f.Returns, f.Body)
+		if _, err := db.Exec(createSQL); err != nil {
+			return fmt.Errorf("create function %s: %w", qualifiedName, err)
+		}
+		log.Info("Created/replaced function", "function", qualifiedName)
+
+		grantSQL := fmt.Sprintf("GRANT EXECUTE ON FUNCTION public.%s(%s) TO %s",
+			pq.QuoteIdentifier(pgName), f.Args, quotedRole)
+		if _, err := db.Exec(grantSQL); err != nil {
+			return fmt.Errorf("grant execute on %s to %s: %w", qualifiedName, roleName, err)
+		}
+		log.Info("Granted EXECUTE", "function", qualifiedName, "role", roleName)
+
+		desiredNames[pgName] = struct{}{}
+	}
+
+	// Drop functions that are managed but no longer desired.
+	current, err := managedFunctions(db, roleName)
+	if err != nil {
+		return err
+	}
+	for _, f := range current {
+		if _, ok := desiredNames[f.name]; !ok {
+			dropSQL := fmt.Sprintf("DROP FUNCTION IF EXISTS public.%s(%s)",
+				pq.QuoteIdentifier(f.name), f.identityArgs)
+			if _, err := db.Exec(dropSQL); err != nil {
+				return fmt.Errorf("drop function public.%s(%s): %w", f.name, f.identityArgs, err)
+			}
+			log.Info("Dropped managed function", "function", f.name, "args", f.identityArgs)
+		}
+	}
+
+	return nil
+}
+
+// DropManagedFunctions drops all functions in the currently-connected database
+// whose name starts with the managed prefix for roleName. Used during CR
+// deletion cleanup.
+func DropManagedFunctions(log logr.Logger, db *sql.DB, roleName string) error {
+	funcs, err := managedFunctions(db, roleName)
+	if err != nil {
+		return err
+	}
+	for _, f := range funcs {
+		dropSQL := fmt.Sprintf("DROP FUNCTION IF EXISTS public.%s(%s)",
+			pq.QuoteIdentifier(f.name), f.identityArgs)
+		if _, err := db.Exec(dropSQL); err != nil {
+			return fmt.Errorf("drop function public.%s(%s): %w", f.name, f.identityArgs, err)
+		}
+		log.Info("Dropped managed function", "function", f.name, "args", f.identityArgs)
+	}
+	return nil
+}
+
+// validateFunction checks that a CustomRoleFunction has the required fields.
+func validateFunction(f CustomRoleFunction) error {
+	if f.Name == "" {
+		return ctlerrors.NewInvalid(fmt.Errorf("function name must not be empty"))
+	}
+	if f.Returns == "" {
+		return ctlerrors.NewInvalid(fmt.Errorf("function %q: returns must not be empty", f.Name))
+	}
+	if f.Body == "" {
+		return ctlerrors.NewInvalid(fmt.Errorf("function %q: body must not be empty", f.Name))
+	}
+	return nil
 }
 
 // resolveSchemas returns the schemas to apply a grant to. If schema is empty or
