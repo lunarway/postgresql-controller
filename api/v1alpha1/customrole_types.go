@@ -72,6 +72,10 @@ type CustomRoleGrant struct {
 // SECURITY DEFINER and SET search_path = pg_catalog. The body is wrapped in
 // BEGIN ... END automatically.
 //
+// By default the function is owned by the database owner, so SECURITY DEFINER
+// runs with that role's privileges. Set owningRole to override this (e.g. to
+// use a superuser role for functions that need elevated privileges like ALTER ROLE).
+//
 // Example:
 //
 //	functions:
@@ -93,6 +97,12 @@ type CustomRoleFunction struct {
 
 	// Returns is the return type (e.g. "void", "boolean", "TABLE(plan text)").
 	Returns string `json:"returns"`
+
+	// OwningRole is the PostgreSQL role that will own the function. Since the
+	// function uses SECURITY DEFINER, it executes with this role's privileges.
+	// If omitted, the function is owned by the database owner.
+	// +optional
+	OwningRole string `json:"owningRole,omitempty"`
 
 	// Body contains the PL/pgSQL statements for the function.
 	// Do not include BEGIN/END — they are added automatically.

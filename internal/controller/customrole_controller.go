@@ -329,10 +329,11 @@ func toPostgresFunctions(functions []postgresqlv1alpha1.CustomRoleFunction) []po
 	result := make([]postgres.CustomRoleFunction, len(functions))
 	for i, f := range functions {
 		result[i] = postgres.CustomRoleFunction{
-			Name:    f.Name,
-			Args:    f.Args,
-			Returns: f.Returns,
-			Body:    f.Body,
+			Name:       f.Name,
+			Args:       f.Args,
+			Returns:    f.Returns,
+			OwningRole: f.OwningRole,
+			Body:       f.Body,
 		}
 	}
 	return result
