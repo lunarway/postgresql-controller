@@ -261,11 +261,18 @@ func (r *CustomRoleReconciler) reconcileOnHost(log logr.Logger, host string, cre
 	}
 
 	// Determine which databases to apply grants and functions to.
-	// If targetDatabases is set, use exactly those (may include "postgres").
-	// Otherwise, apply to all user databases.
+	// If targetDatabases is set, use those (may include "postgres") but
+	// filter out system databases that should never be modified.
 	var databases []string
 	if len(targetDatabases) > 0 {
-		databases = targetDatabases
+		for _, db := range targetDatabases {
+			switch db {
+			case "rdsadmin", "template0", "template1":
+				log.Info("Skipping system database from targetDatabases", "database", db)
+			default:
+				databases = append(databases, db)
+			}
+		}
 	} else {
 		databases, err = postgres.UserDatabases(adminDB)
 		if err != nil {
