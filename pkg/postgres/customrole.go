@@ -697,8 +697,11 @@ func SyncDatabaseFunctions(log logr.Logger, db *sql.DB, roleName string, functio
 		}
 	}
 
-	// Create or replace desired functions.
-	desiredNames := make(map[string]struct{})
+	// Create or replace desired functions. Track each by name + canonical
+	// identity args so that stale overloads (same name, different arg
+	// signature) are dropped when the args field changes.
+	type desiredKey struct{ name, identityArgs string }
+	desiredFunctions := make(map[desiredKey]struct{})
 	for _, f := range functions {
 		owner := f.OwningRole
 		if owner == "" {
@@ -709,7 +712,7 @@ func SyncDatabaseFunctions(log logr.Logger, db *sql.DB, roleName string, functio
 		qualifiedName := fmt.Sprintf("public.%s(%s)", pq.QuoteIdentifier(pgName), f.Args)
 
 		createSQL := fmt.Sprintf(
-			"SET ROLE %s; CREATE OR REPLACE FUNCTION public.%s(%s) RETURNS %s LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $$ BEGIN %s END; $$; RESET ROLE",
+			"SET ROLE %s; CREATE OR REPLACE FUNCTION public.%s(%s) RETURNS %s LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $func_body$ BEGIN %s END; $func_body$; RESET ROLE",
 			pq.QuoteIdentifier(owner),
 			pq.QuoteIdentifier(pgName), f.Args, f.Returns, f.Body)
 		if _, err := db.Exec(createSQL); err != nil {
@@ -725,16 +728,28 @@ func SyncDatabaseFunctions(log logr.Logger, db *sql.DB, roleName string, functio
 		}
 		log.Info("Granted EXECUTE", "function", qualifiedName, "role", roleName)
 
-		desiredNames[pgName] = struct{}{}
+		// Query the canonical identity args from pg_catalog so we compare
+		// against the same format that managedFunctions returns.
+		var canonicalArgs string
+		if err := db.QueryRow(`
+			SELECT pg_get_function_identity_arguments(p.oid)
+			FROM pg_proc p
+			JOIN pg_namespace n ON n.oid = p.pronamespace
+			WHERE n.nspname = 'public' AND p.proname = $1
+			ORDER BY p.oid DESC LIMIT 1`, pgName).Scan(&canonicalArgs); err != nil {
+			return fmt.Errorf("lookup identity args for %s: %w", pgName, err)
+		}
+		desiredFunctions[desiredKey{pgName, canonicalArgs}] = struct{}{}
 	}
 
-	// Drop functions that are managed but no longer desired.
+	// Drop functions that are managed but no longer desired (including stale
+	// overloads whose arg signature changed).
 	current, err := managedFunctions(db, roleName)
 	if err != nil {
 		return err
 	}
 	for _, f := range current {
-		if _, ok := desiredNames[f.name]; !ok {
+		if _, ok := desiredFunctions[desiredKey{f.name, f.identityArgs}]; !ok {
 			dropSQL := fmt.Sprintf("SET ROLE %s; DROP FUNCTION IF EXISTS public.%s(%s); RESET ROLE",
 				pq.QuoteIdentifier(f.owner),
 				pq.QuoteIdentifier(f.name), f.identityArgs)

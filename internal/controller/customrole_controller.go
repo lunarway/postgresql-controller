@@ -227,9 +227,12 @@ func (r *CustomRoleReconciler) cleanupRoleOnHost(log logr.Logger, host string, c
 		}
 	}
 
-	// Drop functions scoped to the postgres database.
+	// Drop functions and revoke grants scoped to the postgres database.
 	if err := postgres.DropManagedFunctions(log, adminDB, roleName); err != nil {
 		return fmt.Errorf("drop functions in postgres database: %w", err)
+	}
+	if err := postgres.RevokeAllDatabaseGrants(log, adminDB, roleName); err != nil {
+		return fmt.Errorf("revoke grants in postgres database: %w", err)
 	}
 
 	return postgres.DropCustomRole(log, adminDB, roleName)
