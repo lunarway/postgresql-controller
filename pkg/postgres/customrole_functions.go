@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -27,6 +28,11 @@ type CustomRoleFunction struct {
 	// Body is the PL/pgSQL statements (without BEGIN/END).
 	Body string
 }
+
+// safeTypeExpr matches strings that consist only of characters valid in a
+// PostgreSQL type expression or argument list. This prevents SQL injection via
+// Args/Returns fields that are interpolated directly into DDL.
+var safeTypeExpr = regexp.MustCompile(`^[a-zA-Z0-9 _,.()\[\]"]*$`)
 
 // randomDollarTag returns a random dollar-quoting tag of the form $f_<hex>$
 // that is safe to use as a PL/pgSQL function body delimiter.
@@ -195,8 +201,13 @@ func SyncDatabaseFunctions(log logr.Logger, db *sql.DB, roleName string, functio
 
 		// ALTER FUNCTION sets ownership idempotently so that a changed owningRole
 		// takes effect even when CREATE OR REPLACE does not transfer ownership.
-		if _, err := db.Exec(fmt.Sprintf("ALTER FUNCTION public.%s(%s) OWNER TO %s",
-			pq.QuoteIdentifier(pgName), canonicalArgs, pq.QuoteIdentifier(owner))); err != nil {
+		// Run as owner (not the connection user) — PostgreSQL requires the caller
+		// to be the current owner or a superuser.
+		if err := execWithRole(db, owner, func(tx *sql.Tx) error {
+			_, err := tx.Exec(fmt.Sprintf("ALTER FUNCTION public.%s(%s) OWNER TO %s",
+				pq.QuoteIdentifier(pgName), canonicalArgs, pq.QuoteIdentifier(owner)))
+			return err
+		}); err != nil {
 			return fmt.Errorf("set owner on function %s: %w", qualifiedName, err)
 		}
 
@@ -266,6 +277,12 @@ func validateFunction(f CustomRoleFunction) error {
 	}
 	if f.Returns == "" {
 		return ctlerrors.NewInvalid(fmt.Errorf("function %q: returns must not be empty", f.Name))
+	}
+	if !safeTypeExpr.MatchString(f.Args) {
+		return ctlerrors.NewInvalid(fmt.Errorf("function %q: args contains invalid characters", f.Name))
+	}
+	if !safeTypeExpr.MatchString(f.Returns) {
+		return ctlerrors.NewInvalid(fmt.Errorf("function %q: returns contains invalid characters", f.Name))
 	}
 	if f.Body == "" {
 		return ctlerrors.NewInvalid(fmt.Errorf("function %q: body must not be empty", f.Name))
