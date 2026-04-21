@@ -92,11 +92,13 @@ func randomDollarTag() string {
 }
 
 // managedFunctionPrefix returns the prefix used to name functions managed by
-// this role. Hyphens in the role name are replaced with underscores and a
-// double underscore separates the role prefix from the user-supplied name.
-// Example: role "vault-admin", func "disable_pgaudit" → "vault_admin__disable_pgaudit"
+// this role. The role name is used verbatim (including hyphens) so that two
+// roles whose names differ only by hyphen vs underscore (e.g. "reporting-db"
+// and "reporting_db") never share a prefix. The generated function identifier
+// is always quoted via pq.QuoteIdentifier, so hyphens are safe.
+// Example: role "vault-admin", func "disable_pgaudit" → "vault-admin__disable_pgaudit"
 func managedFunctionPrefix(roleName string) string {
-	return strings.ReplaceAll(roleName, "-", "_") + "__"
+	return roleName + "__"
 }
 
 // managedFunctionName returns the full PostgreSQL function name for a managed function.
