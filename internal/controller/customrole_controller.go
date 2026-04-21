@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
@@ -174,74 +175,9 @@ func (r *CustomRoleReconciler) reconcile(ctx context.Context, reqLogger logr.Log
 	return nil
 }
 
-func (r *CustomRoleReconciler) cleanupRole(_ context.Context, log logr.Logger, roleName string) error {
-	for host, creds := range r.HostCredentials {
-		if err := r.cleanupRoleOnHost(log, host, creds, roleName); err != nil {
-			return fmt.Errorf("cleanup on host %s: %w", host, err)
-		}
-	}
-	return nil
-}
-
-func (r *CustomRoleReconciler) cleanupRoleOnHost(log logr.Logger, host string, creds postgres.Credentials, roleName string) error {
-	adminConnStr := postgres.ConnectionString{
-		Host:     host,
-		Database: "postgres",
-		User:     creds.User,
-		Password: creds.Password,
-		Params:   creds.Params,
-	}
-	adminDB, err := postgres.Connect(log, adminConnStr)
-	if err != nil {
-		return fmt.Errorf("connect to host: %w", err)
-	}
-	defer adminDB.Close()
-
-	databases, err := postgres.UserDatabases(adminDB)
-	if err != nil {
-		return fmt.Errorf("list databases: %w", err)
-	}
-	for _, dbName := range databases {
-		connStr := postgres.ConnectionString{
-			Host:     host,
-			Database: dbName,
-			User:     creds.User,
-			Password: creds.Password,
-			Params:   creds.Params,
-		}
-		db, err := postgres.Connect(log, connStr)
-		if err != nil {
-			return fmt.Errorf("connect to %s: %w", dbName, err)
-		}
-		dropErr := postgres.DropManagedFunctions(log, db, roleName)
-		if dropErr != nil {
-			db.Close()
-			return fmt.Errorf("drop functions in database %s: %w", dbName, dropErr)
-		}
-		revokeErr := postgres.RevokeAllDatabaseGrants(log, db, roleName)
-		if closeErr := db.Close(); closeErr != nil {
-			log.Error(closeErr, "failed to close database connection", "database", dbName)
-		}
-		if revokeErr != nil {
-			return fmt.Errorf("revoke grants in database %s: %w", dbName, revokeErr)
-		}
-	}
-
-	// Drop functions and revoke grants scoped to the postgres database.
-	if err := postgres.DropManagedFunctions(log, adminDB, roleName); err != nil {
-		return fmt.Errorf("drop functions in postgres database: %w", err)
-	}
-	if err := postgres.RevokeAllDatabaseGrants(log, adminDB, roleName); err != nil {
-		return fmt.Errorf("revoke grants in postgres database: %w", err)
-	}
-
-	return postgres.DropCustomRole(log, adminDB, roleName)
-}
-
 func (r *CustomRoleReconciler) reconcileOnHost(log logr.Logger, host string, creds postgres.Credentials, roleName string, grantRoles []string, targetDatabases []string, grants []postgres.CustomRoleGrant, functions []postgres.CustomRoleFunction) error {
 	log = log.WithValues("host", host)
 
-	// Connect to the postgres maintenance database for server-level operations.
 	adminConnStr := postgres.ConnectionString{
 		Host:     host,
 		Database: "postgres",
@@ -255,156 +191,49 @@ func (r *CustomRoleReconciler) reconcileOnHost(log logr.Logger, host string, cre
 	}
 	defer adminDB.Close()
 
-	// Create the role and apply server-level role grants.
-	if err := postgres.EnsureCustomRole(log, adminDB, roleName, grantRoles); err != nil {
-		return fmt.Errorf("ensure role: %w", err)
+	// Resolve the effective database list and, when scoped, all user databases
+	// (so each domain can run its cleanup pass without an extra query).
+	databases, allUserDatabases, err := resolveTargetDatabases(log, adminDB, targetDatabases)
+	if err != nil {
+		return err
 	}
 
-	// Determine which databases to apply grants and functions to.
-	// If targetDatabases is set, use those (may include "postgres") but
-	// filter out system databases that should never be modified.
-	var databases []string
-	if len(targetDatabases) > 0 {
-		for _, db := range targetDatabases {
-			switch db {
-			case "rdsadmin", "template0", "template1":
-				log.Info("Skipping system database from targetDatabases", "database", db)
-			default:
-				databases = append(databases, db)
-			}
-		}
-	} else {
-		databases, err = postgres.UserDatabases(adminDB)
-		if err != nil {
-			return fmt.Errorf("list databases: %w", err)
-		}
+	if err := r.reconcileRoleOnHost(log, adminDB, roleName, grantRoles); err != nil {
+		return err
 	}
-
-	for _, dbName := range databases {
-		if dbName == "postgres" {
-			// Reuse the existing admin connection for the postgres database.
-			if err := postgres.SyncDatabaseGrants(log, adminDB, roleName, grants); err != nil {
-				return fmt.Errorf("sync grants on database postgres: %w", err)
-			}
-			if err := postgres.SyncDatabaseFunctions(log, adminDB, roleName, functions); err != nil {
-				return fmt.Errorf("sync functions on database postgres: %w", err)
-			}
-			continue
-		}
-		if err := r.syncGrantsOnDatabase(log, host, creds, roleName, dbName, grants); err != nil {
-			return fmt.Errorf("sync grants on database %s: %w", dbName, err)
-		}
-		if err := r.syncFunctionsOnDatabase(log, host, creds, roleName, dbName, functions); err != nil {
-			return fmt.Errorf("sync functions on database %s: %w", dbName, err)
-		}
+	if err := r.reconcileGrantsOnHost(log, host, creds, roleName, databases, allUserDatabases, grants); err != nil {
+		return err
 	}
-
-	// When targetDatabases is explicitly set, also clean up any managed resources
-	// in databases that are no longer in scope. Without this, narrowing the
-	// databases list leaves orphaned functions and grants behind.
-	if len(targetDatabases) > 0 {
-		targetSet := make(map[string]struct{}, len(databases))
-		for _, db := range databases {
-			targetSet[db] = struct{}{}
-		}
-
-		// Clean up the postgres database if it is not targeted.
-		if _, ok := targetSet["postgres"]; !ok {
-			if err := postgres.SyncDatabaseGrants(log, adminDB, roleName, nil); err != nil {
-				return fmt.Errorf("cleanup grants on database postgres: %w", err)
-			}
-			if err := postgres.SyncDatabaseFunctions(log, adminDB, roleName, nil); err != nil {
-				return fmt.Errorf("cleanup functions on database postgres: %w", err)
-			}
-		}
-
-		// Clean up user databases that are no longer targeted.
-		allUserDatabases, err := postgres.UserDatabases(adminDB)
-		if err != nil {
-			return fmt.Errorf("list databases for cleanup: %w", err)
-		}
-		for _, dbName := range allUserDatabases {
-			if _, inTarget := targetSet[dbName]; inTarget {
-				continue
-			}
-			if err := r.syncGrantsOnDatabase(log, host, creds, roleName, dbName, nil); err != nil {
-				return fmt.Errorf("cleanup grants on database %s: %w", dbName, err)
-			}
-			if err := r.syncFunctionsOnDatabase(log, host, creds, roleName, dbName, nil); err != nil {
-				return fmt.Errorf("cleanup functions on database %s: %w", dbName, err)
-			}
-		}
+	if err := r.reconcileFunctionsOnHost(log, host, creds, adminDB, roleName, databases, allUserDatabases, functions); err != nil {
+		return err
 	}
-
 	return nil
 }
 
-func (r *CustomRoleReconciler) syncFunctionsOnDatabase(log logr.Logger, host string, adminCredentials postgres.Credentials, roleName, dbName string, functions []postgres.CustomRoleFunction) error {
-	connStr := postgres.ConnectionString{
-		Host:     host,
-		Database: dbName,
-		User:     adminCredentials.User,
-		Password: adminCredentials.Password,
-		Params:   adminCredentials.Params,
+// resolveTargetDatabases returns the effective database list for this
+// reconcile cycle and, when targetDatabases is non-empty, all user databases
+// (used by domain reconcilers for their cleanup passes).
+// Databases in UntargetableDatabases are filtered from the explicit list.
+func resolveTargetDatabases(log logr.Logger, adminDB *sql.DB, targetDatabases []string) (databases []string, allUserDatabases []string, err error) {
+	if len(targetDatabases) > 0 {
+		for _, db := range targetDatabases {
+			if _, ok := postgres.UntargetableDatabases[db]; ok {
+				log.Info("Skipping system database from targetDatabases", "database", db)
+				continue
+			}
+			databases = append(databases, db)
+		}
+		allUserDatabases, err = postgres.UserDatabases(adminDB)
+		if err != nil {
+			return nil, nil, fmt.Errorf("list databases for cleanup: %w", err)
+		}
+		return databases, allUserDatabases, nil
 	}
-	db, err := postgres.Connect(log, connStr)
+	databases, err = postgres.UserDatabases(adminDB)
 	if err != nil {
-		return fmt.Errorf("connect to %s: %w", connStr, err)
+		return nil, nil, fmt.Errorf("list databases: %w", err)
 	}
-	defer func() {
-		if err := db.Close(); err != nil {
-			log.Error(err, "failed to close database connection", "database", dbName)
-		}
-	}()
-
-	return postgres.SyncDatabaseFunctions(log, db, roleName, functions)
-}
-
-func toPostgresGrants(grants []postgresqlv1alpha1.CustomRoleGrant) []postgres.CustomRoleGrant {
-	result := make([]postgres.CustomRoleGrant, len(grants))
-	for i, g := range grants {
-		result[i] = postgres.CustomRoleGrant{
-			Schema:     g.Schema,
-			Table:      g.Table,
-			Privileges: g.Privileges,
-		}
-	}
-	return result
-}
-
-func toPostgresFunctions(functions []postgresqlv1alpha1.CustomRoleFunction) []postgres.CustomRoleFunction {
-	result := make([]postgres.CustomRoleFunction, len(functions))
-	for i, f := range functions {
-		result[i] = postgres.CustomRoleFunction{
-			Name:       f.Name,
-			Args:       f.Args,
-			Returns:    f.Returns,
-			OwningRole: f.OwningRole,
-			Body:       f.Body,
-		}
-	}
-	return result
-}
-
-func (r *CustomRoleReconciler) syncGrantsOnDatabase(log logr.Logger, host string, adminCredentials postgres.Credentials, roleName, dbName string, grants []postgres.CustomRoleGrant) error {
-	connStr := postgres.ConnectionString{
-		Host:     host,
-		Database: dbName,
-		User:     adminCredentials.User,
-		Password: adminCredentials.Password,
-		Params:   adminCredentials.Params,
-	}
-	db, err := postgres.Connect(log, connStr)
-	if err != nil {
-		return fmt.Errorf("connect to %s: %w", connStr, err)
-	}
-	defer func() {
-		if err := db.Close(); err != nil {
-			log.Error(err, "failed to close database connection", "database", dbName)
-		}
-	}()
-
-	return postgres.SyncDatabaseGrants(log, db, roleName, grants)
+	return databases, nil, nil
 }
 
 func (r *CustomRoleReconciler) persistStatus(ctx context.Context, customRole *postgresqlv1alpha1.CustomRole, reconcileErr error) {

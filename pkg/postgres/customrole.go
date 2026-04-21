@@ -1,7 +1,9 @@
 package postgres
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -582,6 +584,14 @@ func DropCustomRole(log logr.Logger, db *sql.DB, roleName string) error {
 	return nil
 }
 
+// UntargetableDatabases contains PostgreSQL system databases that must not be
+// modified by the controller even when explicitly listed in spec.databases.
+var UntargetableDatabases = map[string]struct{}{
+	"rdsadmin":  {},
+	"template0": {},
+	"template1": {},
+}
+
 // UserDatabases returns the names of all non-template databases on the server,
 // excluding system databases (postgres, rdsadmin) and template databases.
 func UserDatabases(db *sql.DB) ([]string, error) {
@@ -605,6 +615,33 @@ func UserDatabases(db *sql.DB) ([]string, error) {
 	return names, rows.Err()
 }
 
+// execWithRole runs fn inside a transaction with SET LOCAL ROLE so every
+// statement in fn executes with owner's privileges. The role resets
+// automatically when the transaction ends (commit or rollback).
+func execWithRole(db *sql.DB, owner string, fn func(*sql.Tx) error) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	if _, err := tx.Exec("SET LOCAL ROLE " + pq.QuoteIdentifier(owner)); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("set role %s: %w", owner, err)
+	}
+	if err := fn(tx); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
+
+// randomDollarTag returns a random dollar-quoting tag of the form $f_<hex>$
+// that is safe to use as a PL/pgSQL function body delimiter.
+func randomDollarTag() string {
+	b := make([]byte, 8)
+	rand.Read(b) //nolint:errcheck
+	return "$f_" + hex.EncodeToString(b) + "$"
+}
+
 // managedFunctionPrefix returns the prefix used to name functions managed by
 // this role. Hyphens in the role name are replaced with underscores and a
 // double underscore separates the role prefix from the user-supplied name.
@@ -623,6 +660,12 @@ type managedFunctionKey struct {
 	name         string
 	identityArgs string
 	owner        string
+}
+
+// desiredFunctionKey identifies a desired function by name and canonical argument signature.
+type desiredFunctionKey struct {
+	name         string
+	identityArgs string
 }
 
 // managedFunctions returns all functions in the public schema whose name starts
@@ -666,12 +709,13 @@ func databaseOwner(db *sql.DB) (string, error) {
 }
 
 // SyncDatabaseFunctions reconciles SECURITY DEFINER functions in the
-// currently-connected database. For each desired function it executes CREATE OR
-// REPLACE (via SET ROLE to the owning role) and grants EXECUTE to roleName.
-// Functions are named with a role-based prefix (<rolename>__<funcname>) so they
-// can be identified for cleanup. If a function's OwningRole is empty, the
-// database owner is used, so the function runs with the database owner's
-// privileges rather than the controller's superuser privileges.
+// currently-connected database. For each desired function it creates or
+// replaces the function (as the owning role), ensures ownership is correct via
+// ALTER FUNCTION, and grants EXECUTE to roleName. Functions are named with a
+// role-based prefix (<rolename>__<funcname>) so they can be identified for
+// cleanup. If a function's OwningRole is empty, the database owner is used.
+// Each DDL operation runs inside a transaction to prevent SET LOCAL ROLE leaking
+// into the connection pool on error.
 func SyncDatabaseFunctions(log logr.Logger, db *sql.DB, roleName string, functions []CustomRoleFunction) error {
 	for _, f := range functions {
 		if err := validateFunction(f); err != nil {
@@ -681,28 +725,36 @@ func SyncDatabaseFunctions(log logr.Logger, db *sql.DB, roleName string, functio
 
 	quotedRole := pq.QuoteIdentifier(roleName)
 
-	// Resolve the database owner once for functions that don't specify an owning role.
+	// Resolve the database owner once for functions that omit owningRole.
 	var dbOwner string
-	needsOwner := false
 	for _, f := range functions {
 		if f.OwningRole == "" {
-			needsOwner = true
+			var err error
+			dbOwner, err = databaseOwner(db)
+			if err != nil {
+				return err
+			}
 			break
 		}
 	}
-	if needsOwner {
-		var err error
-		dbOwner, err = databaseOwner(db)
-		if err != nil {
-			return err
+
+	// Build a map of currently-managed functions so we can detect ownership
+	// changes before attempting CREATE OR REPLACE.
+	current, err := managedFunctions(db, roleName)
+	if err != nil {
+		return err
+	}
+	// currentOwner maps a function name to its current owner. Only the first
+	// overload per name is tracked; args-change overloads are handled by the
+	// stale-overload cleanup below.
+	currentOwner := make(map[string]string, len(current))
+	for _, f := range current {
+		if _, seen := currentOwner[f.name]; !seen {
+			currentOwner[f.name] = f.owner
 		}
 	}
 
-	// Create or replace desired functions. Track each by name + canonical
-	// identity args so that stale overloads (same name, different arg
-	// signature) are dropped when the args field changes.
-	type desiredKey struct{ name, identityArgs string }
-	desiredFunctions := make(map[desiredKey]struct{})
+	desired := make(map[desiredFunctionKey]struct{})
 	for _, f := range functions {
 		owner := f.OwningRole
 		if owner == "" {
@@ -711,26 +763,32 @@ func SyncDatabaseFunctions(log logr.Logger, db *sql.DB, roleName string, functio
 
 		pgName := managedFunctionName(roleName, f.Name)
 		qualifiedName := fmt.Sprintf("public.%s(%s)", pq.QuoteIdentifier(pgName), f.Args)
+		tag := randomDollarTag()
 
-		createSQL := fmt.Sprintf(
-			"SET ROLE %s; CREATE OR REPLACE FUNCTION public.%s(%s) RETURNS %s LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $func_body$ BEGIN %s END; $func_body$; RESET ROLE",
-			pq.QuoteIdentifier(owner),
-			pq.QuoteIdentifier(pgName), f.Args, f.Returns, f.Body)
-		if _, err := db.Exec(createSQL); err != nil {
+		// If the existing function is owned by a different role, drop it first so
+		// that CREATE OR REPLACE (which requires owning the function) can succeed.
+		if prev, exists := currentOwner[pgName]; exists && prev != owner {
+			if err := execWithRole(db, prev, func(tx *sql.Tx) error {
+				_, err := tx.Exec(fmt.Sprintf("DROP FUNCTION IF EXISTS public.%s(%s)",
+					pq.QuoteIdentifier(pgName), f.Args))
+				return err
+			}); err != nil {
+				return fmt.Errorf("drop function %s before owner change: %w", qualifiedName, err)
+			}
+		}
+
+		if err := execWithRole(db, owner, func(tx *sql.Tx) error {
+			_, err := tx.Exec(fmt.Sprintf(
+				"CREATE OR REPLACE FUNCTION public.%s(%s) RETURNS %s LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS %s\nBEGIN\n%s\nEND;\n%s",
+				pq.QuoteIdentifier(pgName), f.Args, f.Returns, tag, f.Body, tag))
+			return err
+		}); err != nil {
 			return fmt.Errorf("create function %s as %s: %w", qualifiedName, owner, err)
 		}
 		log.Info("Created/replaced function", "function", qualifiedName, "owner", owner)
 
-		grantSQL := fmt.Sprintf("SET ROLE %s; GRANT EXECUTE ON FUNCTION public.%s(%s) TO %s; RESET ROLE",
-			pq.QuoteIdentifier(owner),
-			pq.QuoteIdentifier(pgName), f.Args, quotedRole)
-		if _, err := db.Exec(grantSQL); err != nil {
-			return fmt.Errorf("grant execute on %s to %s: %w", qualifiedName, roleName, err)
-		}
-		log.Info("Granted EXECUTE", "function", qualifiedName, "role", roleName)
-
-		// Query the canonical identity args from pg_catalog so we compare
-		// against the same format that managedFunctions returns.
+		// Query canonical args from pg_catalog so comparisons match the format
+		// that managedFunctions returns.
 		var canonicalArgs string
 		if err := db.QueryRow(`
 			SELECT pg_get_function_identity_arguments(p.oid)
@@ -740,21 +798,35 @@ func SyncDatabaseFunctions(log logr.Logger, db *sql.DB, roleName string, functio
 			ORDER BY p.oid DESC LIMIT 1`, pgName).Scan(&canonicalArgs); err != nil {
 			return fmt.Errorf("lookup identity args for %s: %w", pgName, err)
 		}
-		desiredFunctions[desiredKey{pgName, canonicalArgs}] = struct{}{}
+
+		// ALTER FUNCTION sets ownership idempotently so that a changed owningRole
+		// takes effect even when CREATE OR REPLACE does not transfer ownership.
+		if _, err := db.Exec(fmt.Sprintf("ALTER FUNCTION public.%s(%s) OWNER TO %s",
+			pq.QuoteIdentifier(pgName), canonicalArgs, pq.QuoteIdentifier(owner))); err != nil {
+			return fmt.Errorf("set owner on function %s: %w", qualifiedName, err)
+		}
+
+		if err := execWithRole(db, owner, func(tx *sql.Tx) error {
+			_, err := tx.Exec(fmt.Sprintf("GRANT EXECUTE ON FUNCTION public.%s(%s) TO %s",
+				pq.QuoteIdentifier(pgName), canonicalArgs, quotedRole))
+			return err
+		}); err != nil {
+			return fmt.Errorf("grant execute on %s to %s: %w", qualifiedName, roleName, err)
+		}
+		log.Info("Granted EXECUTE", "function", qualifiedName, "role", roleName)
+
+		desired[desiredFunctionKey{pgName, canonicalArgs}] = struct{}{}
 	}
 
 	// Drop functions that are managed but no longer desired (including stale
 	// overloads whose arg signature changed).
-	current, err := managedFunctions(db, roleName)
-	if err != nil {
-		return err
-	}
 	for _, f := range current {
-		if _, ok := desiredFunctions[desiredKey{f.name, f.identityArgs}]; !ok {
-			dropSQL := fmt.Sprintf("SET ROLE %s; DROP FUNCTION IF EXISTS public.%s(%s); RESET ROLE",
-				pq.QuoteIdentifier(f.owner),
-				pq.QuoteIdentifier(f.name), f.identityArgs)
-			if _, err := db.Exec(dropSQL); err != nil {
+		if _, ok := desired[desiredFunctionKey{f.name, f.identityArgs}]; !ok {
+			if err := execWithRole(db, f.owner, func(tx *sql.Tx) error {
+				_, err := tx.Exec(fmt.Sprintf("DROP FUNCTION IF EXISTS public.%s(%s)",
+					pq.QuoteIdentifier(f.name), f.identityArgs))
+				return err
+			}); err != nil {
 				return fmt.Errorf("drop function public.%s(%s): %w", f.name, f.identityArgs, err)
 			}
 			log.Info("Dropped managed function", "function", f.name, "args", f.identityArgs)
@@ -765,18 +837,20 @@ func SyncDatabaseFunctions(log logr.Logger, db *sql.DB, roleName string, functio
 }
 
 // DropManagedFunctions drops all functions in the currently-connected database
-// whose name starts with the managed prefix for roleName. Uses SET ROLE to the
-// function owner for each drop. Used during CR deletion cleanup.
+// whose name starts with the managed prefix for roleName. Each drop runs inside
+// a transaction with SET LOCAL ROLE to the function owner. Used during CR
+// deletion cleanup.
 func DropManagedFunctions(log logr.Logger, db *sql.DB, roleName string) error {
 	funcs, err := managedFunctions(db, roleName)
 	if err != nil {
 		return err
 	}
 	for _, f := range funcs {
-		dropSQL := fmt.Sprintf("SET ROLE %s; DROP FUNCTION IF EXISTS public.%s(%s); RESET ROLE",
-			pq.QuoteIdentifier(f.owner),
-			pq.QuoteIdentifier(f.name), f.identityArgs)
-		if _, err := db.Exec(dropSQL); err != nil {
+		if err := execWithRole(db, f.owner, func(tx *sql.Tx) error {
+			_, err := tx.Exec(fmt.Sprintf("DROP FUNCTION IF EXISTS public.%s(%s)",
+				pq.QuoteIdentifier(f.name), f.identityArgs))
+			return err
+		}); err != nil {
 			return fmt.Errorf("drop function public.%s(%s): %w", f.name, f.identityArgs, err)
 		}
 		log.Info("Dropped managed function", "function", f.name, "args", f.identityArgs)
