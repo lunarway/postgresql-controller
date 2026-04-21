@@ -213,12 +213,12 @@ func (r *CustomRoleReconciler) reconcileOnHost(log logr.Logger, host string, cre
 // resolveTargetDatabases returns the effective database list for this
 // reconcile cycle and, when targetDatabases is non-empty, all user databases
 // (used by domain reconcilers for their cleanup passes).
-// Databases in UntargetableDatabases are filtered from the explicit list.
+// Databases in postgres.ReservedSystemDatabases are filtered from the explicit list.
 func resolveTargetDatabases(log logr.Logger, adminDB *sql.DB, targetDatabases []string) (databases []string, allUserDatabases []string, err error) {
 	if len(targetDatabases) > 0 {
 		for _, db := range targetDatabases {
-			if _, ok := postgres.UntargetableDatabases[db]; ok {
-				log.Info("Skipping system database from targetDatabases", "database", db)
+			if _, ok := postgres.ReservedSystemDatabases[db]; ok {
+				log.Info("Skipping reserved system database from targetDatabases", "database", db)
 				continue
 			}
 			databases = append(databases, db)
