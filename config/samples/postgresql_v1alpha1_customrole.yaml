@@ -5,9 +5,43 @@ metadata:
 spec:
   grantRoles:
     - pg_monitor
+  # Omit databases to apply grants and functions to every user database.
   grants:
     - schema: public
       privileges: [SELECT]
     - schema: audit
       table: events
       privileges: [SELECT, INSERT]
+  # Security definer functions — created in the public schema with
+  # LANGUAGE plpgsql, SECURITY DEFINER, SET search_path = pg_catalog.
+  # The body should contain only the PL/pgSQL statements (BEGIN/END is
+  # added automatically). Use fully qualified names for tables/schemas.
+  #
+  # By default functions are owned by the database owner, so SECURITY
+  # DEFINER runs with that role's privileges (least privilege).
+  # Set owningRole to override this for functions that need elevated
+  # privileges (e.g. ALTER ROLE requires a superuser-like role).
+  functions:
+    # Owned by the database owner (default) — runs with its privileges.
+    - name: my_query_function
+      args: "query text"
+      returns: "TABLE(result text)"
+      body: |
+        RETURN QUERY EXECUTE query;
+---
+apiVersion: postgresql.lunar.tech/v1alpha1
+kind: CustomRole
+metadata:
+  name: admin-utils
+spec:
+  # Restrict to the postgres database only.
+  databases: [postgres]
+  functions:
+    # owningRole overrides the default (database owner) so the function
+    # runs with iam_creator's privileges, which can ALTER ROLE.
+    - name: my_admin_function
+      args: "target_role text"
+      returns: void
+      owningRole: iam_creator
+      body: |
+        EXECUTE format('ALTER ROLE %I SET some_setting = %L', target_role, 'value');
