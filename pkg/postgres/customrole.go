@@ -789,6 +789,13 @@ func validateFunction(f CustomRoleFunction) error {
 	if f.Name == "" {
 		return ctlerrors.NewInvalid(fmt.Errorf("function name must not be empty"))
 	}
+	// "__" is the separator between the role prefix and the function name in the
+	// generated PostgreSQL identifier. Allowing it in the user-supplied name would
+	// break the cleanup query that uses the absence of "__" after the prefix to
+	// distinguish functions owned by this role from those of longer-prefixed roles.
+	if strings.Contains(f.Name, "__") {
+		return ctlerrors.NewInvalid(fmt.Errorf("function %q: name must not contain \"__\"", f.Name))
+	}
 	if f.Returns == "" {
 		return ctlerrors.NewInvalid(fmt.Errorf("function %q: returns must not be empty", f.Name))
 	}

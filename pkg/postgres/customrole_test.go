@@ -1149,6 +1149,25 @@ func TestRevokeAllDatabaseGrants_viaSetRole(t *testing.T) {
 		"USAGE should be revoked")
 }
 
+func TestSyncDatabaseFunctions_rejectsNameWithDoubleUnderscore(t *testing.T) {
+	host := test.Integration(t)
+	log := test.SetLogger(t)
+
+	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host: host, Database: "postgres", User: "iam_creator", Password: "iam_creator",
+	})
+	require.NoError(t, err)
+	defer adminDB.Close()
+
+	roleName := fmt.Sprintf("custom_role_%d", time.Now().UnixNano())
+	require.NoError(t, postgres.EnsureCustomRole(log, adminDB, roleName, nil))
+
+	err = postgres.SyncDatabaseFunctions(log, adminDB, roleName, []postgres.CustomRoleFunction{
+		{Name: "bad__name", Returns: "void", Body: "NULL;"},
+	})
+	require.Error(t, err, "function name containing __ should be rejected")
+}
+
 func TestSyncDatabaseFunctions_createsFunction(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)

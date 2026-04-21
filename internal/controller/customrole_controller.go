@@ -299,6 +299,43 @@ func (r *CustomRoleReconciler) reconcileOnHost(log logr.Logger, host string, cre
 		}
 	}
 
+	// When targetDatabases is explicitly set, also clean up any managed resources
+	// in databases that are no longer in scope. Without this, narrowing the
+	// databases list leaves orphaned functions and grants behind.
+	if len(targetDatabases) > 0 {
+		targetSet := make(map[string]struct{}, len(databases))
+		for _, db := range databases {
+			targetSet[db] = struct{}{}
+		}
+
+		// Clean up the postgres database if it is not targeted.
+		if _, ok := targetSet["postgres"]; !ok {
+			if err := postgres.SyncDatabaseGrants(log, adminDB, roleName, nil); err != nil {
+				return fmt.Errorf("cleanup grants on database postgres: %w", err)
+			}
+			if err := postgres.SyncDatabaseFunctions(log, adminDB, roleName, nil); err != nil {
+				return fmt.Errorf("cleanup functions on database postgres: %w", err)
+			}
+		}
+
+		// Clean up user databases that are no longer targeted.
+		allUserDatabases, err := postgres.UserDatabases(adminDB)
+		if err != nil {
+			return fmt.Errorf("list databases for cleanup: %w", err)
+		}
+		for _, dbName := range allUserDatabases {
+			if _, inTarget := targetSet[dbName]; inTarget {
+				continue
+			}
+			if err := r.syncGrantsOnDatabase(log, host, creds, roleName, dbName, nil); err != nil {
+				return fmt.Errorf("cleanup grants on database %s: %w", dbName, err)
+			}
+			if err := r.syncFunctionsOnDatabase(log, host, creds, roleName, dbName, nil); err != nil {
+				return fmt.Errorf("cleanup functions on database %s: %w", dbName, err)
+			}
+		}
+	}
+
 	return nil
 }
 
