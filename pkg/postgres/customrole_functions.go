@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -29,10 +28,60 @@ type CustomRoleFunction struct {
 	Body string
 }
 
-// safeTypeExpr matches strings that consist only of characters valid in a
-// PostgreSQL type expression or argument list. This prevents SQL injection via
-// Args/Returns fields that are interpolated directly into DDL.
-var safeTypeExpr = regexp.MustCompile(`^[a-zA-Z0-9 _,.()\[\]"]*$`)
+// isSafeArgs reports whether s is safe to interpolate as the argument list of a
+// CREATE FUNCTION statement. A closing parenthesis at depth 0 would escape the
+// argument list, enabling injection. Statement terminators and comment markers
+// are also rejected.
+func isSafeArgs(s string) bool {
+	if strings.ContainsAny(s, ";'") || strings.Contains(s, "--") || strings.Contains(s, "/*") {
+		return false
+	}
+	depth := 0
+	for _, r := range s {
+		switch r {
+		case '(':
+			depth++
+		case ')':
+			if depth == 0 {
+				return false
+			}
+			depth--
+		}
+	}
+	return depth == 0
+}
+
+// isSafeReturns reports whether s is safe to interpolate as the RETURNS type
+// expression of a CREATE FUNCTION statement. Spaces outside balanced
+// parentheses could inject extra function options (e.g. "SET search_path TO
+// public" would override the hardcoded search_path). Only a leading "SETOF "
+// prefix is permitted to carry a space outside parentheses.
+func isSafeReturns(s string) bool {
+	if strings.ContainsAny(s, ";'") || strings.Contains(s, "--") || strings.Contains(s, "/*") {
+		return false
+	}
+	remaining := s
+	if strings.HasPrefix(strings.ToUpper(remaining), "SETOF ") {
+		remaining = remaining[6:]
+	}
+	depth := 0
+	for _, r := range remaining {
+		switch r {
+		case '(':
+			depth++
+		case ')':
+			if depth == 0 {
+				return false
+			}
+			depth--
+		case ' ', '\t', '\n', '\r':
+			if depth == 0 {
+				return false
+			}
+		}
+	}
+	return depth == 0
+}
 
 // randomDollarTag returns a random dollar-quoting tag of the form $f_<hex>$
 // that is safe to use as a PL/pgSQL function body delimiter.
@@ -278,11 +327,11 @@ func validateFunction(f CustomRoleFunction) error {
 	if f.Returns == "" {
 		return ctlerrors.NewInvalid(fmt.Errorf("function %q: returns must not be empty", f.Name))
 	}
-	if !safeTypeExpr.MatchString(f.Args) {
-		return ctlerrors.NewInvalid(fmt.Errorf("function %q: args contains invalid characters", f.Name))
+	if !isSafeArgs(f.Args) {
+		return ctlerrors.NewInvalid(fmt.Errorf("function %q: args contains unsafe SQL characters or unbalanced parentheses", f.Name))
 	}
-	if !safeTypeExpr.MatchString(f.Returns) {
-		return ctlerrors.NewInvalid(fmt.Errorf("function %q: returns contains invalid characters", f.Name))
+	if !isSafeReturns(f.Returns) {
+		return ctlerrors.NewInvalid(fmt.Errorf("function %q: returns contains unsafe SQL characters or spaces outside parentheses", f.Name))
 	}
 	if f.Body == "" {
 		return ctlerrors.NewInvalid(fmt.Errorf("function %q: body must not be empty", f.Name))
