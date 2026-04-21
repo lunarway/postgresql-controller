@@ -44,8 +44,8 @@ func TestSyncDatabaseFunctions_createsFunction(t *testing.T) {
 	epoch := time.Now().UnixNano()
 	roleName := fmt.Sprintf("cr-%d", epoch)
 	funcName := "myfunc"
-	// The actual PG function name is <rolename>__<funcname> with hyphens replaced.
-	pgName := fmt.Sprintf("cr_%d__myfunc", epoch)
+	// The actual PG function name is <rolename>__<funcname> with the role name verbatim.
+	pgName := fmt.Sprintf("cr-%d__myfunc", epoch)
 
 	require.NoError(t, postgres.EnsureCustomRole(log, adminDB, roleName, nil))
 
@@ -175,10 +175,9 @@ func TestDropManagedFunctions(t *testing.T) {
 }
 
 // TestSyncDatabaseFunctions_doesNotDropFunctionsOfLongerPrefixRole verifies
-// that when two roles share a name prefix after hyphen normalisation (e.g. role
-// "cr-X" prefix "cr_X__" and role "cr-X--extra" prefix "cr_X__extra__"), syncing
-// the shorter role does not accidentally drop functions that belong to the longer
-// one.
+// that when two roles share a name prefix (e.g. role "cr-X" prefix "cr-X__"
+// and role "cr-X--extra" prefix "cr-X--extra__"), syncing the shorter role
+// does not accidentally drop functions that belong to the longer one.
 func TestSyncDatabaseFunctions_doesNotDropFunctionsOfLongerPrefixRole(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
@@ -190,12 +189,12 @@ func TestSyncDatabaseFunctions_doesNotDropFunctionsOfLongerPrefixRole(t *testing
 	defer adminDB.Close()
 
 	epoch := time.Now().UnixNano()
-	// roleShort normalizes to prefix "cr_<epoch>__"
-	// roleLong normalizes to prefix "cr_<epoch>__extra__"
+	// roleShort has prefix "cr-<epoch>__"
+	// roleLong has prefix "cr-<epoch>--extra__"
 	// A naive starts_with for roleShort also matches functions owned by roleLong.
 	roleShort := fmt.Sprintf("cr-%d", epoch)
 	roleLong := fmt.Sprintf("cr-%d--extra", epoch)
-	pgFuncLong := fmt.Sprintf("cr_%d__extra__myfunc", epoch)
+	pgFuncLong := fmt.Sprintf("cr-%d--extra__myfunc", epoch)
 
 	require.NoError(t, postgres.EnsureCustomRole(log, adminDB, roleShort, nil))
 	require.NoError(t, postgres.EnsureCustomRole(log, adminDB, roleLong, nil))
@@ -227,7 +226,7 @@ func TestDropManagedFunctions_doesNotDropFunctionsOfLongerPrefixRole(t *testing.
 	epoch := time.Now().UnixNano()
 	roleShort := fmt.Sprintf("cr-%d", epoch)
 	roleLong := fmt.Sprintf("cr-%d--extra", epoch)
-	pgFuncLong := fmt.Sprintf("cr_%d__extra__myfunc", epoch)
+	pgFuncLong := fmt.Sprintf("cr-%d--extra__myfunc", epoch)
 
 	require.NoError(t, postgres.EnsureCustomRole(log, adminDB, roleShort, nil))
 	require.NoError(t, postgres.EnsureCustomRole(log, adminDB, roleLong, nil))
