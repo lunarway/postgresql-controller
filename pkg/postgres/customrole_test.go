@@ -1292,6 +1292,76 @@ func TestDropManagedFunctions(t *testing.T) {
 	assert.False(t, functionExists(t, adminDB, "public", pgName), "function should be dropped")
 }
 
+// TestSyncDatabaseFunctions_doesNotDropFunctionsOfLongerPrefixRole verifies
+// that when two roles share a name prefix after hyphen normalisation (e.g. role
+// "cr-X" prefix "cr_X__" and role "cr-X--extra" prefix "cr_X__extra__"), syncing
+// the shorter role does not accidentally drop functions that belong to the longer
+// one.
+func TestSyncDatabaseFunctions_doesNotDropFunctionsOfLongerPrefixRole(t *testing.T) {
+	host := test.Integration(t)
+	log := test.SetLogger(t)
+
+	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host: host, Database: "postgres", User: "iam_creator", Password: "iam_creator",
+	})
+	require.NoError(t, err)
+	defer adminDB.Close()
+
+	epoch := time.Now().UnixNano()
+	// roleShort normalizes to prefix "cr_<epoch>__"
+	// roleLong normalizes to prefix "cr_<epoch>__extra__"
+	// A naive starts_with for roleShort also matches functions owned by roleLong.
+	roleShort := fmt.Sprintf("cr-%d", epoch)
+	roleLong := fmt.Sprintf("cr-%d--extra", epoch)
+	pgFuncLong := fmt.Sprintf("cr_%d__extra__myfunc", epoch)
+
+	require.NoError(t, postgres.EnsureCustomRole(log, adminDB, roleShort, nil))
+	require.NoError(t, postgres.EnsureCustomRole(log, adminDB, roleLong, nil))
+
+	require.NoError(t, postgres.SyncDatabaseFunctions(log, adminDB, roleLong, []postgres.CustomRoleFunction{
+		{Name: "myfunc", Returns: "void", Body: "NULL;"},
+	}))
+	require.True(t, functionExists(t, adminDB, "public", pgFuncLong), "precondition: roleLong's function must exist")
+
+	// Sync roleShort with no functions — must NOT touch roleLong's function.
+	require.NoError(t, postgres.SyncDatabaseFunctions(log, adminDB, roleShort, nil))
+
+	assert.True(t, functionExists(t, adminDB, "public", pgFuncLong),
+		"roleLong's function must not be dropped when syncing roleShort")
+}
+
+// TestDropManagedFunctions_doesNotDropFunctionsOfLongerPrefixRole mirrors the
+// SyncDatabaseFunctions variant but exercises the deletion-time cleanup path.
+func TestDropManagedFunctions_doesNotDropFunctionsOfLongerPrefixRole(t *testing.T) {
+	host := test.Integration(t)
+	log := test.SetLogger(t)
+
+	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host: host, Database: "postgres", User: "iam_creator", Password: "iam_creator",
+	})
+	require.NoError(t, err)
+	defer adminDB.Close()
+
+	epoch := time.Now().UnixNano()
+	roleShort := fmt.Sprintf("cr-%d", epoch)
+	roleLong := fmt.Sprintf("cr-%d--extra", epoch)
+	pgFuncLong := fmt.Sprintf("cr_%d__extra__myfunc", epoch)
+
+	require.NoError(t, postgres.EnsureCustomRole(log, adminDB, roleShort, nil))
+	require.NoError(t, postgres.EnsureCustomRole(log, adminDB, roleLong, nil))
+
+	require.NoError(t, postgres.SyncDatabaseFunctions(log, adminDB, roleLong, []postgres.CustomRoleFunction{
+		{Name: "myfunc", Returns: "void", Body: "NULL;"},
+	}))
+	require.True(t, functionExists(t, adminDB, "public", pgFuncLong), "precondition: roleLong's function must exist")
+
+	// Drop all managed functions for roleShort — must NOT affect roleLong's function.
+	require.NoError(t, postgres.DropManagedFunctions(log, adminDB, roleShort))
+
+	assert.True(t, functionExists(t, adminDB, "public", pgFuncLong),
+		"roleLong's function must not be dropped when cleaning up roleShort")
+}
+
 func TestSyncDatabaseFunctions_securityDefiner(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)

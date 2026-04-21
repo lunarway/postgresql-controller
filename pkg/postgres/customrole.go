@@ -635,7 +635,8 @@ func managedFunctions(db *sql.DB, roleName string) ([]managedFunctionKey, error)
 		JOIN pg_namespace n ON n.oid = p.pronamespace
 		JOIN pg_roles r ON r.oid = p.proowner
 		WHERE n.nspname = 'public'
-		  AND starts_with(p.proname, $1)`, prefix)
+		  AND starts_with(p.proname, $1)
+		  AND position('__' in substring(p.proname from length($1)+1)) = 0`, prefix)
 	if err != nil {
 		return nil, fmt.Errorf("query managed functions for %s: %w", roleName, err)
 	}
