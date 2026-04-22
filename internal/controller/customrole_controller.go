@@ -132,9 +132,6 @@ func (r *CustomRoleReconciler) reconcile(ctx context.Context, reqLogger logr.Log
 	}
 
 	roleName := customRole.Spec.RoleName
-	if roleName == "" {
-		roleName = customRole.Name
-	}
 	reqLogger = reqLogger.WithValues("roleName", roleName)
 
 	// Handle deletion: clean up the PostgreSQL role and its grants before
