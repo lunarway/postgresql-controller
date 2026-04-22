@@ -205,6 +205,31 @@ spec:
 
 Valid privilege keywords: `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `TRUNCATE`, `REFERENCES`, `TRIGGER`.
 
+### `functions`
+
+`functions` is a list of SECURITY DEFINER functions created in the `public` schema with `LANGUAGE plpgsql` and `SET search_path = pg_catalog`. The `body` field contains only the PL/pgSQL statements; `BEGIN`/`END` is added automatically.
+
+Each function entry supports an optional `owningRole` field that controls which role owns (and therefore executes as) the function:
+
+| `owningRole` value | Effective owner |
+|--------------------|-----------------|
+| omitted / empty | Database owner (default, least privilege) |
+| a literal role name | That specific role |
+| `$controllerUser` | The controller's current connection role |
+
+Use `$controllerUser` when the controller's admin role differs across hosts (e.g. `iam_creator` on one cluster, `iam_creator_v2` on another), or when the target owner is `rds_superuser` on AWS RDS — that role blocks `SET ROLE` even with `set_option=t`, so a literal name would fail on RDS hosts.
+
+```yaml
+spec:
+  functions:
+    - name: my_admin_function
+      args: "target_role text"
+      returns: void
+      owningRole: $controllerUser
+      body: |
+        EXECUTE format('ALTER ROLE %I SET some_setting = %L', target_role, 'value');
+```
+
 ### Examples
 
 #### Read-only role across all schemas and tables
