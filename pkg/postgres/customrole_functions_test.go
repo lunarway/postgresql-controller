@@ -274,6 +274,32 @@ func TestSyncDatabaseFunctions_securityDefiner(t *testing.T) {
 	assert.Equal(t, "true", securityType, "function should be SECURITY DEFINER")
 }
 
+func TestSyncDatabaseFunctions_revokesPublicExecute(t *testing.T) {
+	host := test.Integration(t)
+	log := test.SetLogger(t)
+
+	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host: host, Database: "postgres", User: "iam_creator", Password: "iam_creator",
+	})
+	require.NoError(t, err)
+	defer adminDB.Close()
+
+	epoch := time.Now().UnixNano()
+	roleName := fmt.Sprintf("custom_role_%d", epoch)
+	pgName := fmt.Sprintf("custom_role_%d__myfunc", epoch)
+
+	require.NoError(t, postgres.EnsureCustomRole(log, adminDB, roleName, nil))
+
+	require.NoError(t, postgres.SyncDatabaseFunctions(log, adminDB, roleName, []postgres.CustomRoleFunction{
+		{Name: "myfunc", Returns: "void", Body: "NULL;"},
+	}))
+
+	assert.True(t, functionExecuteGranted(t, adminDB, roleName, "public", pgName),
+		"role should have EXECUTE on function")
+	assert.False(t, functionPublicExecuteGranted(t, adminDB, "public", pgName),
+		"PUBLIC should not have EXECUTE on SECURITY DEFINER function")
+}
+
 // functionExists returns true if a function with the given name exists in the schema.
 func functionExists(t *testing.T, db *sql.DB, schema, funcName string) bool {
 	t.Helper()
@@ -301,6 +327,26 @@ func functionExecuteGranted(t *testing.T, db *sql.DB, roleName, schema, funcName
 			  AND a.grantee = (SELECT oid FROM pg_roles WHERE rolname = $3)
 			  AND a.privilege_type = 'EXECUTE'
 		)`, schema, funcName, roleName).Scan(&granted)
+	require.NoError(t, err)
+	return granted
+}
+
+// functionPublicExecuteGranted returns true if PUBLIC has EXECUTE on a function
+// in the given schema. When proacl is NULL, PostgreSQL applies default privileges
+// which include EXECUTE to PUBLIC; that case is handled via COALESCE to the
+// default ACL for the function's owner.
+func functionPublicExecuteGranted(t *testing.T, db *sql.DB, schema, funcName string) bool {
+	t.Helper()
+	var granted bool
+	err := db.QueryRow(`
+		SELECT EXISTS(
+			SELECT 1 FROM pg_proc p
+			JOIN pg_namespace n ON n.oid = p.pronamespace,
+			     aclexplode(COALESCE(p.proacl, acldefault('f', p.proowner))) AS a(grantor, grantee, privilege_type, is_grantable)
+			WHERE n.nspname = $1 AND p.proname = $2
+			  AND a.grantee = 0
+			  AND a.privilege_type = 'EXECUTE'
+		)`, schema, funcName).Scan(&granted)
 	require.NoError(t, err)
 	return granted
 }
