@@ -23,6 +23,13 @@ import (
 // CustomRoleSpec defines the desired state of CustomRole
 // +k8s:openapi-gen=true
 type CustomRoleSpec struct {
+	// RoleName is the PostgreSQL role name to create. If omitted, the
+	// resource's metadata.name is used. Use this when the desired Postgres
+	// role name is not a valid Kubernetes resource name (e.g. contains
+	// underscores, which Kubernetes metadata.name does not allow).
+	// +optional
+	RoleName string `json:"roleName,omitempty"`
+
 	// GrantRoles is a list of existing PostgreSQL roles to grant to this role
 	// (e.g. pg_monitor, pg_read_all_data, or another CustomRole's name).
 	// These are applied at the server level.

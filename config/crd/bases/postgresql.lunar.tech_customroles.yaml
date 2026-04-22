@@ -145,6 +145,13 @@ spec:
                   - privileges
                   type: object
                 type: array
+              roleName:
+                description: |-
+                  RoleName is the PostgreSQL role name to create. If omitted, the
+                  resource's metadata.name is used. Use this when the desired Postgres
+                  role name is not a valid Kubernetes resource name (e.g. contains
+                  underscores, which Kubernetes metadata.name does not allow).
+                type: string
             type: object
           status:
             description: CustomRoleStatus defines the observed state of CustomRole
