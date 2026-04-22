@@ -74,7 +74,7 @@ spec:
                     database owner, so SECURITY DEFINER\nruns with that role's privileges.
                     Set owningRole to override this (e.g. to\nuse a superuser role
                     for functions that need elevated privileges like ALTER ROLE).\nUse
-                    the sentinel value \"$controller\" to resolve to the controller's
+                    the sentinel value \"$controllerUser\" to resolve to the controller's
                     connection\nrole at reconcile time — recommended when the connection
                     role differs per host.\n\nExample:\n\n\tfunctions:\n\t- name:
                     my_function\n\t  args: \"input_val text\"\n\t  returns: void\n\t
@@ -103,7 +103,7 @@ spec:
                         If omitted, the function is owned by the database owner.
 
                         Special sentinel values:
-                          - "$controller" — resolves at reconcile time to the role the controller
+                          - "$controllerUser" — resolves at reconcile time to the role the controller
                             is currently connected as (SELECT current_user). Use this when the
                             connection role differs per host (e.g. iam_creator, iam_creator_v2)
                             and hard-coding a role name is not viable. This is the recommended

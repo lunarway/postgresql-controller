@@ -86,7 +86,7 @@ type CustomRoleGrant struct {
 // By default the function is owned by the database owner, so SECURITY DEFINER
 // runs with that role's privileges. Set owningRole to override this (e.g. to
 // use a superuser role for functions that need elevated privileges like ALTER ROLE).
-// Use the sentinel value "$controller" to resolve to the controller's connection
+// Use the sentinel value "$controllerUser" to resolve to the controller's connection
 // role at reconcile time — recommended when the connection role differs per host.
 //
 // Example:
@@ -116,7 +116,7 @@ type CustomRoleFunction struct {
 	// If omitted, the function is owned by the database owner.
 	//
 	// Special sentinel values:
-	//   - "$controller" — resolves at reconcile time to the role the controller
+	//   - "$controllerUser" — resolves at reconcile time to the role the controller
 	//     is currently connected as (SELECT current_user). Use this when the
 	//     connection role differs per host (e.g. iam_creator, iam_creator_v2)
 	//     and hard-coding a role name is not viable. This is the recommended

@@ -300,7 +300,7 @@ func TestSyncDatabaseFunctions_revokesPublicExecute(t *testing.T) {
 		"PUBLIC should not have EXECUTE on SECURITY DEFINER function")
 }
 
-// TestSyncDatabaseFunctions_controllerSentinelOwner verifies that owningRole: "$controller"
+// TestSyncDatabaseFunctions_controllerSentinelOwner verifies that owningRole: "$controllerUser"
 // resolves to the current connection user and the created function is owned by that role.
 func TestSyncDatabaseFunctions_controllerSentinelOwner(t *testing.T) {
 	host := test.Integration(t)
@@ -323,7 +323,7 @@ func TestSyncDatabaseFunctions_controllerSentinelOwner(t *testing.T) {
 			Name:       "myfunc",
 			Returns:    "void",
 			Body:       "NULL;",
-			OwningRole: "$controller",
+			OwningRole: "$controllerUser",
 		},
 	})
 	require.NoError(t, err)
@@ -338,7 +338,7 @@ func TestSyncDatabaseFunctions_controllerSentinelOwner(t *testing.T) {
 }
 
 // TestSyncDatabaseFunctions_controllerSentinelMixedOwners verifies that a CR can mix
-// "$controller" sentinel and literal role names in the same spec.
+// "$controllerUser" sentinel and literal role names in the same spec.
 func TestSyncDatabaseFunctions_controllerSentinelMixedOwners(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
@@ -364,7 +364,7 @@ func TestSyncDatabaseFunctions_controllerSentinelMixedOwners(t *testing.T) {
 		WHERE d.datname = current_database()`).Scan(&dbOwner))
 
 	err = postgres.SyncDatabaseFunctions(log, adminDB, roleName, []postgres.CustomRoleFunction{
-		{Name: "ctrl_func", Returns: "void", Body: "NULL;", OwningRole: "$controller"},
+		{Name: "ctrl_func", Returns: "void", Body: "NULL;", OwningRole: "$controllerUser"},
 		{Name: "lit_func", Returns: "void", Body: "NULL;", OwningRole: dbOwner},
 	})
 	require.NoError(t, err)

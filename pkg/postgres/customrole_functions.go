@@ -95,7 +95,7 @@ func randomDollarTag() string {
 // that resolves to the role the controller is currently connected as (SELECT current_user).
 // Use this when the connection role differs per host (e.g. iam_creator, iam_creator_v2)
 // and hard-coding a role name is not viable.
-const controllerSentinelOwningRole = "$controller"
+const controllerSentinelOwningRole = "$controllerUser"
 
 // currentUser returns the role name that the current connection is authenticated as.
 func currentUser(db *sql.DB) (string, error) {
@@ -204,7 +204,7 @@ func SyncDatabaseFunctions(log logr.Logger, db *sql.DB, roleName string, functio
 		}
 	}
 
-	// Resolve the controller sentinel once for functions that use $controller.
+	// Resolve the controller sentinel once for functions that use $controllerUser.
 	var controllerUser string
 	for _, f := range functions {
 		if f.OwningRole == controllerSentinelOwningRole {
