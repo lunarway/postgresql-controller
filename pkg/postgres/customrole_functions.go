@@ -262,6 +262,18 @@ func SyncDatabaseFunctions(log logr.Logger, db *sql.DB, roleName string, functio
 			return fmt.Errorf("set owner on function %s: %w", qualifiedName, err)
 		}
 
+		// Revoke the default PUBLIC EXECUTE grant so only roleName can call the
+		// function. PostgreSQL grants EXECUTE to PUBLIC by default on new
+		// functions, which would otherwise let any role invoke a SECURITY
+		// DEFINER function owned by a privileged role.
+		if err := execWithRole(db, owner, func(tx *sql.Tx) error {
+			_, err := tx.Exec(fmt.Sprintf("REVOKE ALL ON FUNCTION public.%s(%s) FROM PUBLIC",
+				pq.QuoteIdentifier(pgName), canonicalArgs))
+			return err
+		}); err != nil {
+			return fmt.Errorf("revoke public execute on %s: %w", qualifiedName, err)
+		}
+
 		if err := execWithRole(db, owner, func(tx *sql.Tx) error {
 			_, err := tx.Exec(fmt.Sprintf("GRANT EXECUTE ON FUNCTION public.%s(%s) TO %s",
 				pq.QuoteIdentifier(pgName), canonicalArgs, quotedRole))
