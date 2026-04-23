@@ -15,7 +15,7 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .metadata.name
+    - jsonPath: .spec.roleName
       name: Role
       type: string
     - jsonPath: .status.phase
@@ -73,9 +73,12 @@ spec:
                     END automatically.\n\nBy default the function is owned by the
                     database owner, so SECURITY DEFINER\nruns with that role's privileges.
                     Set owningRole to override this (e.g. to\nuse a superuser role
-                    for functions that need elevated privileges like ALTER ROLE).\n\nExample:\n\n\tfunctions:\n\t-
-                    name: my_function\n\t  args: \"input_val text\"\n\t  returns:
-                    void\n\t  body: |\n\t    EXECUTE format('ALTER ROLE %I SET some_setting
+                    for functions that need elevated privileges like ALTER ROLE).\nUse
+                    the sentinel value \"$controllerUser\" to resolve to the controller's
+                    connection\nrole at reconcile time — recommended when the connection
+                    role differs per host.\n\nExample:\n\n\tfunctions:\n\t- name:
+                    my_function\n\t  args: \"input_val text\"\n\t  returns: void\n\t
+                    \ body: |\n\t    EXECUTE format('ALTER ROLE %I SET some_setting
                     = %L', input_val, 'value');"
                   properties:
                     args:
@@ -98,6 +101,13 @@ spec:
                         OwningRole is the PostgreSQL role that will own the function. Since the
                         function uses SECURITY DEFINER, it executes with this role's privileges.
                         If omitted, the function is owned by the database owner.
+
+                        Special sentinel values:
+                          - "$controllerUser" — resolves at reconcile time to the role the controller
+                            is currently connected as (SELECT current_user). Use this when the
+                            connection role differs per host (e.g. iam_creator, iam_creator_v2)
+                            and hard-coding a role name is not viable. This is the recommended
+                            value when the function must be owned by the controller's connection role.
                       type: string
                     returns:
                       description: Returns is the return type (e.g. "void", "boolean",

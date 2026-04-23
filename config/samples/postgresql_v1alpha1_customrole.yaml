@@ -3,6 +3,7 @@ kind: CustomRole
 metadata:
   name: reporting
 spec:
+  roleName: reporting
   grantRoles:
     - pg_monitor
   # Omit databases to apply grants and functions to every user database.
@@ -21,6 +22,8 @@ spec:
   # DEFINER runs with that role's privileges (least privilege).
   # Set owningRole to override this for functions that need elevated
   # privileges (e.g. ALTER ROLE requires a superuser-like role).
+  # Use $controllerUser as a sentinel to always resolve to the controller's
+  # own connection role.
   functions:
     # Owned by the database owner (default) — runs with its privileges.
     - name: my_query_function
@@ -34,14 +37,16 @@ kind: CustomRole
 metadata:
   name: admin-utils
 spec:
+  roleName: admin-utils
   # Restrict to the postgres database only.
   databases: [postgres]
   functions:
-    # owningRole overrides the default (database owner) so the function
-    # runs with iam_creator's privileges, which can ALTER ROLE.
+    # $controllerUser resolves to whatever role the controller is connected
+    # as — use this when the controller's admin role differs across hosts,
+    # e.g. iam_creator vs iam_creator_v2.
     - name: my_admin_function
       args: "target_role text"
       returns: void
-      owningRole: iam_creator
+      owningRole: $controllerUser
       body: |
         EXECUTE format('ALTER ROLE %I SET some_setting = %L', target_role, 'value');

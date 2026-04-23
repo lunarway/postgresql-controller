@@ -300,6 +300,116 @@ func TestSyncDatabaseFunctions_revokesPublicExecute(t *testing.T) {
 		"PUBLIC should not have EXECUTE on SECURITY DEFINER function")
 }
 
+// TestSyncDatabaseFunctions_controllerSentinelOwner verifies that owningRole: "$controllerUser"
+// resolves to the current connection user and the created function is owned by that role.
+func TestSyncDatabaseFunctions_controllerSentinelOwner(t *testing.T) {
+	host := test.Integration(t)
+	log := test.SetLogger(t)
+
+	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host: host, Database: "postgres", User: "iam_creator", Password: "iam_creator",
+	})
+	require.NoError(t, err)
+	defer adminDB.Close()
+
+	epoch := time.Now().UnixNano()
+	roleName := fmt.Sprintf("custom_role_%d", epoch)
+	pgName := fmt.Sprintf("custom_role_%d__myfunc", epoch)
+
+	require.NoError(t, postgres.EnsureCustomRole(log, adminDB, roleName, nil))
+
+	err = postgres.SyncDatabaseFunctions(log, adminDB, roleName, []postgres.CustomRoleFunction{
+		{
+			Name:       "myfunc",
+			Returns:    "void",
+			Body:       "NULL;",
+			OwningRole: "$controllerUser",
+		},
+	})
+	require.NoError(t, err)
+
+	require.True(t, functionExists(t, adminDB, "public", pgName), "function should exist")
+
+	// The function owner must equal the connection user (iam_creator).
+	var connUser string
+	require.NoError(t, adminDB.QueryRow("SELECT current_user").Scan(&connUser))
+	assert.Equal(t, connUser, functionOwner(t, adminDB, "public", pgName),
+		"function owner should equal current connection user")
+}
+
+// TestSyncDatabaseFunctions_controllerSentinelMixedOwners verifies that a CR can mix
+// "$controllerUser" sentinel and literal role names in the same spec.
+func TestSyncDatabaseFunctions_controllerSentinelMixedOwners(t *testing.T) {
+	host := test.Integration(t)
+	log := test.SetLogger(t)
+
+	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host: host, Database: "postgres", User: "iam_creator", Password: "iam_creator",
+	})
+	require.NoError(t, err)
+	defer adminDB.Close()
+
+	epoch := time.Now().UnixNano()
+	roleName := fmt.Sprintf("custom_role_%d", epoch)
+	pgNameCtrl := fmt.Sprintf("custom_role_%d__ctrl_func", epoch)
+	pgNameLit := fmt.Sprintf("custom_role_%d__lit_func", epoch)
+
+	require.NoError(t, postgres.EnsureCustomRole(log, adminDB, roleName, nil))
+
+	// Get the db owner to use as the literal owner for the second function.
+	var dbOwner string
+	require.NoError(t, adminDB.QueryRow(`
+		SELECT r.rolname FROM pg_database d
+		JOIN pg_roles r ON r.oid = d.datdba
+		WHERE d.datname = current_database()`).Scan(&dbOwner))
+
+	err = postgres.SyncDatabaseFunctions(log, adminDB, roleName, []postgres.CustomRoleFunction{
+		{Name: "ctrl_func", Returns: "void", Body: "NULL;", OwningRole: "$controllerUser"},
+		{Name: "lit_func", Returns: "void", Body: "NULL;", OwningRole: dbOwner},
+	})
+	require.NoError(t, err)
+
+	var connUser string
+	require.NoError(t, adminDB.QueryRow("SELECT current_user").Scan(&connUser))
+
+	assert.Equal(t, connUser, functionOwner(t, adminDB, "public", pgNameCtrl),
+		"ctrl_func owner should equal current connection user")
+	assert.Equal(t, dbOwner, functionOwner(t, adminDB, "public", pgNameLit),
+		"lit_func owner should equal the literal db owner role")
+}
+
+// TestSyncDatabaseFunctions_emptyOwningRoleFallsBackToDbOwner verifies that the existing
+// empty owningRole → database owner behavior is unchanged.
+func TestSyncDatabaseFunctions_emptyOwningRoleFallsBackToDbOwner(t *testing.T) {
+	host := test.Integration(t)
+	log := test.SetLogger(t)
+
+	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+		Host: host, Database: "postgres", User: "iam_creator", Password: "iam_creator",
+	})
+	require.NoError(t, err)
+	defer adminDB.Close()
+
+	epoch := time.Now().UnixNano()
+	roleName := fmt.Sprintf("custom_role_%d", epoch)
+	pgName := fmt.Sprintf("custom_role_%d__myfunc", epoch)
+
+	require.NoError(t, postgres.EnsureCustomRole(log, adminDB, roleName, nil))
+
+	require.NoError(t, postgres.SyncDatabaseFunctions(log, adminDB, roleName, []postgres.CustomRoleFunction{
+		{Name: "myfunc", Returns: "void", Body: "NULL;"},
+	}))
+
+	var dbOwner string
+	require.NoError(t, adminDB.QueryRow(`
+		SELECT r.rolname FROM pg_database d
+		JOIN pg_roles r ON r.oid = d.datdba
+		WHERE d.datname = current_database()`).Scan(&dbOwner))
+
+	assert.Equal(t, dbOwner, functionOwner(t, adminDB, "public", pgName),
+		"function with empty owningRole should be owned by the database owner")
+}
+
 // functionExists returns true if a function with the given name exists in the schema.
 func functionExists(t *testing.T, db *sql.DB, schema, funcName string) bool {
 	t.Helper()
@@ -329,6 +439,20 @@ func functionExecuteGranted(t *testing.T, db *sql.DB, roleName, schema, funcName
 		)`, schema, funcName, roleName).Scan(&granted)
 	require.NoError(t, err)
 	return granted
+}
+
+// functionOwner returns the role name that owns the function.
+func functionOwner(t *testing.T, db *sql.DB, schema, funcName string) string {
+	t.Helper()
+	var owner string
+	err := db.QueryRow(`
+		SELECT r.rolname
+		FROM pg_proc p
+		JOIN pg_namespace n ON n.oid = p.pronamespace
+		JOIN pg_roles r ON r.oid = p.proowner
+		WHERE n.nspname = $1 AND p.proname = $2`, schema, funcName).Scan(&owner)
+	require.NoError(t, err)
+	return owner
 }
 
 // functionPublicExecuteGranted returns true if PUBLIC has EXECUTE on a function

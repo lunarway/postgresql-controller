@@ -91,6 +91,21 @@ func randomDollarTag() string {
 	return "$f_" + hex.EncodeToString(b) + "$"
 }
 
+// controllerSentinelOwningRole is the sentinel value for CustomRoleFunction.OwningRole
+// that resolves to the role the controller is currently connected as (SELECT current_user).
+// Use this when the connection role differs per host (e.g. iam_creator, iam_creator_v2)
+// and hard-coding a role name is not viable.
+const controllerSentinelOwningRole = "$controllerUser"
+
+// currentUser returns the role name that the current connection is authenticated as.
+func currentUser(db *sql.DB) (string, error) {
+	var user string
+	if err := db.QueryRow("SELECT current_user").Scan(&user); err != nil {
+		return "", fmt.Errorf("query current user: %w", err)
+	}
+	return user, nil
+}
+
 // managedFunctionPrefix returns the prefix used to name functions managed by
 // this role. The role name is used verbatim (including hyphens) so that two
 // roles whose names differ only by hyphen vs underscore (e.g. "reporting-db"
@@ -189,6 +204,19 @@ func SyncDatabaseFunctions(log logr.Logger, db *sql.DB, roleName string, functio
 		}
 	}
 
+	// Resolve the controller sentinel once for functions that use $controllerUser.
+	var controllerUser string
+	for _, f := range functions {
+		if f.OwningRole == controllerSentinelOwningRole {
+			var err error
+			controllerUser, err = currentUser(db)
+			if err != nil {
+				return err
+			}
+			break
+		}
+	}
+
 	// Build a map of currently-managed functions so we can detect ownership
 	// changes before attempting CREATE OR REPLACE.
 	current, err := managedFunctions(db, roleName)
@@ -208,8 +236,11 @@ func SyncDatabaseFunctions(log logr.Logger, db *sql.DB, roleName string, functio
 	desired := make(map[desiredFunctionKey]struct{})
 	for _, f := range functions {
 		owner := f.OwningRole
-		if owner == "" {
+		switch owner {
+		case "":
 			owner = dbOwner
+		case controllerSentinelOwningRole:
+			owner = controllerUser
 		}
 
 		pgName := managedFunctionName(roleName, f.Name)
