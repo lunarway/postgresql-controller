@@ -15,7 +15,7 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .metadata.name
+    - jsonPath: .spec.roleName
       name: Role
       type: string
     - jsonPath: .status.phase

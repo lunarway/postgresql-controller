@@ -162,7 +162,7 @@ type CustomRoleStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Role",type="string",JSONPath=".metadata.name"
+// +kubebuilder:printcolumn:name="Role",type="string",JSONPath=".spec.roleName"
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.phase"
 // +kubebuilder:printcolumn:name="Error",type="string",JSONPath=".status.error"
 
