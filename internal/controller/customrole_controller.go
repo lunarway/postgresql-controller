@@ -247,6 +247,7 @@ func (r *CustomRoleReconciler) persistStatus(ctx context.Context, customRole *po
 	case ctlerrors.IsInvalid(reconcileErr):
 		phase = postgresqlv1alpha1.CustomRolePhaseInvalid
 		errorMessage = reconcileErr.Error()
+		failingHost = ""
 	default:
 		phase = postgresqlv1alpha1.CustomRolePhaseFailed
 		errorMessage = reconcileErr.Error()
