@@ -185,7 +185,7 @@ func (r *CustomRoleReconciler) reconcileOnHost(log logr.Logger, host string, cre
 		Password: creds.Password,
 		Params:   creds.Params,
 	}
-	adminDB, err := postgres.Connect(log, adminConnStr)
+	adminDB, err := postgres.Connect(adminConnStr)
 	if err != nil {
 		return fmt.Errorf("connect to host: %w", err)
 	}
@@ -252,9 +252,7 @@ func (r *CustomRoleReconciler) persistStatus(ctx context.Context, customRole *po
 		errorMessage = reconcileErr.Error()
 	}
 
-	if customRole.Status.Phase == phase &&
-		customRole.Status.Error == errorMessage &&
-		customRole.Status.FailingHost == failingHost {
+	if customRole.Status.IsUnchanged(phase, errorMessage, failingHost) {
 		return
 	}
 

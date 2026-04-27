@@ -189,6 +189,10 @@ type CustomRoleList struct {
 	Items           []CustomRole `json:"items"`
 }
 
+func (s CustomRoleStatus) IsUnchanged(phase CustomRolePhase, errorMessage, failingHost string) bool {
+	return s.Phase == phase && s.Error == errorMessage && s.FailingHost == failingHost
+}
+
 func init() {
 	SchemeBuilder.Register(&CustomRole{}, &CustomRoleList{})
 }

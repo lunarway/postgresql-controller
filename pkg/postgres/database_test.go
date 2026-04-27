@@ -81,7 +81,7 @@ func TestDatabase_sunshine(t *testing.T) {
 	postgresqlHost := test.Integration(t)
 	log := test.SetLogger(t)
 	managerRole := "postgres_role_name"
-	db, err := postgres.Connect(log, postgres.ConnectionString{
+	db, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -115,7 +115,7 @@ func TestDatabase_sunshine(t *testing.T) {
 	assert.True(t, roleCanLogin(t, db, name))
 	assert.True(t, hasPassword(t, log, postgresqlHost, name))
 
-	newDB, err := postgres.Connect(log, postgres.ConnectionString{
+	newDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: name,
 		User:     name,
@@ -144,7 +144,7 @@ func TestDatabase_HasExtensionsNotExistingAlreadyEnableExtensions(t *testing.T) 
 	log := test.SetLogger(t)
 
 	managerRole := "postgres_role_name"
-	db, err := postgres.Connect(log, postgres.ConnectionString{
+	db, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -179,7 +179,7 @@ func TestDatabase_HasExtensionsNotExistingAlreadyEnableExtensions(t *testing.T) 
 	assert.True(t, roleCanLogin(t, db, name))
 	assert.True(t, hasPassword(t, log, postgresqlHost, name))
 
-	newDB, err := postgres.Connect(log, postgres.ConnectionString{
+	newDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: name,
 		User:     name,
@@ -203,7 +203,7 @@ func TestDatabase_HasExtensionsNoUpdates(t *testing.T) {
 	log := test.SetLogger(t)
 
 	managerRole := "postgres_role_name"
-	db, err := postgres.Connect(log, postgres.ConnectionString{
+	db, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -244,7 +244,7 @@ func TestDatabase_HasExtensionsNoUpdates(t *testing.T) {
 	assert.True(t, roleCanLogin(t, db, name))
 	assert.True(t, hasPassword(t, log, postgresqlHost, name))
 
-	newDB, err := postgres.Connect(log, postgres.ConnectionString{
+	newDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: name,
 		User:     name,
@@ -295,7 +295,7 @@ func TestDatabase_HasExtensionsGiveEmptyDeclarativeExtensionsShouldDoNothing(t *
 	log := test.SetLogger(t)
 
 	managerRole := "postgres_role_name"
-	db, err := postgres.Connect(log, postgres.ConnectionString{
+	db, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -336,7 +336,7 @@ func TestDatabase_HasExtensionsGiveEmptyDeclarativeExtensionsShouldDoNothing(t *
 	assert.True(t, roleCanLogin(t, db, name))
 	assert.True(t, hasPassword(t, log, postgresqlHost, name))
 
-	newDB, err := postgres.Connect(log, postgres.ConnectionString{
+	newDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: name,
 		User:     name,
@@ -386,7 +386,7 @@ func TestDatabase_noPassword(t *testing.T) {
 	postgresqlHost := test.Integration(t)
 	log := test.SetLogger(t)
 	managerRole := "postgres_role_name"
-	db, err := postgres.Connect(log, postgres.ConnectionString{
+	db, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -417,7 +417,7 @@ func TestDatabase_noPassword(t *testing.T) {
 
 	assert.False(t, roleCanLogin(t, db, name))
 
-	newDB, err := postgres.Connect(log, postgres.ConnectionString{
+	newDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: name,
 		User:     "iam_creator",
@@ -446,7 +446,7 @@ func TestDatabase_switchFromLoginToNoLoginAndBack(t *testing.T) {
 	log := test.SetLogger(t)
 	managerRole := "postgres_role_name"
 
-	db, err := postgres.Connect(log, postgres.ConnectionString{
+	db, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -511,7 +511,7 @@ func TestDatabase_switchFromLoginToNoLoginAndBack(t *testing.T) {
 	assert.True(t, roleCanLogin(t, db, name))
 	assert.True(t, hasPassword(t, log, postgresqlHost, name))
 
-	newDB, err := postgres.Connect(log, postgres.ConnectionString{
+	newDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: name,
 		User:     "iam_creator",
@@ -546,7 +546,7 @@ func TestDatabase_existingResourcePrivilegesForReadWriteRoles(t *testing.T) {
 	log := test.SetLogger(t)
 	managerRole := "postgres_role_name"
 	log.Info("TC: Connection as iam_creator")
-	db, err := postgres.Connect(log, postgres.ConnectionString{
+	db, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -573,7 +573,7 @@ func TestDatabase_existingResourcePrivilegesForReadWriteRoles(t *testing.T) {
 	`, name))
 
 	log.Info("TC: Connect as service user")
-	serviceDB, err := postgres.Connect(log, postgres.ConnectionString{
+	serviceDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: name,
 		User:     name,
@@ -615,7 +615,7 @@ func TestDatabase_existingResourcePrivilegesForReadWriteRoles(t *testing.T) {
 	}
 
 	log.Info("TC: Connect as developer")
-	developerDB, err := postgres.Connect(log, postgres.ConnectionString{
+	developerDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: name,
 		User:     developerName,
@@ -639,7 +639,7 @@ func TestDatabase_defaultDatabaseName(t *testing.T) {
 	managerRole := "postgres_role_name"
 	log := test.SetLogger(t)
 	log.Info("TC: Connecting as iam_creator")
-	db, err := postgres.Connect(log, postgres.ConnectionString{
+	db, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -698,7 +698,7 @@ func TestDatabase_mixedOwnershipOnSharedDatabase(t *testing.T) {
 	postgresqlHost := test.Integration(t)
 	log := test.NewLogger(t)
 	log.Info("TC: Connecting as iam_creator on defaul database")
-	db, err := postgres.Connect(log, postgres.ConnectionString{
+	db, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -731,7 +731,7 @@ func TestDatabase_mixedOwnershipOnSharedDatabase(t *testing.T) {
 	dbExec(t, db, `REVOKE %s FROM CURRENT_USER`, sharedDatabaseName)
 
 	// connect to shared database with created role
-	sharedConn, err := postgres.Connect(log, postgres.ConnectionString{
+	sharedConn, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: sharedDatabaseName,
 		User:     sharedDatabaseName,
@@ -774,7 +774,7 @@ func TestDatabase_mixedOwnershipOnSharedDatabase(t *testing.T) {
 
 	// connect as the new user and do some queries to ensure permissions are
 	// correct
-	newUserConn, err := postgres.Connect(log, postgres.ConnectionString{
+	newUserConn, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: sharedDatabaseName,
 		User:     newUser,
@@ -813,7 +813,7 @@ func TestDatabase_mixedOwnershipOnSharedDatabase(t *testing.T) {
 	}
 
 	// connect as the developer on the shared database
-	developerConn, err := postgres.Connect(log, postgres.ConnectionString{
+	developerConn, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: sharedDatabaseName,
 		User:     developer,
@@ -837,7 +837,7 @@ func TestDatabase_idempotency(t *testing.T) {
 	postgresqlHost := test.Integration(t)
 	log := test.SetLogger(t)
 	managerRole := "postgres_role_name"
-	db, err := postgres.Connect(log, postgres.ConnectionString{
+	db, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -884,7 +884,7 @@ func TestDatabase_idempotency(t *testing.T) {
 }
 
 func hasPassword(t *testing.T, log logr.Logger, host, username string) bool {
-	db, err := postgres.Connect(log, postgres.ConnectionString{
+	db, err := postgres.Connect(postgres.ConnectionString{
 		Host:     host,
 		Database: "postgres",
 		User:     "admin",

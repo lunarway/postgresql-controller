@@ -49,7 +49,7 @@ func (c ConnectionString) String() string {
 	return strings.ReplaceAll(raw, url.QueryEscape(c.Password), "********")
 }
 
-func Connect(log logr.Logger, connectionString ConnectionString) (*sql.DB, error) {
+func Connect(connectionString ConnectionString) (*sql.DB, error) {
 	db, err := sql.Open("postgres", connectionString.Raw())
 	if err != nil {
 		return nil, err

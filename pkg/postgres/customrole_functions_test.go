@@ -16,7 +16,7 @@ func TestSyncDatabaseFunctions_rejectsNameWithDoubleUnderscore(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
 
-	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+	adminDB, err := postgres.Connect(postgres.ConnectionString{
 		Host: host, Database: "postgres", User: "iam_creator", Password: "iam_creator",
 	})
 	require.NoError(t, err)
@@ -35,7 +35,7 @@ func TestSyncDatabaseFunctions_createsFunction(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
 
-	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+	adminDB, err := postgres.Connect(postgres.ConnectionString{
 		Host: host, Database: "postgres", User: "iam_creator", Password: "iam_creator",
 	})
 	require.NoError(t, err)
@@ -68,7 +68,7 @@ func TestSyncDatabaseFunctions_idempotent(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
 
-	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+	adminDB, err := postgres.Connect(postgres.ConnectionString{
 		Host: host, Database: "postgres", User: "iam_creator", Password: "iam_creator",
 	})
 	require.NoError(t, err)
@@ -93,7 +93,7 @@ func TestSyncDatabaseFunctions_dropsRemovedFunction(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
 
-	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+	adminDB, err := postgres.Connect(postgres.ConnectionString{
 		Host: host, Database: "postgres", User: "iam_creator", Password: "iam_creator",
 	})
 	require.NoError(t, err)
@@ -127,7 +127,7 @@ func TestSyncDatabaseFunctions_dropsAllWhenEmpty(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
 
-	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+	adminDB, err := postgres.Connect(postgres.ConnectionString{
 		Host: host, Database: "postgres", User: "iam_creator", Password: "iam_creator",
 	})
 	require.NoError(t, err)
@@ -153,7 +153,7 @@ func TestDropManagedFunctions(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
 
-	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+	adminDB, err := postgres.Connect(postgres.ConnectionString{
 		Host: host, Database: "postgres", User: "iam_creator", Password: "iam_creator",
 	})
 	require.NoError(t, err)
@@ -182,7 +182,7 @@ func TestSyncDatabaseFunctions_doesNotDropFunctionsOfLongerPrefixRole(t *testing
 	host := test.Integration(t)
 	log := test.SetLogger(t)
 
-	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+	adminDB, err := postgres.Connect(postgres.ConnectionString{
 		Host: host, Database: "postgres", User: "iam_creator", Password: "iam_creator",
 	})
 	require.NoError(t, err)
@@ -217,7 +217,7 @@ func TestDropManagedFunctions_doesNotDropFunctionsOfLongerPrefixRole(t *testing.
 	host := test.Integration(t)
 	log := test.SetLogger(t)
 
-	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+	adminDB, err := postgres.Connect(postgres.ConnectionString{
 		Host: host, Database: "postgres", User: "iam_creator", Password: "iam_creator",
 	})
 	require.NoError(t, err)
@@ -247,7 +247,7 @@ func TestSyncDatabaseFunctions_securityDefiner(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
 
-	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+	adminDB, err := postgres.Connect(postgres.ConnectionString{
 		Host: host, Database: "postgres", User: "iam_creator", Password: "iam_creator",
 	})
 	require.NoError(t, err)
@@ -278,7 +278,7 @@ func TestSyncDatabaseFunctions_revokesPublicExecute(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
 
-	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+	adminDB, err := postgres.Connect(postgres.ConnectionString{
 		Host: host, Database: "postgres", User: "iam_creator", Password: "iam_creator",
 	})
 	require.NoError(t, err)
@@ -306,7 +306,7 @@ func TestSyncDatabaseFunctions_controllerSentinelOwner(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
 
-	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+	adminDB, err := postgres.Connect(postgres.ConnectionString{
 		Host: host, Database: "postgres", User: "iam_creator", Password: "iam_creator",
 	})
 	require.NoError(t, err)
@@ -343,7 +343,7 @@ func TestSyncDatabaseFunctions_controllerSentinelMixedOwners(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
 
-	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+	adminDB, err := postgres.Connect(postgres.ConnectionString{
 		Host: host, Database: "postgres", User: "iam_creator", Password: "iam_creator",
 	})
 	require.NoError(t, err)
@@ -384,7 +384,7 @@ func TestSyncDatabaseFunctions_emptyOwningRoleFallsBackToDbOwner(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
 
-	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+	adminDB, err := postgres.Connect(postgres.ConnectionString{
 		Host: host, Database: "postgres", User: "iam_creator", Password: "iam_creator",
 	})
 	require.NoError(t, err)

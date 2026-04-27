@@ -16,7 +16,7 @@ func TestEnsureCustomRole_createsRole(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
 
-	db, err := postgres.Connect(log, postgres.ConnectionString{
+	db, err := postgres.Connect(postgres.ConnectionString{
 		Host:     host,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -38,7 +38,7 @@ func TestEnsureCustomRole_idempotent(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
 
-	db, err := postgres.Connect(log, postgres.ConnectionString{
+	db, err := postgres.Connect(postgres.ConnectionString{
 		Host:     host,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -57,7 +57,7 @@ func TestEnsureCustomRole_grantsRoles(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
 
-	db, err := postgres.Connect(log, postgres.ConnectionString{
+	db, err := postgres.Connect(postgres.ConnectionString{
 		Host:     host,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -79,7 +79,7 @@ func TestEnsureCustomRole_revokesRemovedRole(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
 
-	db, err := postgres.Connect(log, postgres.ConnectionString{
+	db, err := postgres.Connect(postgres.ConnectionString{
 		Host:     host,
 		Database: "postgres",
 		User:     "iam_creator",
