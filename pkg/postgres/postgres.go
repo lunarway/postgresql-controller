@@ -50,7 +50,6 @@ func (c ConnectionString) String() string {
 }
 
 func Connect(log logr.Logger, connectionString ConnectionString) (*sql.DB, error) {
-	log.Info("Connecting to database", "url", connectionString)
 	db, err := sql.Open("postgres", connectionString.Raw())
 	if err != nil {
 		return nil, err

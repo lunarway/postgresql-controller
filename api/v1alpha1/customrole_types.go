@@ -158,6 +158,11 @@ type CustomRoleStatus struct {
 	// Error contains the error message when Phase is Failed or Invalid
 	// +optional
 	Error string `json:"error,omitempty"`
+
+	// FailingHost is the PostgreSQL host that caused reconciliation to fail.
+	// Empty when reconciliation succeeded or the failure is not host-specific.
+	// +optional
+	FailingHost string `json:"failingHost,omitempty"`
 }
 
 // +kubebuilder:object:root=true

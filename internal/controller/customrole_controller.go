@@ -166,12 +166,12 @@ func (r *CustomRoleReconciler) reconcile(ctx context.Context, reqLogger logr.Log
 
 	for host, creds := range r.HostCredentials {
 		if err := r.reconcileOnHost(reqLogger, host, creds, roleName, customRole.Spec.GrantRoles, customRole.Spec.Databases, grants, functions); err != nil {
-			r.persistStatus(ctx, customRole, err)
+			r.persistStatus(ctx, customRole, host, err)
 			return fmt.Errorf("reconcile on host %s: %w", host, err)
 		}
 	}
 
-	r.persistStatus(ctx, customRole, nil)
+	r.persistStatus(ctx, customRole, "", nil)
 	return nil
 }
 
@@ -236,13 +236,14 @@ func resolveTargetDatabases(log logr.Logger, adminDB *sql.DB, targetDatabases []
 	return databases, nil, nil
 }
 
-func (r *CustomRoleReconciler) persistStatus(ctx context.Context, customRole *postgresqlv1alpha1.CustomRole, reconcileErr error) {
+func (r *CustomRoleReconciler) persistStatus(ctx context.Context, customRole *postgresqlv1alpha1.CustomRole, failingHost string, reconcileErr error) {
 	var phase postgresqlv1alpha1.CustomRolePhase
 	var errorMessage string
 
 	switch {
 	case reconcileErr == nil:
 		phase = postgresqlv1alpha1.CustomRolePhaseRunning
+		failingHost = ""
 	case ctlerrors.IsInvalid(reconcileErr):
 		phase = postgresqlv1alpha1.CustomRolePhaseInvalid
 		errorMessage = reconcileErr.Error()
@@ -251,13 +252,16 @@ func (r *CustomRoleReconciler) persistStatus(ctx context.Context, customRole *po
 		errorMessage = reconcileErr.Error()
 	}
 
-	if customRole.Status.Phase == phase && customRole.Status.Error == errorMessage {
+	if customRole.Status.Phase == phase &&
+		customRole.Status.Error == errorMessage &&
+		customRole.Status.FailingHost == failingHost {
 		return
 	}
 
 	customRole.Status.Phase = phase
 	customRole.Status.PhaseUpdated = metav1.Now()
 	customRole.Status.Error = errorMessage
+	customRole.Status.FailingHost = failingHost
 
 	if err := r.Client.Status().Update(ctx, customRole); err != nil {
 		r.Log.Error(err, "failed to update CustomRole status")
