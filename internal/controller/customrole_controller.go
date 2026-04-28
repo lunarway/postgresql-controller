@@ -47,6 +47,8 @@ type CustomRoleReconciler struct {
 	client.Client
 	Log logr.Logger
 
+	SuperuserRoleName string
+
 	// HostCredentials contains a map of credentials for hosts (keyed by host name)
 	HostCredentials map[string]postgres.Credentials
 }
@@ -190,6 +192,10 @@ func (r *CustomRoleReconciler) reconcileOnHost(log logr.Logger, host string, cre
 		return fmt.Errorf("connect to host: %w", err)
 	}
 	defer adminDB.Close()
+
+	if err := postgres.Preflight(log, adminDB, r.SuperuserRoleName); err != nil {
+		return err
+	}
 
 	// Resolve the effective database list and, when scoped, all user databases
 	// (so each domain can run its cleanup pass without an extra query).
