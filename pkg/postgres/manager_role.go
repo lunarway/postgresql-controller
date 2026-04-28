@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	"github.com/lib/pq"
 )
 
 // EnsureManagerRole creates the management role on db if it does not
@@ -17,6 +18,6 @@ func EnsureManagerRole(log logr.Logger, db *sql.DB, role string) error {
 	return tryExec(log, db, tryExecReq{
 		objectType: "management role",
 		errorCode:  "duplicate_object",
-		query:      fmt.Sprintf("CREATE ROLE %s", role),
+		query:      fmt.Sprintf("CREATE ROLE %s", pq.QuoteIdentifier(role)),
 	})
 }
