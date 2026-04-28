@@ -112,7 +112,7 @@ func (r *PostgreSQLDatabaseReconciler) reconcile(ctx context.Context, reqLogger 
 	status.host = host
 	reqLogger = reqLogger.WithValues("host", host)
 
-	if err := r.runPreflight(reqLogger, host, *adminCredentials); err != nil {
+	if err := r.prepareHost(reqLogger, host, *adminCredentials); err != nil {
 		return status, err
 	}
 
@@ -290,11 +290,10 @@ func (r *PostgreSQLDatabaseReconciler) EnsurePostgreSQLDatabase(ctx context.Cont
 	return nil
 }
 
-// runPreflight opens an admin connection to the host and verifies controller
-// invariants (superuser role membership) before any reconcile work. The
-// connection is closed before returning - the downstream postgres.Database
-// call opens its own.
-func (r *PostgreSQLDatabaseReconciler) runPreflight(log logr.Logger, host string, admin postgres.Credentials) error {
+// prepareHost opens an admin connection to the host, runs preflight checks,
+// and ensures the management role exists. The connection is closed before
+// returning - the downstream postgres.Database call opens its own.
+func (r *PostgreSQLDatabaseReconciler) prepareHost(log logr.Logger, host string, admin postgres.Credentials) error {
 	db, err := postgres.Connect(postgres.ConnectionString{
 		Host:     host,
 		Database: "postgres",
@@ -303,10 +302,17 @@ func (r *PostgreSQLDatabaseReconciler) runPreflight(log logr.Logger, host string
 		Params:   admin.Params,
 	})
 	if err != nil {
-		return fmt.Errorf("preflight: connect to host %s: %w", host, err)
+		return fmt.Errorf("prepare host %s: connect: %w", host, err)
 	}
 	defer db.Close()
-	return postgres.Preflight(log, db, r.SuperuserRoleName)
+
+	if err := postgres.Preflight(log, db, r.SuperuserRoleName); err != nil {
+		return err
+	}
+	if err := postgres.EnsureManagerRole(log, db, r.ManagerRoleName); err != nil {
+		return fmt.Errorf("prepare host %s: ensure management role: %w", host, err)
+	}
+	return nil
 }
 
 type adminCredentialsParams struct {
