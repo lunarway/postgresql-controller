@@ -16,7 +16,7 @@ func TestApplyDatabaseGrants_specificSchemaAllTables(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
 
-	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+	adminDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     host,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -39,7 +39,7 @@ func TestApplyDatabaseGrants_specificSchemaAllTables(t *testing.T) {
 		"postgres_role_name", nil,
 	))
 
-	targetDB, err := postgres.Connect(log, postgres.ConnectionString{
+	targetDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     host,
 		Database: dbName,
 		User:     "iam_creator",
@@ -66,7 +66,7 @@ func TestApplyDatabaseGrants_specificTable(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
 
-	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+	adminDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     host,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -89,7 +89,7 @@ func TestApplyDatabaseGrants_specificTable(t *testing.T) {
 		"postgres_role_name", nil,
 	))
 
-	targetDB, err := postgres.Connect(log, postgres.ConnectionString{
+	targetDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     host,
 		Database: dbName,
 		User:     "iam_creator",
@@ -117,7 +117,7 @@ func TestApplyDatabaseGrants_allSchemasAllTables(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
 
-	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+	adminDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     host,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -140,7 +140,7 @@ func TestApplyDatabaseGrants_allSchemasAllTables(t *testing.T) {
 		"postgres_role_name", nil,
 	))
 
-	targetDB, err := postgres.Connect(log, postgres.ConnectionString{
+	targetDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     host,
 		Database: dbName,
 		User:     "iam_creator",
@@ -170,7 +170,7 @@ func TestApplyDatabaseGrants_idempotent(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
 
-	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+	adminDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     host,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -192,7 +192,7 @@ func TestApplyDatabaseGrants_idempotent(t *testing.T) {
 		"postgres_role_name", nil,
 	))
 
-	targetDB, err := postgres.Connect(log, postgres.ConnectionString{
+	targetDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     host,
 		Database: dbName,
 		User:     "iam_creator",
@@ -215,7 +215,7 @@ func TestSyncDatabaseGrants_grantCombinations(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
 
-	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+	adminDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     host,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -239,7 +239,7 @@ func TestSyncDatabaseGrants_grantCombinations(t *testing.T) {
 		"postgres_role_name", nil,
 	))
 
-	targetDB, err := postgres.Connect(log, postgres.ConnectionString{
+	targetDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     host,
 		Database: dbName,
 		User:     "iam_creator",
@@ -441,7 +441,7 @@ func TestSyncDatabaseGrants_revokesRemovedPrivilege(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
 
-	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+	adminDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     host,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -463,7 +463,7 @@ func TestSyncDatabaseGrants_revokesRemovedPrivilege(t *testing.T) {
 		"postgres_role_name", nil,
 	))
 
-	targetDB, err := postgres.Connect(log, postgres.ConnectionString{
+	targetDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     host,
 		Database: dbName,
 		User:     "iam_creator",
@@ -496,7 +496,7 @@ func TestSyncDatabaseGrants_revokesRemovedGrant(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
 
-	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+	adminDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     host,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -518,7 +518,7 @@ func TestSyncDatabaseGrants_revokesRemovedGrant(t *testing.T) {
 		"postgres_role_name", nil,
 	))
 
-	targetDB, err := postgres.Connect(log, postgres.ConnectionString{
+	targetDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     host,
 		Database: dbName,
 		User:     "iam_creator",
@@ -548,7 +548,7 @@ func TestSyncDatabaseGrants_partialRevokePreservesSchemaUsage(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
 
-	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+	adminDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     host,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -571,7 +571,7 @@ func TestSyncDatabaseGrants_partialRevokePreservesSchemaUsage(t *testing.T) {
 		"postgres_role_name", nil,
 	))
 
-	targetDB, err := postgres.Connect(log, postgres.ConnectionString{
+	targetDB, err := postgres.Connect(postgres.ConnectionString{
 		Host: host, Database: dbName, User: "iam_creator", Password: "iam_creator",
 	})
 	require.NoError(t, err)
@@ -603,7 +603,7 @@ func TestSyncDatabaseGrants_picksUpNewTable(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
 
-	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+	adminDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     host,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -626,7 +626,7 @@ func TestSyncDatabaseGrants_picksUpNewTable(t *testing.T) {
 		"postgres_role_name", nil,
 	))
 
-	targetDB, err := postgres.Connect(log, postgres.ConnectionString{
+	targetDB, err := postgres.Connect(postgres.ConnectionString{
 		Host: host, Database: dbName, User: "iam_creator", Password: "iam_creator",
 	})
 	require.NoError(t, err)
@@ -658,7 +658,7 @@ func TestSyncDatabaseGrants_skipsMissingSchemaAndTable(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
 
-	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+	adminDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     host,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -680,7 +680,7 @@ func TestSyncDatabaseGrants_skipsMissingSchemaAndTable(t *testing.T) {
 		"postgres_role_name", nil,
 	))
 
-	targetDB, err := postgres.Connect(log, postgres.ConnectionString{
+	targetDB, err := postgres.Connect(postgres.ConnectionString{
 		Host: host, Database: dbName, User: "iam_creator", Password: "iam_creator",
 	})
 	require.NoError(t, err)
@@ -726,7 +726,7 @@ func TestSyncDatabaseGrants_omittedSchemaAndTable_dbNamedSchema(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
 
-	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+	adminDB, err := postgres.Connect(postgres.ConnectionString{
 		Host: host, Database: "postgres", User: "iam_creator", Password: "iam_creator",
 	})
 	require.NoError(t, err)
@@ -745,7 +745,7 @@ func TestSyncDatabaseGrants_omittedSchemaAndTable_dbNamedSchema(t *testing.T) {
 		"postgres_role_name", nil,
 	))
 
-	targetDB, err := postgres.Connect(log, postgres.ConnectionString{
+	targetDB, err := postgres.Connect(postgres.ConnectionString{
 		Host: host, Database: dbName, User: "iam_creator", Password: "iam_creator",
 	})
 	require.NoError(t, err)
@@ -784,7 +784,7 @@ func TestSyncDatabaseGrants_skipsPermissionDenied(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
 
-	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+	adminDB, err := postgres.Connect(postgres.ConnectionString{
 		Host: host, Database: "postgres", User: "iam_creator", Password: "iam_creator",
 	})
 	require.NoError(t, err)
@@ -807,7 +807,7 @@ func TestSyncDatabaseGrants_skipsPermissionDenied(t *testing.T) {
 		"postgres_role_name", nil,
 	))
 
-	targetDB, err := postgres.Connect(log, postgres.ConnectionString{
+	targetDB, err := postgres.Connect(postgres.ConnectionString{
 		Host: host, Database: dbName, User: "iam_creator", Password: "iam_creator",
 	})
 	require.NoError(t, err)
@@ -830,7 +830,7 @@ func TestSyncDatabaseGrants_skipsPermissionDenied(t *testing.T) {
 	require.NoError(t, postgres.EnsureCustomRole(log, adminDB, roleName, nil))
 
 	// Connect as the controller — it owns the schema and one table but not the other.
-	controllerDB, err := postgres.Connect(log, postgres.ConnectionString{
+	controllerDB, err := postgres.Connect(postgres.ConnectionString{
 		Host: host, Database: dbName, User: controllerUser, Password: controllerUser,
 	})
 	require.NoError(t, err)
@@ -861,7 +861,7 @@ func TestSyncDatabaseGrants_grantsViaSetRoleToTableOwner(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
 
-	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+	adminDB, err := postgres.Connect(postgres.ConnectionString{
 		Host: host, Database: "postgres", User: "iam_creator", Password: "iam_creator",
 	})
 	require.NoError(t, err)
@@ -884,7 +884,7 @@ func TestSyncDatabaseGrants_grantsViaSetRoleToTableOwner(t *testing.T) {
 		"postgres_role_name", nil,
 	))
 
-	targetDB, err := postgres.Connect(log, postgres.ConnectionString{
+	targetDB, err := postgres.Connect(postgres.ConnectionString{
 		Host: host, Database: dbName, User: "iam_creator", Password: "iam_creator",
 	})
 	require.NoError(t, err)
@@ -904,7 +904,7 @@ func TestSyncDatabaseGrants_grantsViaSetRoleToTableOwner(t *testing.T) {
 
 	// Create schema and tables owned by the service user.
 	dbExec(t, targetDB, fmt.Sprintf("CREATE SCHEMA %s AUTHORIZATION %s", schemaName, serviceUser))
-	serviceDB, err := postgres.Connect(log, postgres.ConnectionString{
+	serviceDB, err := postgres.Connect(postgres.ConnectionString{
 		Host: host, Database: dbName, User: serviceUser, Password: serviceUser,
 	})
 	require.NoError(t, err)
@@ -923,7 +923,7 @@ func TestSyncDatabaseGrants_grantsViaSetRoleToTableOwner(t *testing.T) {
 	require.NoError(t, postgres.EnsureCustomRole(log, adminDB, roleName, nil))
 
 	// Connect as the controller user (member of service user, but not the table owner).
-	controllerDB, err := postgres.Connect(log, postgres.ConnectionString{
+	controllerDB, err := postgres.Connect(postgres.ConnectionString{
 		Host: host, Database: dbName, User: controllerUser, Password: controllerUser,
 	})
 	require.NoError(t, err)
@@ -962,7 +962,7 @@ func TestRevokeAllDatabaseGrants_viaSetRole(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
 
-	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+	adminDB, err := postgres.Connect(postgres.ConnectionString{
 		Host: host, Database: "postgres", User: "iam_creator", Password: "iam_creator",
 	})
 	require.NoError(t, err)
@@ -983,7 +983,7 @@ func TestRevokeAllDatabaseGrants_viaSetRole(t *testing.T) {
 		"postgres_role_name", nil,
 	))
 
-	targetDB, err := postgres.Connect(log, postgres.ConnectionString{
+	targetDB, err := postgres.Connect(postgres.ConnectionString{
 		Host: host, Database: dbName, User: "iam_creator", Password: "iam_creator",
 	})
 	require.NoError(t, err)
@@ -998,7 +998,7 @@ func TestRevokeAllDatabaseGrants_viaSetRole(t *testing.T) {
 
 	// Create schema and table owned by the service user.
 	dbExec(t, targetDB, fmt.Sprintf("CREATE SCHEMA %s AUTHORIZATION %s", schemaName, serviceUser))
-	serviceDB, err := postgres.Connect(log, postgres.ConnectionString{
+	serviceDB, err := postgres.Connect(postgres.ConnectionString{
 		Host: host, Database: dbName, User: serviceUser, Password: serviceUser,
 	})
 	require.NoError(t, err)
@@ -1008,7 +1008,7 @@ func TestRevokeAllDatabaseGrants_viaSetRole(t *testing.T) {
 	// Create custom role and grant privileges via SET ROLE.
 	require.NoError(t, postgres.EnsureCustomRole(log, adminDB, roleName, nil))
 
-	controllerDB, err := postgres.Connect(log, postgres.ConnectionString{
+	controllerDB, err := postgres.Connect(postgres.ConnectionString{
 		Host: host, Database: dbName, User: controllerUser, Password: controllerUser,
 	})
 	require.NoError(t, err)

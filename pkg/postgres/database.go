@@ -79,7 +79,7 @@ func Database(log logr.Logger, host string, adminCredentials, serviceCredentials
 		Password: adminCredentials.Password,
 		Params:   adminCredentials.Params,
 	}
-	serviceConnection, err := Connect(log, serviceConnectionString)
+	serviceConnection, err := Connect(serviceConnectionString)
 	if err != nil {
 		return fmt.Errorf("connect to host %s: %w", serviceConnectionString, err)
 	}
@@ -217,7 +217,7 @@ func createDatabase(log logr.Logger, host string, adminCredentials Credentials, 
 		Password: adminCredentials.Password,
 		Params:   adminCredentials.Params,
 	}
-	db, err := Connect(log, connectionString)
+	db, err := Connect(connectionString)
 	if err != nil {
 		return fmt.Errorf("connect to host %s: %w", connectionString, err)
 	}

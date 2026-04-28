@@ -34,7 +34,7 @@ func (r *CustomRoleReconciler) cleanupRoleOnHost(log logr.Logger, host string, c
 		Password: creds.Password,
 		Params:   creds.Params,
 	}
-	adminDB, err := postgres.Connect(log, adminConnStr)
+	adminDB, err := postgres.Connect(adminConnStr)
 	if err != nil {
 		return fmt.Errorf("connect to host: %w", err)
 	}
@@ -52,7 +52,7 @@ func (r *CustomRoleReconciler) cleanupRoleOnHost(log logr.Logger, host string, c
 			Password: creds.Password,
 			Params:   creds.Params,
 		}
-		db, err := postgres.Connect(log, connStr)
+		db, err := postgres.Connect(connStr)
 		if err != nil {
 			return fmt.Errorf("connect to %s: %w", dbName, err)
 		}

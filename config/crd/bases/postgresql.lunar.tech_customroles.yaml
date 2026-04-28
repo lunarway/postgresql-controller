@@ -178,6 +178,11 @@ spec:
                 description: Error contains the error message when Phase is Failed
                   or Invalid
                 type: string
+              failingHost:
+                description: |-
+                  FailingHost is the PostgreSQL host that caused reconciliation to fail.
+                  Empty when reconciliation succeeded or the failure is not host-specific.
+                type: string
               phase:
                 description: Phase is the current phase of the CustomRole resource
                 type: string
