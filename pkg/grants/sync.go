@@ -73,7 +73,7 @@ func (g *Granter) connectToHosts(log logr.Logger, accesses HostAccess) (map[stri
 			User:     credentials.User,
 			Password: credentials.Password,
 		}
-		db, err := postgres.Connect(log, connectionString)
+		db, err := postgres.Connect(connectionString)
 		if err != nil {
 			errs = multierr.Append(errs, fmt.Errorf("connect to %s: %w", connectionString, err))
 			continue

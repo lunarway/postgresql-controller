@@ -15,7 +15,7 @@ func TestUserDatabases(t *testing.T) {
 	host := test.Integration(t)
 	log := test.SetLogger(t)
 
-	adminDB, err := postgres.Connect(log, postgres.ConnectionString{
+	adminDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     host,
 		Database: "postgres",
 		User:     "iam_creator",

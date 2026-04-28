@@ -158,6 +158,11 @@ type CustomRoleStatus struct {
 	// Error contains the error message when Phase is Failed or Invalid
 	// +optional
 	Error string `json:"error,omitempty"`
+
+	// FailingHost is the PostgreSQL host that caused reconciliation to fail.
+	// Empty when reconciliation succeeded or the failure is not host-specific.
+	// +optional
+	FailingHost string `json:"failingHost,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -182,6 +187,10 @@ type CustomRoleList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata"`
 	Items           []CustomRole `json:"items"`
+}
+
+func (s CustomRoleStatus) IsUnchanged(phase CustomRolePhase, errorMessage, failingHost string) bool {
+	return s.Phase == phase && s.Error == errorMessage && s.FailingHost == failingHost
 }
 
 func init() {

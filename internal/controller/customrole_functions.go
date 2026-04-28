@@ -71,7 +71,7 @@ func (r *CustomRoleReconciler) syncFunctionsOnDatabase(log logr.Logger, host str
 		Password: adminCredentials.Password,
 		Params:   adminCredentials.Params,
 	}
-	db, err := postgres.Connect(log, connStr)
+	db, err := postgres.Connect(connStr)
 	if err != nil {
 		return fmt.Errorf("connect to %s: %w", connStr, err)
 	}
