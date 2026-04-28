@@ -43,7 +43,8 @@ type PostgreSQLDatabaseReconciler struct {
 	client.Client
 	Log logr.Logger
 
-	ManagerRoleName string
+	ManagerRoleName   string
+	SuperuserRoleName string
 	// contains a map of credentials for hosts
 	HostCredentials map[string]postgres.Credentials
 }
@@ -110,6 +111,11 @@ func (r *PostgreSQLDatabaseReconciler) reconcile(ctx context.Context, reqLogger 
 	}
 	status.host = host
 	reqLogger = reqLogger.WithValues("host", host)
+
+	if err := r.runPreflight(reqLogger, host, *adminCredentials); err != nil {
+		return status, err
+	}
+
 	user, err := kube.ResourceValue(r.Client, database.Spec.User, request.Namespace)
 	if err != nil {
 		if !ctlerrors.IsInvalid(err) {
@@ -282,6 +288,25 @@ func (r *PostgreSQLDatabaseReconciler) EnsurePostgreSQLDatabase(ctx context.Cont
 	}
 
 	return nil
+}
+
+// runPreflight opens an admin connection to the host and verifies controller
+// invariants (superuser role membership) before any reconcile work. The
+// connection is closed before returning - the downstream postgres.Database
+// call opens its own.
+func (r *PostgreSQLDatabaseReconciler) runPreflight(log logr.Logger, host string, admin postgres.Credentials) error {
+	db, err := postgres.Connect(postgres.ConnectionString{
+		Host:     host,
+		Database: "postgres",
+		User:     admin.User,
+		Password: admin.Password,
+		Params:   admin.Params,
+	})
+	if err != nil {
+		return fmt.Errorf("preflight: connect to host %s: %w", host, err)
+	}
+	defer db.Close()
+	return postgres.Preflight(log, db, r.SuperuserRoleName)
 }
 
 type adminCredentialsParams struct {
