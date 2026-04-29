@@ -136,7 +136,6 @@ func TestConnectionString_logger(t *testing.T) {
 // each connection and don't let the sql.DB connection pool keep them open.
 func TestConnect_idleConnections(t *testing.T) {
 	postgresqlHost := test.Integration(t)
-	logger := test.NewLogger(t)
 	connectionString := postgres.ConnectionString{
 		Host:     postgresqlHost,
 		User:     "iam_creator",
@@ -149,7 +148,7 @@ func TestConnect_idleConnections(t *testing.T) {
 	// the connection pool is properly configured the idle connections will be
 	// dropped before we call Close.
 	for i := 0; i < 100; i++ {
-		conn, err := postgres.Connect(logger, connectionString)
+		conn, err := postgres.Connect(connectionString)
 		if err != nil {
 			t.Fatalf("connect to database failed: %v", err)
 		}
@@ -160,7 +159,7 @@ func TestConnect_idleConnections(t *testing.T) {
 func TestRole_staticRoles(t *testing.T) {
 	postgresqlHost := test.Integration(t)
 	log := test.SetLogger(t)
-	db, err := postgres.Connect(log, postgres.ConnectionString{
+	db, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		User:     "iam_creator",
 		Database: "postgres",
@@ -262,7 +261,7 @@ func TestRole_owningWritePriviliges(t *testing.T) {
 	postgresqlHost := test.Integration(t)
 	log := test.SetLogger(t)
 
-	iamCreatorRootDB, err := postgres.Connect(log, postgres.ConnectionString{
+	iamCreatorRootDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		User:     "iam_creator",
 		Database: "postgres",
@@ -291,7 +290,7 @@ func TestRole_owningWritePriviliges(t *testing.T) {
 	//
 
 	// reconnect to start a new session with grants from above database creation
-	iamCreatorUserDB, err := postgres.Connect(log, postgres.ConnectionString{
+	iamCreatorUserDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		User:     "iam_creator",
 		Database: serviceUser1,
@@ -312,7 +311,7 @@ func TestRole_owningWritePriviliges(t *testing.T) {
 		return
 	}
 
-	userDB, err := postgres.Connect(log, postgres.ConnectionString{
+	userDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		User:     developerUser,
 		Database: serviceUser1,
@@ -333,7 +332,7 @@ func TestRole_owningWritePriviliges(t *testing.T) {
 
 	// ensure we revoke the privilege again
 
-	iamCreatorUserDB, err = postgres.Connect(log, postgres.ConnectionString{
+	iamCreatorUserDB, err = postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		User:     "iam_creator",
 		Database: serviceUser1,
@@ -354,7 +353,7 @@ func TestRole_owningWritePriviliges(t *testing.T) {
 		return
 	}
 
-	userDB, err = postgres.Connect(log, postgres.ConnectionString{
+	userDB, err = postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		User:     developerUser,
 		Database: serviceUser1,
@@ -378,7 +377,7 @@ func TestRole_priviliges(t *testing.T) {
 	postgresqlHost := test.Integration(t)
 	log := test.SetLogger(t)
 
-	iamCreatorRootDB, err := postgres.Connect(log, postgres.ConnectionString{
+	iamCreatorRootDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		User:     "iam_creator",
 		Database: "postgres",
@@ -410,7 +409,7 @@ func TestRole_priviliges(t *testing.T) {
 	//
 
 	// reconnect to start a new session with grants from above database creation
-	iamCreatorUserDB, err := postgres.Connect(log, postgres.ConnectionString{
+	iamCreatorUserDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		User:     "iam_creator",
 		Database: serviceUser1,
@@ -431,7 +430,7 @@ func TestRole_priviliges(t *testing.T) {
 		return
 	}
 
-	userDB, err := postgres.Connect(log, postgres.ConnectionString{
+	userDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		User:     developerUser,
 		Database: serviceUser1,
@@ -456,7 +455,7 @@ func TestRole_priviliges(t *testing.T) {
 	//
 
 	// reconnect to start a new session with grants from above database creation
-	iamCreatorUserDB, err = postgres.Connect(log, postgres.ConnectionString{
+	iamCreatorUserDB, err = postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		User:     "iam_creator",
 		Database: serviceUser2,
@@ -482,7 +481,7 @@ func TestRole_priviliges(t *testing.T) {
 		return
 	}
 
-	userDB, err = postgres.Connect(log, postgres.ConnectionString{
+	userDB, err = postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		User:     developerUser,
 		Database: serviceUser2,
@@ -518,7 +517,7 @@ func createServiceDatabase(t *testing.T, log logr.Logger, host, service string) 
 		t.Fatalf("Failed to create database: %v", err)
 	}
 
-	serviceUserDB, err := postgres.Connect(log, postgres.ConnectionString{
+	serviceUserDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     host,
 		User:     service,
 		Database: service,

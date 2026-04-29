@@ -43,7 +43,8 @@ type PostgreSQLDatabaseReconciler struct {
 	client.Client
 	Log logr.Logger
 
-	ManagerRoleName string
+	ManagerRoleName   string
+	SuperuserRoleName string
 	// contains a map of credentials for hosts
 	HostCredentials map[string]postgres.Credentials
 }
@@ -110,6 +111,11 @@ func (r *PostgreSQLDatabaseReconciler) reconcile(ctx context.Context, reqLogger 
 	}
 	status.host = host
 	reqLogger = reqLogger.WithValues("host", host)
+
+	if err := r.prepareHost(reqLogger, host, *adminCredentials); err != nil {
+		return status, err
+	}
+
 	user, err := kube.ResourceValue(r.Client, database.Spec.User, request.Namespace)
 	if err != nil {
 		if !ctlerrors.IsInvalid(err) {
@@ -281,6 +287,31 @@ func (r *PostgreSQLDatabaseReconciler) EnsurePostgreSQLDatabase(ctx context.Cont
 		return fmt.Errorf("create database %s on host %s: %w", params.Target.Name, params.Host, err)
 	}
 
+	return nil
+}
+
+// prepareHost opens an admin connection to the host, runs preflight checks,
+// and ensures the management role exists. The connection is closed before
+// returning - the downstream postgres.Database call opens its own.
+func (r *PostgreSQLDatabaseReconciler) prepareHost(log logr.Logger, host string, admin postgres.Credentials) error {
+	db, err := postgres.Connect(postgres.ConnectionString{
+		Host:     host,
+		Database: "postgres",
+		User:     admin.User,
+		Password: admin.Password,
+		Params:   admin.Params,
+	})
+	if err != nil {
+		return fmt.Errorf("prepare host %s: connect: %w", host, err)
+	}
+	defer db.Close()
+
+	if err := postgres.Preflight(log, db, r.SuperuserRoleName); err != nil {
+		return err
+	}
+	if err := postgres.EnsureManagerRole(log, db, r.ManagerRoleName); err != nil {
+		return fmt.Errorf("prepare host %s: ensure management role: %w", host, err)
+	}
 	return nil
 }
 

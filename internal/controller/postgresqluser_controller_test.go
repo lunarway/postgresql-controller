@@ -564,7 +564,7 @@ func TestReconcile_multipleDatabaseResources(t *testing.T) {
 func seededDatabase(t *testing.T, host, databaseName, userName string, managerRole string) {
 	t.Helper()
 
-	dbConn, err := postgres.Connect(logf.Log, postgres.ConnectionString{
+	dbConn, err := postgres.Connect(postgres.ConnectionString{
 		Database: "postgres",
 		Host:     host,
 		Password: "iam_creator",
@@ -586,7 +586,7 @@ func seededDatabase(t *testing.T, host, databaseName, userName string, managerRo
 	}, managerRole, nil)
 	require.NoErrorf(t, err, "failed to created seeded database '%s'", databaseName)
 
-	db1Conn, err := postgres.Connect(logf.Log, postgres.ConnectionString{
+	db1Conn, err := postgres.Connect(postgres.ConnectionString{
 		Database: databaseName,
 		Host:     host,
 		Password: databaseName,
@@ -599,7 +599,7 @@ func seededDatabase(t *testing.T, host, databaseName, userName string, managerRo
 }
 
 func assertAccess(t *testing.T, host, databaseName, userName string) {
-	userConn, err := postgres.Connect(logf.Log, postgres.ConnectionString{
+	userConn, err := postgres.Connect(postgres.ConnectionString{
 		Database: databaseName,
 		Host:     host,
 		User:     userName,
