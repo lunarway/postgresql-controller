@@ -122,7 +122,7 @@ func TestPostgreSQLDatabase_Reconcile_globalExtensions(t *testing.T) {
 				Log:               ctrl.Log.WithName(t.Name()),
 				HostCredentials:   hostCredentials,
 				ManagerRoleName:   managerRole,
-				SuperuserRoleName: "rds_superuser",
+				SuperuserRoleName: "iam_creator",
 				GlobalExtensions:  tc.globalExtensions,
 			}
 

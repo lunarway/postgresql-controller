@@ -168,16 +168,6 @@ func (r *PostgreSQLDatabaseReconciler) reconcile(ctx context.Context, reqLogger 
 	return status, nil
 }
 
-func fromApiExtensions(extensions []postgresqlv1alpha1.PostgreSQLDatabaseExtension) postgres.Extensions {
-	postgresExtensions := make([]postgres.Extension, 0, len(extensions))
-
-	for _, e := range extensions {
-		postgresExtensions = append(postgresExtensions, postgres.NewExtension(e.ExtensionName))
-	}
-
-	return postgresExtensions
-}
-
 // mergeExtensions merges global extensions with database-specific extensions, ensuring uniqueness.
 // Database extensions take precedence if there are duplicates.
 func (r *PostgreSQLDatabaseReconciler) mergeExtensions(dbExtensions []postgresqlv1alpha1.PostgreSQLDatabaseExtension) postgres.Extensions {
@@ -239,7 +229,7 @@ func (s *status) update(err error) bool {
 	switch {
 	case err == nil:
 		phase = postgresqlv1alpha1.PostgreSQLDatabasePhaseRunning
-	case err != nil:
+	default:
 		errorMessage = err.Error()
 		if ctlerrors.IsInvalid(err) {
 			phase = postgresqlv1alpha1.PostgreSQLDatabasePhaseInvalid

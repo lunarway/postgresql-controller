@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/lib/pq"
 	"k8s.io/utils/strings/slices"
 )
 
@@ -91,7 +92,7 @@ func installExtensions(ctx context.Context, conn *sql.DB, adminCredentials, serv
 	for _, e := range extensionsToInstall {
 		_, err := conn.ExecContext(
 			ctx,
-			fmt.Sprintf("CREATE EXTENSION IF NOT EXISTS %s WITH SCHEMA %s", e.Name, serviceCredentials.Name),
+			fmt.Sprintf("CREATE EXTENSION IF NOT EXISTS %s WITH SCHEMA %s", pq.QuoteIdentifier(e.Name), pq.QuoteIdentifier(serviceCredentials.Name)),
 		)
 		if err != nil {
 			return fmt.Errorf("failed to install: user: %s, db: %s, extension %s: %w", adminCredentials.User, serviceCredentials.Name, e.Name, err)
