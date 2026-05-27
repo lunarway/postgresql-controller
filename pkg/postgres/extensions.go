@@ -95,7 +95,7 @@ func installExtensions(ctx context.Context, conn *sql.DB, adminCredentials, serv
 			fmt.Sprintf("CREATE EXTENSION IF NOT EXISTS %s WITH SCHEMA %s", pq.QuoteIdentifier(e.Name), pq.QuoteIdentifier(serviceCredentials.Name)),
 		)
 		if err != nil {
-			return fmt.Errorf("failed to install: user: %s, db: %s, extension %s: %w", adminCredentials.User, serviceCredentials.Name, e.Name, err)
+			return fmt.Errorf("failed to install extension %s, user: %s, db: %s: %w", e.Name, adminCredentials.User, serviceCredentials.Name, err)
 		}
 	}
 
