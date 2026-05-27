@@ -84,7 +84,7 @@ func (c *ControllerConfiguration) GetLoginRoles() []string {
 // Returns an empty slice if GlobalExtensions is empty.
 func (c *ControllerConfiguration) GetGlobalExtensions() []string {
 	if c.GlobalExtensions == "" {
-		return []string{}
+		return nil
 	}
 	extensions := strings.Split(c.GlobalExtensions, ",")
 	result := make([]string, 0, len(extensions))
