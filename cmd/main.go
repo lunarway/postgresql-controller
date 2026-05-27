@@ -135,6 +135,7 @@ func main() {
 		ManagerRoleName:   config.ManagerRoleName,
 		SuperuserRoleName: config.SuperuserRoleName,
 		HostCredentials:   config.HostCredentials,
+		GlobalExtensions:  config.GetGlobalExtensions(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PostgreSQLDatabase")
 		os.Exit(1)

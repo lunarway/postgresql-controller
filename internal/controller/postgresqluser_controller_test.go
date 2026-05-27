@@ -615,7 +615,7 @@ func assertAccess(t *testing.T, host, databaseName, userName string) {
 func doReconcile(t *testing.T, sut *PostgreSQLUserReconciler, req reconcile.Request) {
 	const reconcileLimit = 10
 
-	for i := 0; i < reconcileLimit; i++ {
+	for range reconcileLimit {
 		res, err := sut.Reconcile(context.Background(), req)
 		assert.NoError(t, err, "reconciliation failed")
 

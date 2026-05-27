@@ -47,6 +47,8 @@ type PostgreSQLDatabaseReconciler struct {
 	SuperuserRoleName string
 	// contains a map of credentials for hosts
 	HostCredentials map[string]postgres.Credentials
+	// GlobalExtensions contains the list of extensions to install on all databases
+	GlobalExtensions []string
 }
 
 //+kubebuilder:rbac:groups=postgresql.lunar.tech,resources=postgresqldatabases,verbs=get;list;watch;create;update;patch;delete
@@ -139,6 +141,9 @@ func (r *PostgreSQLDatabaseReconciler) reconcile(ctx context.Context, reqLogger 
 
 	reqLogger.Info("Resolved all referenced values for PostgreSQLDatabase resource")
 
+	// Merge global extensions with database-specific extensions
+	mergedExtensions := r.mergeExtensions(extensions)
+
 	// Ensure the database is in sync with the object
 	err = r.EnsurePostgreSQLDatabase(
 		ctx,
@@ -147,7 +152,7 @@ func (r *PostgreSQLDatabaseReconciler) reconcile(ctx context.Context, reqLogger 
 			Host:        host,
 			Admin:       *adminCredentials,
 			ManagerRole: r.ManagerRoleName,
-			Extensions:  fromApiExtensions(extensions),
+			Extensions:  mergedExtensions,
 			Target: postgres.Credentials{
 				Name:     database.Spec.Name,
 				User:     user,
@@ -171,6 +176,31 @@ func fromApiExtensions(extensions []postgresqlv1alpha1.PostgreSQLDatabaseExtensi
 	}
 
 	return postgresExtensions
+}
+
+// mergeExtensions merges global extensions with database-specific extensions, ensuring uniqueness.
+// Database extensions take precedence if there are duplicates.
+func (r *PostgreSQLDatabaseReconciler) mergeExtensions(dbExtensions []postgresqlv1alpha1.PostgreSQLDatabaseExtension) postgres.Extensions {
+	seen := make(map[string]struct{})
+	result := make([]postgres.Extension, 0, len(r.GlobalExtensions)+len(dbExtensions))
+
+	// Add database-specific extensions first
+	for _, ext := range dbExtensions {
+		if _, exists := seen[ext.ExtensionName]; !exists {
+			seen[ext.ExtensionName] = struct{}{}
+			result = append(result, postgres.NewExtension(ext.ExtensionName))
+		}
+	}
+
+	// Add global extensions that aren't already present
+	for _, extName := range r.GlobalExtensions {
+		if _, exists := seen[extName]; !exists {
+			seen[extName] = struct{}{}
+			result = append(result, postgres.NewExtension(extName))
+		}
+	}
+
+	return result
 }
 
 type status struct {

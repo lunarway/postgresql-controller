@@ -420,3 +420,82 @@ func TestPostgreSQLDatabase_Reconcile_unknownHostCredentialsResourceReference(t 
 		RequeueAfter: 10 * time.Second,
 	}, res, "result not as expected")
 }
+
+func TestPostgreSQLDatabaseReconciler_mergeExtensions(t *testing.T) {
+	tt := []struct {
+		name             string
+		globalExtensions []string
+		dbExtensions     []lunarwayv1alpha1.PostgreSQLDatabaseExtension
+		expected         []string
+	}{
+		{
+			name:             "empty global and empty database",
+			globalExtensions: []string{},
+			dbExtensions:     []lunarwayv1alpha1.PostgreSQLDatabaseExtension{},
+			expected:         nil,
+		},
+		{
+			name:             "nil global and nil database",
+			globalExtensions: nil,
+			dbExtensions:     nil,
+			expected:         nil,
+		},
+		{
+			name:             "only global extensions",
+			globalExtensions: []string{"pgcrypto", "uuid-ossp"},
+			dbExtensions:     []lunarwayv1alpha1.PostgreSQLDatabaseExtension{},
+			expected:         []string{"pgcrypto", "uuid-ossp"},
+		},
+		{
+			name:             "only database extensions",
+			globalExtensions: []string{},
+			dbExtensions: []lunarwayv1alpha1.PostgreSQLDatabaseExtension{
+				{ExtensionName: "pg_trgm"},
+			},
+			expected: []string{"pg_trgm"},
+		},
+		{
+			name:             "both global and database extensions with no overlap",
+			globalExtensions: []string{"pgcrypto", "uuid-ossp"},
+			dbExtensions: []lunarwayv1alpha1.PostgreSQLDatabaseExtension{
+				{ExtensionName: "pg_trgm"},
+			},
+			expected: []string{"pg_trgm", "pgcrypto", "uuid-ossp"},
+		},
+		{
+			name:             "duplicate extension in both global and database",
+			globalExtensions: []string{"pgcrypto", "uuid-ossp"},
+			dbExtensions: []lunarwayv1alpha1.PostgreSQLDatabaseExtension{
+				{ExtensionName: "pgcrypto"},
+			},
+			expected: []string{"pgcrypto", "uuid-ossp"},
+		},
+		{
+			name:             "multiple duplicates",
+			globalExtensions: []string{"pgcrypto", "uuid-ossp", "pg_stat_statements"},
+			dbExtensions: []lunarwayv1alpha1.PostgreSQLDatabaseExtension{
+				{ExtensionName: "pgcrypto"},
+				{ExtensionName: "pg_trgm"},
+				{ExtensionName: "uuid-ossp"},
+			},
+			expected: []string{"pgcrypto", "pg_trgm", "uuid-ossp", "pg_stat_statements"},
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			r := &PostgreSQLDatabaseReconciler{
+				GlobalExtensions: tc.globalExtensions,
+			}
+
+			result := r.mergeExtensions(tc.dbExtensions)
+
+			var resultNames []string
+			for _, ext := range result {
+				resultNames = append(resultNames, ext.Name)
+			}
+
+			assert.Equal(t, tc.expected, resultNames, "merged extensions not as expected")
+		})
+	}
+}

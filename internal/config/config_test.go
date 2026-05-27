@@ -150,3 +150,51 @@ func TestHostCredentials_String(t *testing.T) {
 		})
 	}
 }
+
+func TestControllerConfiguration_GetGlobalExtensions(t *testing.T) {
+	tt := []struct {
+		name   string
+		input  string
+		output []string
+	}{
+		{
+			name:   "empty string",
+			input:  "",
+			output: []string{},
+		},
+		{
+			name:   "single extension",
+			input:  "pgcrypto",
+			output: []string{"pgcrypto"},
+		},
+		{
+			name:   "multiple extensions",
+			input:  "pgcrypto,uuid-ossp,pg_stat_statements",
+			output: []string{"pgcrypto", "uuid-ossp", "pg_stat_statements"},
+		},
+		{
+			name:   "extensions with whitespace",
+			input:  "pgcrypto, uuid-ossp , pg_stat_statements",
+			output: []string{"pgcrypto", "uuid-ossp", "pg_stat_statements"},
+		},
+		{
+			name:   "trailing comma",
+			input:  "pgcrypto,uuid-ossp,",
+			output: []string{"pgcrypto", "uuid-ossp"},
+		},
+		{
+			name:   "empty elements",
+			input:  "pgcrypto,,uuid-ossp",
+			output: []string{"pgcrypto", "uuid-ossp"},
+		},
+	}
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := ControllerConfiguration{
+				GlobalExtensions: tc.input,
+			}
+			output := cfg.GetGlobalExtensions()
+			assert.Equal(t, tc.output, output, "parsed extensions not as expected")
+		})
+	}
+}
