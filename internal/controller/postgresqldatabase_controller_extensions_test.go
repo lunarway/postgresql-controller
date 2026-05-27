@@ -158,6 +158,114 @@ func TestPostgreSQLDatabase_Reconcile_globalExtensions(t *testing.T) {
 	}
 }
 
+// TestPostgreSQLDatabase_Reconcile_extensionsAlreadyInstalled verifies that reconciliation
+// handles already-installed extensions correctly and doesn't fail when extensions exist.
+func TestPostgreSQLDatabase_Reconcile_extensionsAlreadyInstalled(t *testing.T) {
+	logf.SetLogger(zap.New(zap.UseDevMode(true)))
+
+	host := test.Integration(t)
+	var (
+		epoch        = time.Now().UnixNano()
+		namespace    = "default"
+		databaseName = fmt.Sprintf("database_ext_preinstalled_%d", epoch)
+		managerRole  = "postgres_role_manager"
+	)
+
+	// Create the schema for our tests
+	s := runtime.NewScheme()
+	err := scheme.AddToScheme(s)
+	require.NoError(t, err, "add scheme failed")
+	err = lunarwayv1alpha1.AddToScheme(s)
+	require.NoError(t, err, "add lunar scheme failed")
+
+	// Test case: some extensions are already installed before reconciliation
+	t.Run("some extensions already installed", func(t *testing.T) {
+		dbName := fmt.Sprintf("%s_%d", databaseName, time.Now().UnixNano())
+
+		// Seed the database
+		seededDatabase(t, host, dbName, dbName, managerRole)
+
+		// Pre-install pgcrypto extension before reconciliation
+		conn, err := postgres.Connect(postgres.ConnectionString{
+			Database: dbName,
+			Host:     host,
+			Password: "iam_creator",
+			User:     "iam_creator",
+		})
+		require.NoError(t, err, "failed to connect to database")
+		_, err = conn.Exec(fmt.Sprintf("CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA %s", dbName))
+		require.NoError(t, err, "failed to pre-install pgcrypto")
+		conn.Close()
+
+		databaseResource := &lunarwayv1alpha1.PostgreSQLDatabase{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      dbName,
+				Namespace: namespace,
+			},
+			Spec: lunarwayv1alpha1.PostgreSQLDatabaseSpec{
+				Host: lunarwayv1alpha1.ResourceVar{
+					Value: "localhost",
+				},
+				Name: dbName,
+				User: lunarwayv1alpha1.ResourceVar{
+					Value: dbName,
+				},
+				Password: &lunarwayv1alpha1.ResourceVar{
+					Value: "test-password",
+				},
+				Extensions: []lunarwayv1alpha1.PostgreSQLDatabaseExtension{
+					{ExtensionName: "pg_trgm"},
+				},
+			},
+		}
+
+		objs := []runtime.Object{databaseResource}
+		cl := fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).WithStatusSubresource(databaseResource).Build()
+
+		hostCredentials := map[string]postgres.Credentials{
+			"localhost": {
+				User:     "iam_creator",
+				Password: "iam_creator",
+			},
+		}
+
+		r := &PostgreSQLDatabaseReconciler{
+			Client:            cl,
+			Log:               ctrl.Log.WithName(t.Name()),
+			HostCredentials:   hostCredentials,
+			ManagerRoleName:   managerRole,
+			SuperuserRoleName: "iam_creator",
+			GlobalExtensions:  []string{"pgcrypto", "uuid-ossp"},
+		}
+
+		req := reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      dbName,
+				Namespace: namespace,
+			},
+		}
+
+		// Reconcile - should not fail even though pgcrypto is already installed
+		_, err = r.Reconcile(context.Background(), req)
+		require.NoError(t, err, "reconcile should not fail with pre-installed extensions")
+
+		// Verify all extensions are installed
+		conn, err = postgres.Connect(postgres.ConnectionString{
+			Database: dbName,
+			Host:     host,
+			Password: "test-password",
+			User:     dbName,
+		})
+		require.NoError(t, err, "failed to connect to database")
+		defer conn.Close()
+
+		installedExtensions := getInstalledExtensionsFromDB(t, conn)
+		expectedExtensions := []string{"pgcrypto", "uuid-ossp", "pg_trgm"}
+
+		assert.ElementsMatch(t, expectedExtensions, installedExtensions, "all extensions should be installed")
+	})
+}
+
 // getInstalledExtensionsFromDB queries PostgreSQL for installed extensions
 func getInstalledExtensionsFromDB(t *testing.T, conn *sql.DB) []string {
 	t.Helper()

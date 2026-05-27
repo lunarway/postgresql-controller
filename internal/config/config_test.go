@@ -187,11 +187,26 @@ func TestControllerConfiguration_GetGlobalExtensions(t *testing.T) {
 			input:  "pgcrypto,,uuid-ossp",
 			output: []string{"pgcrypto", "uuid-ossp"},
 		},
+		{
+			name:   "invalid extension with spaces",
+			input:  "pgcrypto,some thing with spaces,uuid-ossp",
+			output: []string{"pgcrypto", "uuid-ossp"},
+		},
+		{
+			name:   "invalid extension with special characters",
+			input:  "pgcrypto,invalid$ext,uuid-ossp",
+			output: []string{"pgcrypto", "uuid-ossp"},
+		},
+		{
+			name:   "valid extension with underscores and hyphens",
+			input:  "pg_stat_statements,uuid-ossp,my_ext-123",
+			output: []string{"pg_stat_statements", "uuid-ossp", "my_ext-123"},
+		},
 	}
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := ControllerConfiguration{
-				GlobalExtensions: tc.input,
+				GlobalExtensionsToInstall: tc.input,
 			}
 			output := cfg.GetGlobalExtensions()
 			assert.Equal(t, tc.output, output, "parsed extensions not as expected")

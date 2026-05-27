@@ -14,23 +14,23 @@ import (
 )
 
 type ControllerConfiguration struct {
-	MetricsAddress           string
-	ProbeAddress             string
-	EnableLeaderElection     bool
-	ResyncPeriod             time.Duration
-	UserRoles                string
-	UserRolePrefix           string
-	GlobalExtensions         string
-	AWS                      AwsConfig
-	HostCredentials          map[string]postgres.Credentials
-	ManagerRoleName          string
-	SuperuserRoleName        string
-	AllDatabasesReadEnabled  bool
-	AllDatabasesWriteEnabled bool
-	ExtendedWriteEnabled     bool
-	IAMPolicyPrefix          string
-	SecureMetrics            bool
-	EnableHTTP2              bool
+	MetricsAddress            string
+	ProbeAddress              string
+	EnableLeaderElection      bool
+	ResyncPeriod              time.Duration
+	UserRoles                 string
+	UserRolePrefix            string
+	GlobalExtensionsToInstall string
+	AWS                       AwsConfig
+	HostCredentials           map[string]postgres.Credentials
+	ManagerRoleName           string
+	SuperuserRoleName         string
+	AllDatabasesReadEnabled   bool
+	AllDatabasesWriteEnabled  bool
+	ExtendedWriteEnabled      bool
+	IAMPolicyPrefix           string
+	SecureMetrics             bool
+	EnableHTTP2               bool
 }
 
 type AwsConfig struct {
@@ -55,7 +55,7 @@ func (c *ControllerConfiguration) RegisterFlags(flagSet *flag.FlagSet) {
 	flagSet.StringVar(&c.ManagerRoleName, "manager-role-name", "postgres_role_manager", "Name of the role which will be managing other roles")
 	flagSet.StringVar(&c.SuperuserRoleName, "superuser-role-name", "rds_superuser", "Name of the superuser role the connecting user must be a member of (defaults to RDS's rds_superuser; override for non-RDS deployments)")
 	flagSet.StringVar(&c.UserRoles, "user-roles", "rds_iam", "List of roles granted to all users")
-	flagSet.StringVar(&c.GlobalExtensions, "global-extensions", "", "Comma-separated list of PostgreSQL extensions to install on all databases")
+	flagSet.StringVar(&c.GlobalExtensionsToInstall, "global-extensions-to-install", "", "Comma-separated list of PostgreSQL extensions to install on all databases (existing extensions are never removed)")
 	flagSet.BoolVar(&c.AllDatabasesReadEnabled, "all-databases-enabled-read", false, "Enable usage of allDatabases field in read access requests")
 	flagSet.BoolVar(&c.AllDatabasesWriteEnabled, "all-databases-enabled-write", false, "Enable usage of allDatabases field in write access requests")
 	flagSet.StringVar(&c.UserRolePrefix, "user-role-prefix", "iam_developer_", "Prefix of roles created in PostgreSQL for users")
@@ -81,20 +81,36 @@ func (c *ControllerConfiguration) GetLoginRoles() []string {
 }
 
 // GetGlobalExtensions returns the list of global extensions to install on all databases.
-// Returns an empty slice if GlobalExtensions is empty.
+// Returns an empty slice if GlobalExtensionsToInstall is empty.
+// Invalid extension names (containing spaces or invalid characters) are filtered out.
 func (c *ControllerConfiguration) GetGlobalExtensions() []string {
-	if c.GlobalExtensions == "" {
+	if c.GlobalExtensionsToInstall == "" {
 		return []string{}
 	}
-	extensions := strings.Split(c.GlobalExtensions, ",")
+	extensions := strings.Split(c.GlobalExtensionsToInstall, ",")
 	result := make([]string, 0, len(extensions))
 	for _, ext := range extensions {
 		trimmed := strings.TrimSpace(ext)
-		if trimmed != "" {
+		if trimmed != "" && isValidExtensionName(trimmed) {
 			result = append(result, trimmed)
 		}
 	}
 	return result
+}
+
+// isValidExtensionName validates that an extension name follows PostgreSQL identifier rules.
+// Extension names should contain only letters, digits, underscores, and hyphens.
+// They cannot contain spaces or other special characters.
+func isValidExtensionName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, r := range name {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-') {
+			return false
+		}
+	}
+	return true
 }
 
 func (c *ControllerConfiguration) Log(log logr.Logger) {
@@ -106,7 +122,7 @@ func (c *ControllerConfiguration) Log(log logr.Logger) {
 		"hosts", hostNames,
 		"roles", c.UserRoles,
 		"prefix", c.UserRolePrefix,
-		"globalExtensions", c.GlobalExtensions,
+		"globalExtensionsToInstall", c.GlobalExtensionsToInstall,
 		"awsPolicyName", c.AWS.PolicyName,
 		"awsRegion", c.AWS.Region,
 		"awsAccountID", c.AWS.AccountID,
