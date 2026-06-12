@@ -197,7 +197,6 @@ func main() {
 		EnsureIAMExternalServiceUser: iam.EnsureExternalServiceUser,
 		RemoveIAMExternalServiceUser: iam.RemoveExternalServiceUser,
 
-		RolePrefix:         config.UserRolePrefix,
 		AWSPolicyName:      config.AWS.PolicyName,
 		AWSRegion:          config.AWS.Region,
 		AWSAccountID:       config.AWS.AccountID,

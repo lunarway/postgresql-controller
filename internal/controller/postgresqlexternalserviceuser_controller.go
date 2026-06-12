@@ -53,7 +53,6 @@ type PostgreSQLExternalServiceUserReconciler struct {
 	EnsureIAMExternalServiceUser func(client *iam.Client, log logr.Logger, config iam.EnsureExternalServiceUserConfig, principalArn, dbUsername string) error
 	RemoveIAMExternalServiceUser func(client *iam.Client, log logr.Logger, config iam.EnsureExternalServiceUserConfig, dbUsername string) error
 
-	RolePrefix         string
 	AWSPolicyName      string
 	AWSRegion          string
 	AWSAccountID       string
@@ -107,7 +106,6 @@ func (r *PostgreSQLExternalServiceUserReconciler) reconcile(ctx context.Context,
 		Region:         r.AWSRegion,
 		AccountID:      r.AWSAccountID,
 		PolicyBaseName: r.AWSPolicyName,
-		RolePrefix:     r.RolePrefix,
 		AWSLoginRoles:  r.AWSLoginRoles,
 	}
 
@@ -123,7 +121,7 @@ func (r *PostgreSQLExternalServiceUserReconciler) reconcile(ctx context.Context,
 			// Drop the Postgres role. Logged but non-blocking: if the host is
 			// unavailable the IAM policy has already been removed and the role
 			// will be inert.
-			if err := r.dropPostgresRole(ctx, reqLogger, req.Namespace, obj); err != nil {
+			if err := r.dropPostgresRole(ctx, reqLogger, req.Namespace, obj.Spec.Host, obj.Spec.DBUsername); err != nil {
 				reqLogger.Error(err, "Failed to drop Postgres role during deletion; continuing")
 			}
 
@@ -142,6 +140,20 @@ func (r *PostgreSQLExternalServiceUserReconciler) reconcile(ctx context.Context,
 			return ctrl.Result{}, fmt.Errorf("add finalizer: %w", err)
 		}
 		return ctrl.Result{}, nil
+	}
+
+	// If spec.dbUsername was renamed, clean up the stale IAM policy and Postgres
+	// role before creating resources under the new name.
+	if obj.Status != nil && obj.Status.DBUsername != "" && obj.Status.DBUsername != obj.Spec.DBUsername {
+		previousUsername := obj.Status.DBUsername
+		reqLogger.Info("dbUsername changed, cleaning up previous resources", "previous", previousUsername, "new", obj.Spec.DBUsername)
+
+		if err := r.RemoveIAMExternalServiceUser(iamClient, reqLogger, iamConfig, previousUsername); err != nil {
+			return ctrl.Result{}, r.persistFailed(ctx, obj, fmt.Errorf("remove old IAM policy for %s: %w", previousUsername, err))
+		}
+		if err := r.dropPostgresRole(ctx, reqLogger, req.Namespace, obj.Spec.Host, previousUsername); err != nil {
+			reqLogger.Error(err, "Failed to drop previous Postgres role after rename; continuing", "role", previousUsername)
+		}
 	}
 
 	// Connect to the target Postgres instance.
@@ -198,14 +210,30 @@ func (r *PostgreSQLExternalServiceUserReconciler) connectPostgres(ctx context.Co
 	return db, nil
 }
 
-// dropPostgresRole connects to Postgres and drops the DB role for this resource.
-func (r *PostgreSQLExternalServiceUserReconciler) dropPostgresRole(ctx context.Context, log logr.Logger, namespace string, obj *postgresqlv1alpha1.PostgreSQLExternalServiceUser) error {
-	db, err := r.connectPostgres(ctx, namespace, obj)
+// dropPostgresRole connects to Postgres via the given host ResourceVar and drops
+// the named role. Accepting host and roleName separately allows it to be called
+// with a previous username during a rename, or with spec values during deletion.
+func (r *PostgreSQLExternalServiceUserReconciler) dropPostgresRole(ctx context.Context, log logr.Logger, namespace string, host postgresqlv1alpha1.ResourceVar, roleName string) error {
+	resolvedHost, err := kube.ResourceValue(r.Client, host, namespace)
 	if err != nil {
-		return err
+		return fmt.Errorf("resolve host: %w", err)
+	}
+	creds, ok := r.HostCredentials[resolvedHost]
+	if !ok {
+		return fmt.Errorf("no credentials configured for host %q", resolvedHost)
+	}
+	db, err := postgres.Connect(postgres.ConnectionString{
+		Host:     resolvedHost,
+		Database: creds.Name,
+		User:     creds.User,
+		Password: creds.Password,
+		Params:   creds.Params,
+	})
+	if err != nil {
+		return fmt.Errorf("connect to %s: %w", resolvedHost, err)
 	}
 	defer db.Close()
-	return postgres.DropCustomRole(log, db, obj.Spec.DBUsername)
+	return postgres.DropCustomRole(log, db, roleName)
 }
 
 // getCredentials returns AWS credentials from either a shared profile or
@@ -218,10 +246,12 @@ func (r *PostgreSQLExternalServiceUserReconciler) getCredentials() *credentials.
 }
 
 // persistRunning updates the resource status to Running after a successful reconcile.
+// DBUsername is recorded so the controller can detect renames on the next reconcile.
 func (r *PostgreSQLExternalServiceUserReconciler) persistRunning(ctx context.Context, obj *postgresqlv1alpha1.PostgreSQLExternalServiceUser) error {
 	now := metav1.Now()
 	obj.Status = &postgresqlv1alpha1.PostgreSQLExternalServiceUserStatus{
 		ObservedGeneration: obj.Generation,
+		DBUsername:         obj.Spec.DBUsername,
 		Conditions: []postgresqlv1alpha1.PostgreSQLExternalServiceUserCondition{
 			{
 				Type:               postgresqlv1alpha1.PostgreSQLExternalServiceUserPhaseRunning,

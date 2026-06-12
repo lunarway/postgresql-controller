@@ -93,6 +93,12 @@ type PostgreSQLExternalServiceUserStatus struct {
 	// +patchMergeKey=type
 	// +patchStrategy=merge
 	Conditions []PostgreSQLExternalServiceUserCondition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,2,rep,name=conditions"`
+
+	// DBUsername is the last successfully reconciled Postgres role name.
+	// Tracked so the controller can clean up the old IAM policy and Postgres
+	// role if spec.dbUsername is changed.
+	// +optional
+	DBUsername string `json:"dbUsername,omitempty"`
 }
 
 // +kubebuilder:object:root=true

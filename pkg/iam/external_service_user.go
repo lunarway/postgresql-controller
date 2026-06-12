@@ -12,11 +12,14 @@ import (
 
 // EnsureExternalServiceUserConfig holds the configuration for managing IAM policies
 // for external service users authenticated via IAM principal ARNs.
+//
+// Unlike EnsureUserConfig, there is no RolePrefix field: spec.DBUsername is the
+// exact Postgres role name created by the controller, so the IAM resource ARN
+// must reference it without any prefix to keep them aligned.
 type EnsureExternalServiceUserConfig struct {
 	Region         string
 	AccountID      string
 	PolicyBaseName string
-	RolePrefix     string
 	AWSLoginRoles  []string
 }
 
@@ -51,7 +54,10 @@ func externalPolicyName(baseName, dbUsername string) string {
 
 // newExternalPolicyDocument builds the IAM policy document granting rds-db:connect
 // to the given principalArn on the DB user resource.
-func newExternalPolicyDocument(region, accountID, rolePrefix, principalArn, dbUsername string) *externalPolicyDocument {
+//
+// dbUsername is used as-is in the resource ARN — no role prefix is applied,
+// because spec.DBUsername is the exact Postgres role name the controller creates.
+func newExternalPolicyDocument(region, accountID, principalArn, dbUsername string) *externalPolicyDocument {
 	return &externalPolicyDocument{
 		Version: "2012-10-17",
 		Statement: []externalStatementEntry{
@@ -59,7 +65,7 @@ func newExternalPolicyDocument(region, accountID, rolePrefix, principalArn, dbUs
 				Effect: "Allow",
 				Action: []string{"rds-db:connect"},
 				Resource: []string{
-					fmt.Sprintf("arn:aws:rds-db:%s:%s:dbuser:*/%s%s", region, accountID, rolePrefix, dbUsername),
+					fmt.Sprintf("arn:aws:rds-db:%s:%s:dbuser:*/%s", region, accountID, dbUsername),
 				},
 				Condition: arnEqualsCondition{
 					ArnEquals: arnEqualsValue{PrincipalArn: principalArn},
@@ -77,7 +83,7 @@ func newExternalPolicyDocument(region, accountID, rolePrefix, principalArn, dbUs
 // aws:PrincipalArn matching principalArn exactly (ArnEquals).
 func EnsureExternalServiceUser(client *Client, log logr.Logger, config EnsureExternalServiceUserConfig, principalArn, dbUsername string) error {
 	policyName := externalPolicyName(config.PolicyBaseName, dbUsername)
-	doc := newExternalPolicyDocument(config.Region, config.AccountID, config.RolePrefix, principalArn, dbUsername)
+	doc := newExternalPolicyDocument(config.Region, config.AccountID, principalArn, dbUsername)
 
 	existing, err := client.getExternalPolicyByName(policyName)
 	if err != nil {

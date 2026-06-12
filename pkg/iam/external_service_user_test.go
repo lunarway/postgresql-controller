@@ -22,7 +22,6 @@ func Test_newExternalPolicyDocument_structure(t *testing.T) {
 	doc := newExternalPolicyDocument(
 		"eu-west-1",
 		"000000000000",
-		"iam_developer_",
 		"arn:aws:iam::478824949770:user/VVCTenantUser",
 		"vvc_tenant",
 	)
@@ -32,7 +31,8 @@ func Test_newExternalPolicyDocument_structure(t *testing.T) {
 
 	assert.Equal(t, "Allow", s.Effect)
 	assert.Equal(t, []string{"rds-db:connect"}, s.Action)
-	assert.Equal(t, []string{"arn:aws:rds-db:eu-west-1:000000000000:dbuser:*/iam_developer_vvc_tenant"}, s.Resource)
+	// No rolePrefix — dbUsername is the exact Postgres role name.
+	assert.Equal(t, []string{"arn:aws:rds-db:eu-west-1:000000000000:dbuser:*/vvc_tenant"}, s.Resource)
 	assert.Equal(t, "arn:aws:iam::478824949770:user/VVCTenantUser", s.Condition.ArnEquals.PrincipalArn)
 }
 
@@ -40,7 +40,6 @@ func Test_newExternalPolicyDocument_jsonShape(t *testing.T) {
 	doc := newExternalPolicyDocument(
 		"eu-west-1",
 		"000000000000",
-		"iam_developer_",
 		"arn:aws:iam::478824949770:role/SomeRole",
 		"vvc_tenant",
 	)
@@ -61,7 +60,7 @@ func Test_newExternalPolicyDocument_jsonShape(t *testing.T) {
 }
 
 func Test_newExternalPolicyDocument_roleArn(t *testing.T) {
-	doc := newExternalPolicyDocument("eu-west-1", "111111111111", "", "arn:aws:iam::999:role/MyRole", "svc_user")
+	doc := newExternalPolicyDocument("eu-west-1", "111111111111", "arn:aws:iam::999:role/MyRole", "svc_user")
 
 	require.Len(t, doc.Statement, 1)
 	assert.Equal(t, "arn:aws:rds-db:eu-west-1:111111111111:dbuser:*/svc_user", doc.Statement[0].Resource[0])
@@ -89,7 +88,6 @@ func TestEnsureExternalServiceUser_create(t *testing.T) {
 		Region:         region,
 		AccountID:      accountID,
 		PolicyBaseName: policyBase,
-		RolePrefix:     rolePrefix,
 		AWSLoginRoles:  []string{loginRole},
 	}
 
@@ -124,7 +122,6 @@ func TestEnsureExternalServiceUser_idempotent(t *testing.T) {
 		Region:         region,
 		AccountID:      accountID,
 		PolicyBaseName: policyBase,
-		RolePrefix:     rolePrefix,
 		AWSLoginRoles:  []string{loginRole},
 	}
 
@@ -160,7 +157,6 @@ func TestEnsureExternalServiceUser_arnChange(t *testing.T) {
 		Region:         region,
 		AccountID:      accountID,
 		PolicyBaseName: policyBase,
-		RolePrefix:     rolePrefix,
 		AWSLoginRoles:  []string{loginRole},
 	}
 
@@ -197,7 +193,6 @@ func TestEnsureExternalServiceUser_multipleLoginRoles(t *testing.T) {
 		Region:         region,
 		AccountID:      accountID,
 		PolicyBaseName: policyBase,
-		RolePrefix:     rolePrefix,
 		AWSLoginRoles:  []string{loginRole1, loginRole2},
 	}
 
@@ -227,7 +222,6 @@ func TestRemoveExternalServiceUser(t *testing.T) {
 		Region:         region,
 		AccountID:      accountID,
 		PolicyBaseName: policyBase,
-		RolePrefix:     rolePrefix,
 		AWSLoginRoles:  []string{loginRole},
 	}
 
@@ -266,7 +260,6 @@ func TestRemoveExternalServiceUser_notExist(t *testing.T) {
 		Region:         region,
 		AccountID:      accountID,
 		PolicyBaseName: policyBase,
-		RolePrefix:     rolePrefix,
 		AWSLoginRoles:  []string{loginRole},
 	}
 

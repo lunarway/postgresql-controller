@@ -76,7 +76,6 @@ func TestExternalServiceUser_reconcile_createsRole(t *testing.T) {
 		RemoveIAMExternalServiceUser: func(_ *iam.Client, _ logr.Logger, _ iam.EnsureExternalServiceUserConfig, _ string) error {
 			return nil
 		},
-		RolePrefix:         "",
 		AWSPolicyName:      "test-policy",
 		AWSRegion:          "eu-west-1",
 		AWSAccountID:       "000000000000",
