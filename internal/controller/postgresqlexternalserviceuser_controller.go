@@ -139,7 +139,7 @@ func (r *PostgreSQLExternalServiceUserReconciler) reconcile(ctx context.Context,
 		if err := r.Update(ctx, obj); err != nil {
 			return ctrl.Result{}, fmt.Errorf("add finalizer: %w", err)
 		}
-		return ctrl.Result{}, nil
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	// If spec.dbUsername was renamed, clean up the stale IAM policy and Postgres
