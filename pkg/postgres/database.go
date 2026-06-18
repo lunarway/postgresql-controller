@@ -163,7 +163,7 @@ func Database(log logr.Logger, host string, adminCredentials, serviceCredentials
 	}
 
 	// Set default privileges for the service user
-	err = setDefaultPrivileges(serviceConnection, serviceCredentials.User, readRole, readWriteRole, readOwningWriteRole)
+	err = setDefaultPrivileges(log, serviceConnection, serviceCredentials.User, readRole, readWriteRole, readOwningWriteRole)
 	if err != nil {
 		return fmt.Errorf("set default privileges for service user '%s': %w", serviceCredentials.User, err)
 	}
@@ -271,18 +271,18 @@ func grantAdminOption(log logr.Logger, db *sql.DB, serviceRole string, managerRo
 	})
 }
 
-func setDefaultPrivileges(serviceConnection *sql.DB, serviceRole, readRole, readWriteRole, readOwningWriteRole string) error {
-	err := setReadPrivilegesAs(serviceConnection, serviceRole, readRole, serviceRole)
+func setDefaultPrivileges(log logr.Logger, serviceConnection *sql.DB, serviceRole, readRole, readWriteRole, readOwningWriteRole string) error {
+	err := setReadPrivilegesAs(log, serviceConnection, serviceRole, readRole, serviceRole)
 	if err != nil {
 		return fmt.Errorf("set default read privileges for role %s: %w, as %s", readRole, err, serviceRole)
 	}
 
-	err = setReadWritePrivilegesAs(serviceConnection, serviceRole, readWriteRole, serviceRole)
+	err = setReadWritePrivilegesAs(log, serviceConnection, serviceRole, readWriteRole, serviceRole)
 	if err != nil {
 		return fmt.Errorf("set default readwrite privileges for role %s: %w, as %s", readWriteRole, err, serviceRole)
 	}
 
-	err = setReadWritePrivilegesAs(serviceConnection, serviceRole, readOwningWriteRole, serviceRole)
+	err = setReadWritePrivilegesAs(log, serviceConnection, serviceRole, readOwningWriteRole, serviceRole)
 	if err != nil {
 		return fmt.Errorf("set default readowningwrite privileges for role %s: %w, as %s", readOwningWriteRole, err, serviceRole)
 	}
@@ -338,15 +338,15 @@ func tryExec(log logr.Logger, db *sql.DB, args tryExecReq) error {
 	return nil
 }
 
-func setReadPrivilegesAs(db *sql.DB, schema, role, actor string) error {
-	return setDefaultPrivilegesAs(db, schema, role, "SELECT", actor)
+func setReadPrivilegesAs(log logr.Logger, db *sql.DB, schema, role, actor string) error {
+	return setDefaultPrivilegesAs(log, db, schema, role, "SELECT", actor)
 }
 
-func setReadWritePrivilegesAs(db *sql.DB, schema, role, actor string) error {
-	return setDefaultPrivilegesAs(db, schema, role, "SELECT, INSERT, UPDATE, DELETE", actor)
+func setReadWritePrivilegesAs(log logr.Logger, db *sql.DB, schema, role, actor string) error {
+	return setDefaultPrivilegesAs(log, db, schema, role, "SELECT, INSERT, UPDATE, DELETE", actor)
 }
 
-func setDefaultPrivilegesAs(db *sql.DB, schema, role, privileges, actor string) error {
+func setDefaultPrivilegesAs(log logr.Logger, db *sql.DB, schema, role, privileges, actor string) error {
 	// ensures access to future schemas and tables
 	err := execAsf(db, actor, "ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT %s ON TABLES TO %s;", schema, privileges, role)
 	if err != nil {
@@ -361,9 +361,41 @@ func setDefaultPrivilegesAs(db *sql.DB, schema, role, privileges, actor string) 
 	if err != nil {
 		return fmt.Errorf("grant %s privileges on existing schema: %w, as %s", privileges, err, actor)
 	}
-	err = execAsf(db, actor, fmt.Sprintf("GRANT %s ON ALL TABLES IN SCHEMA %s TO %s", privileges, schema, role))
+	// Grant per-table rather than with a single GRANT ... ON ALL TABLES IN
+	// SCHEMA. The bulk statement runs as the service user and fails entirely if
+	// the schema contains a table owned by another role, locking developers out
+	// of the service-owned tables they should have access to. Iterating lets us
+	// grant on each table as its owner and tolerate tables we cannot grant on.
+	if err := grantPrivilegesOnExistingTables(log, db, schema, role, privileges); err != nil {
+		return fmt.Errorf("grant %s privileges on existing tables: %w", privileges, err)
+	}
+	return nil
+}
+
+// grantPrivilegesOnExistingTables grants privileges on every table in schema to
+// role, issuing one GRANT per table executed as the table's owner. Tables the
+// owner cannot grant on (insufficient_privilege) are logged and skipped so a
+// foreign-owned table does not block access to the rest of the schema.
+func grantPrivilegesOnExistingTables(log logr.Logger, db *sql.DB, schema, role, privileges string) error {
+	tableOwners, err := tableOwnerMap(db)
 	if err != nil {
-		return fmt.Errorf("grant %s privileges on existing tables: %w, as %s", privileges, err, actor)
+		return fmt.Errorf("look up table owners: %w", err)
+	}
+	for table, owner := range tableOwners[schema] {
+		if err := execWithRole(db, owner, func(tx *sql.Tx) error {
+			_, err := tx.Exec(fmt.Sprintf("GRANT %s ON TABLE %s.%s TO %s",
+				privileges,
+				pq.QuoteIdentifier(schema),
+				pq.QuoteIdentifier(table),
+				pq.QuoteIdentifier(role)))
+			return err
+		}); err != nil {
+			if isPermissionDenied(err) {
+				log.Info("Skipping table grant: permission denied", "schema", schema, "table", table, "owner", owner, "role", role)
+				continue
+			}
+			return fmt.Errorf("grant on %s.%s to %s as %s: %w", schema, table, role, owner, err)
+		}
 	}
 	return nil
 }

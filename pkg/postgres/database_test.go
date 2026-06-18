@@ -632,6 +632,128 @@ func TestDatabase_existingResourcePrivilegesForReadWriteRoles(t *testing.T) {
 	dbExec(t, developerDB, fmt.Sprintf(`SELECT * FROM %[1]s.%[1]s`, name))
 }
 
+// TestDatabase_nonServiceOwnedTableInServiceSchema reproduces the lockout
+// scenario where a non-service user owns a table inside the service schema.
+// Reconciliation must still succeed and grant the read role access to the
+// service-owned table rather than failing on the foreign-owned one.
+func TestDatabase_nonServiceOwnedTableInServiceSchema(t *testing.T) {
+	postgresqlHost := test.Integration(t)
+	log := test.SetLogger(t)
+	managerRole := "postgres_role_name"
+	db, err := postgres.Connect(postgres.ConnectionString{
+		Host:     postgresqlHost,
+		Database: "postgres",
+		User:     "iam_creator",
+		Password: "iam_creator",
+	})
+	if err != nil {
+		t.Fatalf("connect to database failed: %v", err)
+	}
+	defer db.Close()
+
+	err = createManagerRole(log, db, managerRole)
+	if err != nil {
+		t.Fatalf("create manager role failed: %v", err)
+	}
+
+	name := fmt.Sprintf("test_%d", time.Now().UnixNano())
+	developerName := fmt.Sprintf("%s_developer", name)
+	otherUser := fmt.Sprintf("%s_other", name)
+	password := "test"
+
+	// Create the service database and user up front so the service schema
+	// exists and is owned by the service user.
+	log.Info("TC: Run controller database creation")
+	err = postgres.Database(log, postgresqlHost,
+		postgres.Credentials{
+			User:     "iam_creator",
+			Password: "iam_creator",
+		}, postgres.Credentials{
+			Name:     name,
+			User:     name,
+			Password: password,
+		}, managerRole, nil)
+	if err != nil {
+		t.Fatalf("Create service database failed: %v", err)
+	}
+
+	// Connect as the service user and create a table it owns in the service
+	// schema. The read role must end up with access to this table.
+	serviceDB, err := postgres.Connect(postgres.ConnectionString{
+		Host:     postgresqlHost,
+		Database: name,
+		User:     name,
+		Password: password,
+	})
+	if err != nil {
+		t.Fatalf("connect as service user failed: %v", err)
+	}
+	defer serviceDB.Close()
+	log.Info("TC: Create service-owned table in service schema")
+	dbExec(t, serviceDB, `CREATE TABLE %[1]s.service_owned (title varchar(40))`, name)
+	dbExec(t, serviceDB, `INSERT INTO %[1]s.service_owned VALUES('service row')`, name)
+
+	// Create a separate non-service user and have it create and own a table in
+	// the service schema. This is the condition that previously broke the bulk
+	// GRANT ... ON ALL TABLES statement and locked users out.
+	log.Info("TC: Create non-service user owning a table in the service schema")
+	dbExec(t, db, `CREATE USER %s WITH PASSWORD '%s' NOCREATEROLE VALID UNTIL 'infinity'`, otherUser, password)
+	dbExec(t, serviceDB, `GRANT CREATE ON SCHEMA %s TO %s`, name, otherUser)
+	otherDB, err := postgres.Connect(postgres.ConnectionString{
+		Host:     postgresqlHost,
+		Database: name,
+		User:     otherUser,
+		Password: password,
+	})
+	if err != nil {
+		t.Fatalf("connect as non-service user failed: %v", err)
+	}
+	defer otherDB.Close()
+	dbExec(t, otherDB, `CREATE TABLE %[1]s.foreign_owned (title varchar(40))`, name)
+
+	// Reconcile again. With a foreign-owned table present in the schema this
+	// must still succeed.
+	log.Info("TC: Re-run controller database creation with foreign-owned table present")
+	err = postgres.Database(log, postgresqlHost,
+		postgres.Credentials{
+			User:     "iam_creator",
+			Password: "iam_creator",
+		}, postgres.Credentials{
+			Name:     name,
+			User:     name,
+			Password: password,
+		}, managerRole, nil)
+	if err != nil {
+		t.Fatalf("reconcile with foreign-owned table failed: %v", err)
+	}
+
+	// Grant a developer read access and verify it can read the service-owned
+	// table despite the foreign-owned table in the same schema.
+	log.Info("TC: Run controller user creation")
+	err = postgres.Role(log, db, developerName, nil, []postgres.DatabaseSchema{{
+		Name:       name,
+		Schema:     name,
+		Privileges: postgres.PrivilegeRead,
+	}})
+	if err != nil {
+		t.Fatalf("create developer role failed: %v", err)
+	}
+
+	developerDB, err := postgres.Connect(postgres.ConnectionString{
+		Host:     postgresqlHost,
+		Database: name,
+		User:     developerName,
+		Password: password,
+	})
+	if err != nil {
+		t.Fatalf("connect as developer failed: %v", err)
+	}
+	defer developerDB.Close()
+	log.Info("TC: Developer selects from service-owned table")
+	rows := dbQuery(t, developerDB, `SELECT * FROM %s.service_owned`, name)
+	assert.Equal(t, []string{"service row"}, rows, "service-owned rows not as expected")
+}
+
 // TestDatabase_defaultDatabaseName tests that we can handle database resources
 // referencing the default name of the database instance.
 func TestDatabase_defaultDatabaseName(t *testing.T) {
