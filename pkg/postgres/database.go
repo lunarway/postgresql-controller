@@ -293,10 +293,14 @@ func revokeAllOnPublic(log logr.Logger, serviceConnection *sql.DB, serviceCreden
 	log.V(1).Info(fmt.Sprintf("Revoke ALL on role PUBLIC for database '%s'", serviceCredentials.Name))
 	err := execAsf(serviceConnection, serviceCredentials.User, `
 		REVOKE ALL ON DATABASE %s from PUBLIC;
-		REVOKE ALL ON SCHEMA public from PUBLIC;
-		REVOKE ALL ON ALL TABLES IN SCHEMA public from PUBLIC;`, serviceCredentials.Name)
+		REVOKE ALL ON SCHEMA public from PUBLIC;`, serviceCredentials.Name)
 	if err != nil {
 		return fmt.Errorf("revoke all for role PUBLIC on database '%s': %w, as %s", serviceCredentials.Name, err, serviceCredentials.User)
+	}
+
+	err = revokeAllOnExistingTablesFromPublicAs(serviceConnection, "public", serviceCredentials.User)
+	if err != nil {
+		return fmt.Errorf("revoke all on existing tables in schema public for role PUBLIC on database '%s': %w, as %s", serviceCredentials.Name, err, serviceCredentials.User)
 	}
 	return nil
 }
@@ -361,11 +365,57 @@ func setDefaultPrivilegesAs(db *sql.DB, schema, role, privileges, actor string) 
 	if err != nil {
 		return fmt.Errorf("grant %s privileges on existing schema: %w, as %s", privileges, err, actor)
 	}
-	err = execAsf(db, actor, fmt.Sprintf("GRANT %s ON ALL TABLES IN SCHEMA %s TO %s", privileges, schema, role))
+	err = grantOnExistingTablesAs(db, schema, role, privileges, actor)
 	if err != nil {
 		return fmt.Errorf("grant %s privileges on existing tables: %w, as %s", privileges, err, actor)
 	}
 	return nil
+}
+
+// grantOnExistingTablesAs grants privileges on the existing relations in schema
+// that actor is allowed to grant on.
+func grantOnExistingTablesAs(db *sql.DB, schema, role, privileges, actor string) error {
+	return forEachOwnedRelationAs(db, schema, actor, fmt.Sprintf("GRANT %s ON TABLE %%s TO %s", privileges, role))
+}
+
+// revokeAllOnExistingTablesFromPublicAs revokes all privileges from the role
+// PUBLIC on the existing relations in schema that actor is allowed to revoke
+// on.
+func revokeAllOnExistingTablesFromPublicAs(db *sql.DB, schema, actor string) error {
+	return forEachOwnedRelationAs(db, schema, actor, "REVOKE ALL ON TABLE %s FROM PUBLIC")
+}
+
+// forEachOwnedRelationAs executes statement for every relation in schema that
+// actor is allowed to grant and revoke privileges on, ie. relations owned by
+// actor or by a role that actor is a member of. statement is a PostgreSQL
+// format() template with a single %s placeholder for the relation name.
+//
+// This intentionally does not use the GRANT/REVOKE ... ON ALL TABLES IN SCHEMA
+// statements as they fail hard with "permission denied for table x" if just a
+// single relation in the schema is owned by another role and actor holds no
+// privileges on it. That happens for relations created by extensions, as
+// extensions are installed by the admin user, and would block all further
+// reconciliation of the database.
+func forEachOwnedRelationAs(db *sql.DB, schema, actor, statement string) error {
+	query := fmt.Sprintf(`
+		DO $$
+		DECLARE
+			relation regclass;
+		BEGIN
+			FOR relation IN
+				SELECT c.oid::regclass
+				FROM pg_class c
+				JOIN pg_namespace n ON n.oid = c.relnamespace
+				WHERE n.nspname = %s
+				  AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
+				  AND pg_has_role(current_user, c.relowner, 'USAGE')
+			LOOP
+				EXECUTE format(%s, relation);
+			END LOOP;
+		END
+		$$;`, pq.QuoteLiteral(schema), pq.QuoteLiteral(statement))
+
+	return execAs(db, actor, query)
 }
 
 // execf executes a formatted query on db.
@@ -373,6 +423,17 @@ func execf(db *sql.DB, query string, args ...interface{}) error {
 	_, err := db.Exec(fmt.Sprintf(query, args...))
 	if err != nil {
 		return err
+	}
+	return nil
+}
+
+// execAs executes query on db as given role. Contrary to execAsf the query is
+// not treated as a format string.
+func execAs(db *sql.DB, role string, query string) error {
+	fullQuery := prependSetRole(query, role)
+	_, err := db.Exec(fullQuery)
+	if err != nil {
+		return fmt.Errorf("unable to execute query '%s'. %w", fullQuery, err)
 	}
 	return nil
 }
