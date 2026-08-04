@@ -385,10 +385,11 @@ func revokeAllOnExistingTablesFromPublicAs(db *sql.DB, schema, actor string) err
 	return forEachOwnedRelationAs(db, schema, actor, "REVOKE ALL ON TABLE %s FROM PUBLIC")
 }
 
-// forEachOwnedRelationAs executes statement for every relation in schema that
-// actor is allowed to grant and revoke privileges on, ie. relations owned by
-// actor or by a role that actor is a member of. statement is a PostgreSQL
-// format() template with a single %s placeholder for the relation name.
+// forEachOwnedRelationAs executes statement as grantingRole for every relation
+// in schema that grantingRole is allowed to grant and revoke privileges on,
+// ie. relations owned by grantingRole or by a role that grantingRole is a
+// member of. statement is a PostgreSQL format() template with a single %s
+// placeholder for the relation name.
 //
 // This intentionally does not use the GRANT/REVOKE ... ON ALL TABLES IN SCHEMA
 // statements as they fail hard with "permission denied for table x" if just a
@@ -396,7 +397,7 @@ func revokeAllOnExistingTablesFromPublicAs(db *sql.DB, schema, actor string) err
 // privileges on it. That happens for relations created by extensions, as
 // extensions are installed by the admin user, and would block all further
 // reconciliation of the database.
-func forEachOwnedRelationAs(db *sql.DB, schema, actor, statement string) error {
+func forEachOwnedRelationAs(db *sql.DB, schema, grantingRole, statement string) error {
 	query := fmt.Sprintf(`
 		DO $$
 		DECLARE
@@ -415,7 +416,7 @@ func forEachOwnedRelationAs(db *sql.DB, schema, actor, statement string) error {
 		END
 		$$;`, pq.QuoteLiteral(schema), pq.QuoteLiteral(statement))
 
-	return execAs(db, actor, query)
+	return execAs(db, grantingRole, query)
 }
 
 // execf executes a formatted query on db.
