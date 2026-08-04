@@ -89,9 +89,13 @@ func extensionsToInstall(extensions, alreadyAvailableExtensions Extensions) (Ext
 // installExtensions actually enable extensions on the database
 func installExtensions(ctx context.Context, conn *sql.DB, adminCredentials, serviceCredentials Credentials, extensionsToInstall []Extension) error {
 	for _, e := range extensionsToInstall {
+		// Extensions are installed into the schema of the service, ie. the one
+		// named after the service user, and never the schema of another service on
+		// the same database. For shared databases the database name is the name of
+		// another service's schema.
 		_, err := conn.ExecContext(
 			ctx,
-			fmt.Sprintf("CREATE EXTENSION IF NOT EXISTS %s WITH SCHEMA %s", e.Name, serviceCredentials.Name),
+			fmt.Sprintf("CREATE EXTENSION IF NOT EXISTS %s WITH SCHEMA %s", e.Name, serviceCredentials.User),
 		)
 		if err != nil {
 			return fmt.Errorf("failed to install: user: %s, db: %s, extension %s: %w", adminCredentials.User, serviceCredentials.Name, e.Name, err)
