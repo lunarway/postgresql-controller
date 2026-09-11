@@ -1,0 +1,178 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.1
+  name: postgresqlexternalserviceusers.postgresql.lunar.tech
+spec:
+  group: postgresql.lunar.tech
+  names:
+    kind: PostgreSQLExternalServiceUser
+    listKind: PostgreSQLExternalServiceUserList
+    plural: postgresqlexternalserviceusers
+    singular: postgresqlexternalserviceuser
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.principalArn
+      name: Principal
+      type: string
+    - jsonPath: .spec.dbUsername
+      name: DBUser
+      type: string
+    - jsonPath: .status.conditions[0].message
+      name: Status
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          PostgreSQLExternalServiceUser is the Schema for the postgresqlexternalserviceusers API.
+          It grants an IAM principal (user or role from any AWS account) RDS IAM authentication
+          access to a PostgreSQL database, without requiring a password.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: PostgreSQLExternalServiceUserSpec defines the desired state
+              of PostgreSQLExternalServiceUser.
+            properties:
+              dbUsername:
+                description: |-
+                  DBUsername is the Postgres role to create with IAM authentication enabled (rds_iam).
+                  No password is set — authentication is performed exclusively via IAM.
+                type: string
+              host:
+                description: Host is the RDS instance to connect to.
+                properties:
+                  value:
+                    description: Defaults to "".
+                    type: string
+                  valueFrom:
+                    description: Source to read the value from.
+                    properties:
+                      configMapKeyRef:
+                        description: Selects a key of a config map in the custom resource's
+                          namespace
+                        properties:
+                          key:
+                            description: The key of the secret or config map to select
+                              from.  Must be a valid key.
+                            type: string
+                          name:
+                            description: The name of the secret or config map in the
+                              namespace to select from.
+                            type: string
+                        required:
+                        - key
+                        type: object
+                      secretKeyRef:
+                        description: Selects a key of a secret in the custom resource's
+                          namespace
+                        properties:
+                          key:
+                            description: The key of the secret or config map to select
+                              from.  Must be a valid key.
+                            type: string
+                          name:
+                            description: The name of the secret or config map in the
+                              namespace to select from.
+                            type: string
+                        required:
+                        - key
+                        type: object
+                    type: object
+                type: object
+              principalArn:
+                description: |-
+                  PrincipalArn is the ARN of the IAM user or role to grant RDS IAM authentication access.
+                  Accepts IAM user ARNs (arn:aws:iam::ACCOUNT:user/NAME) and role ARNs
+                  (arn:aws:iam::ACCOUNT:role/NAME) from any AWS account.
+                type: string
+              roles:
+                description: Roles lists Postgres roles to grant to DBUsername.
+                items:
+                  description: PostgreSQLExternalServiceUserRole defines a Postgres
+                    role to grant to the external service user.
+                  properties:
+                    roleName:
+                      description: RoleName is the name of the Postgres role to grant.
+                      type: string
+                  required:
+                  - roleName
+                  type: object
+                type: array
+            required:
+            - dbUsername
+            - host
+            - principalArn
+            type: object
+          status:
+            description: PostgreSQLExternalServiceUserStatus defines the observed
+              state of PostgreSQLExternalServiceUser.
+            properties:
+              conditions:
+                description: Conditions represents the latest available observations
+                  of the resource's current state.
+                items:
+                  description: PostgreSQLExternalServiceUserCondition describes the
+                    state of a PostgreSQL external service user.
+                  properties:
+                    lastTransitionTime:
+                      description: LastTransitionTime is the last time the condition
+                        transitioned from one status to another.
+                      format: date-time
+                      type: string
+                    lastUpdateTime:
+                      description: LastUpdateTime is the last time this condition
+                        was updated.
+                      format: date-time
+                      type: string
+                    message:
+                      description: Message is a human-readable message indicating
+                        details about the transition.
+                      type: string
+                    reason:
+                      description: Reason is a brief machine-readable explanation
+                        for the condition's last transition.
+                      type: string
+                    status:
+                      description: Status of the condition.
+                      type: string
+                    type:
+                      description: Type is the current state of the resource.
+                      type: string
+                  required:
+                  - status
+                  - type
+                  type: object
+                type: array
+              observedGeneration:
+                description: ObservedGeneration reflects the generation most recently
+                  observed by the controller.
+                format: int64
+                type: integer
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
