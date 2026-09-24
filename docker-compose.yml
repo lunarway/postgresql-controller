@@ -11,7 +11,7 @@ services:
     ports:
       - "5432:5432"
   aws:
-    image: localstack/localstack:2.1.0
+    image: localstack/localstack:2.3.2
     environment:
       - SERVICES=iam
     ports:
