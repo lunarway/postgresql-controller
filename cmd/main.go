@@ -190,6 +190,26 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "PostgreSQLServiceUser")
 		os.Exit(1)
 	}
+	if err = (&controller.PostgreSQLExternalServiceUserReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+
+		EnsureIAMExternalServiceUser: iam.EnsureExternalServiceUser,
+		RemoveIAMExternalServiceUser: iam.RemoveExternalServiceUser,
+
+		AWSPolicyName:      config.AWS.PolicyName,
+		AWSRegion:          config.AWS.Region,
+		AWSAccountID:       config.AWS.AccountID,
+		AWSProfile:         config.AWS.Profile,
+		AWSAccessKeyID:     config.AWS.AccessKeyID,
+		AWSSecretAccessKey: config.AWS.SecretAccessKey,
+		IAMPolicyPrefix:    config.IAMPolicyPrefix,
+		AWSLoginRoles:      config.GetLoginRoles(),
+		HostCredentials:    config.HostCredentials,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "PostgreSQLExternalServiceUser")
+		os.Exit(1)
+	}
 	if err = (&controller.CustomRoleReconciler{
 		Client:            mgr.GetClient(),
 		Log:               ctrl.Log.WithName("controllers").WithName("CustomRole"),
