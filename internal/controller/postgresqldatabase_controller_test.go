@@ -237,10 +237,11 @@ func TestPostgreSQLDatabase_Reconcile_hostCredentialsResourceReference(t *testin
 	// Create a controller object with the fake client but otherwise "live" setup
 	// with database interaction
 	r := &PostgreSQLDatabaseReconciler{
-		Client:          cl,
-		Log:             ctrl.Log.WithName(t.Name()),
-		ManagerRoleName: managerRole,
-		HostCredentials: nil,
+		Client:            cl,
+		Log:               ctrl.Log.WithName(t.Name()),
+		ManagerRoleName:   managerRole,
+		SuperuserRoleName: "iam_creator",
+		HostCredentials:   nil,
 	}
 
 	// seed database into the postgres host
@@ -326,10 +327,11 @@ func TestPostgreSQLDatabase_Reconcile_noPassword(t *testing.T) {
 	// Create a controller object with the fake client but otherwise "live" setup
 	// with database interaction
 	r := &PostgreSQLDatabaseReconciler{
-		Client:          cl,
-		Log:             ctrl.Log.WithName(t.Name()),
-		ManagerRoleName: managerRole,
-		HostCredentials: nil,
+		Client:            cl,
+		Log:               ctrl.Log.WithName(t.Name()),
+		ManagerRoleName:   managerRole,
+		SuperuserRoleName: "iam_creator",
+		HostCredentials:   nil,
 	}
 
 	// seed database into the postgres host

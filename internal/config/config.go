@@ -23,6 +23,7 @@ type ControllerConfiguration struct {
 	AWS                      AwsConfig
 	HostCredentials          map[string]postgres.Credentials
 	ManagerRoleName          string
+	SuperuserRoleName        string
 	AllDatabasesReadEnabled  bool
 	AllDatabasesWriteEnabled bool
 	ExtendedWriteEnabled     bool
@@ -51,6 +52,7 @@ func (c *ControllerConfiguration) RegisterFlags(flagSet *flag.FlagSet) {
 
 	flagSet.Var(&HostCredentials{value: &c.HostCredentials}, "host-credentials", "Host and credential pairs in the form hostname=user:password. Use comma separated pairs for multiple hosts")
 	flagSet.StringVar(&c.ManagerRoleName, "manager-role-name", "postgres_role_manager", "Name of the role which will be managing other roles")
+	flagSet.StringVar(&c.SuperuserRoleName, "superuser-role-name", "rds_superuser", "Name of the superuser role the connecting user must be a member of (defaults to RDS's rds_superuser; override for non-RDS deployments)")
 	flagSet.StringVar(&c.UserRoles, "user-roles", "rds_iam", "List of roles granted to all users")
 	flagSet.BoolVar(&c.AllDatabasesReadEnabled, "all-databases-enabled-read", false, "Enable usage of allDatabases field in read access requests")
 	flagSet.BoolVar(&c.AllDatabasesWriteEnabled, "all-databases-enabled-write", false, "Enable usage of allDatabases field in write access requests")

@@ -81,7 +81,7 @@ func TestDatabase_sunshine(t *testing.T) {
 	postgresqlHost := test.Integration(t)
 	log := test.SetLogger(t)
 	managerRole := "postgres_role_name"
-	db, err := postgres.Connect(log, postgres.ConnectionString{
+	db, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -115,7 +115,7 @@ func TestDatabase_sunshine(t *testing.T) {
 	assert.True(t, roleCanLogin(t, db, name))
 	assert.True(t, hasPassword(t, log, postgresqlHost, name))
 
-	newDB, err := postgres.Connect(log, postgres.ConnectionString{
+	newDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: name,
 		User:     name,
@@ -144,7 +144,7 @@ func TestDatabase_HasExtensionsNotExistingAlreadyEnableExtensions(t *testing.T) 
 	log := test.SetLogger(t)
 
 	managerRole := "postgres_role_name"
-	db, err := postgres.Connect(log, postgres.ConnectionString{
+	db, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -179,7 +179,7 @@ func TestDatabase_HasExtensionsNotExistingAlreadyEnableExtensions(t *testing.T) 
 	assert.True(t, roleCanLogin(t, db, name))
 	assert.True(t, hasPassword(t, log, postgresqlHost, name))
 
-	newDB, err := postgres.Connect(log, postgres.ConnectionString{
+	newDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: name,
 		User:     name,
@@ -203,7 +203,7 @@ func TestDatabase_HasExtensionsNoUpdates(t *testing.T) {
 	log := test.SetLogger(t)
 
 	managerRole := "postgres_role_name"
-	db, err := postgres.Connect(log, postgres.ConnectionString{
+	db, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -244,7 +244,7 @@ func TestDatabase_HasExtensionsNoUpdates(t *testing.T) {
 	assert.True(t, roleCanLogin(t, db, name))
 	assert.True(t, hasPassword(t, log, postgresqlHost, name))
 
-	newDB, err := postgres.Connect(log, postgres.ConnectionString{
+	newDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: name,
 		User:     name,
@@ -295,7 +295,7 @@ func TestDatabase_HasExtensionsGiveEmptyDeclarativeExtensionsShouldDoNothing(t *
 	log := test.SetLogger(t)
 
 	managerRole := "postgres_role_name"
-	db, err := postgres.Connect(log, postgres.ConnectionString{
+	db, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -336,7 +336,7 @@ func TestDatabase_HasExtensionsGiveEmptyDeclarativeExtensionsShouldDoNothing(t *
 	assert.True(t, roleCanLogin(t, db, name))
 	assert.True(t, hasPassword(t, log, postgresqlHost, name))
 
-	newDB, err := postgres.Connect(log, postgres.ConnectionString{
+	newDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: name,
 		User:     name,
@@ -386,7 +386,7 @@ func TestDatabase_noPassword(t *testing.T) {
 	postgresqlHost := test.Integration(t)
 	log := test.SetLogger(t)
 	managerRole := "postgres_role_name"
-	db, err := postgres.Connect(log, postgres.ConnectionString{
+	db, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -417,7 +417,7 @@ func TestDatabase_noPassword(t *testing.T) {
 
 	assert.False(t, roleCanLogin(t, db, name))
 
-	newDB, err := postgres.Connect(log, postgres.ConnectionString{
+	newDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: name,
 		User:     "iam_creator",
@@ -446,7 +446,7 @@ func TestDatabase_switchFromLoginToNoLoginAndBack(t *testing.T) {
 	log := test.SetLogger(t)
 	managerRole := "postgres_role_name"
 
-	db, err := postgres.Connect(log, postgres.ConnectionString{
+	db, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -511,7 +511,7 @@ func TestDatabase_switchFromLoginToNoLoginAndBack(t *testing.T) {
 	assert.True(t, roleCanLogin(t, db, name))
 	assert.True(t, hasPassword(t, log, postgresqlHost, name))
 
-	newDB, err := postgres.Connect(log, postgres.ConnectionString{
+	newDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: name,
 		User:     "iam_creator",
@@ -546,7 +546,7 @@ func TestDatabase_existingResourcePrivilegesForReadWriteRoles(t *testing.T) {
 	log := test.SetLogger(t)
 	managerRole := "postgres_role_name"
 	log.Info("TC: Connection as iam_creator")
-	db, err := postgres.Connect(log, postgres.ConnectionString{
+	db, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -573,7 +573,7 @@ func TestDatabase_existingResourcePrivilegesForReadWriteRoles(t *testing.T) {
 	`, name))
 
 	log.Info("TC: Connect as service user")
-	serviceDB, err := postgres.Connect(log, postgres.ConnectionString{
+	serviceDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: name,
 		User:     name,
@@ -615,7 +615,7 @@ func TestDatabase_existingResourcePrivilegesForReadWriteRoles(t *testing.T) {
 	}
 
 	log.Info("TC: Connect as developer")
-	developerDB, err := postgres.Connect(log, postgres.ConnectionString{
+	developerDB, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: name,
 		User:     developerName,
@@ -639,7 +639,7 @@ func TestDatabase_defaultDatabaseName(t *testing.T) {
 	managerRole := "postgres_role_name"
 	log := test.SetLogger(t)
 	log.Info("TC: Connecting as iam_creator")
-	db, err := postgres.Connect(log, postgres.ConnectionString{
+	db, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -698,7 +698,7 @@ func TestDatabase_mixedOwnershipOnSharedDatabase(t *testing.T) {
 	postgresqlHost := test.Integration(t)
 	log := test.NewLogger(t)
 	log.Info("TC: Connecting as iam_creator on defaul database")
-	db, err := postgres.Connect(log, postgres.ConnectionString{
+	db, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -731,7 +731,7 @@ func TestDatabase_mixedOwnershipOnSharedDatabase(t *testing.T) {
 	dbExec(t, db, `REVOKE %s FROM CURRENT_USER`, sharedDatabaseName)
 
 	// connect to shared database with created role
-	sharedConn, err := postgres.Connect(log, postgres.ConnectionString{
+	sharedConn, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: sharedDatabaseName,
 		User:     sharedDatabaseName,
@@ -774,7 +774,7 @@ func TestDatabase_mixedOwnershipOnSharedDatabase(t *testing.T) {
 
 	// connect as the new user and do some queries to ensure permissions are
 	// correct
-	newUserConn, err := postgres.Connect(log, postgres.ConnectionString{
+	newUserConn, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: sharedDatabaseName,
 		User:     newUser,
@@ -813,7 +813,7 @@ func TestDatabase_mixedOwnershipOnSharedDatabase(t *testing.T) {
 	}
 
 	// connect as the developer on the shared database
-	developerConn, err := postgres.Connect(log, postgres.ConnectionString{
+	developerConn, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: sharedDatabaseName,
 		User:     developer,
@@ -833,11 +833,177 @@ func TestDatabase_mixedOwnershipOnSharedDatabase(t *testing.T) {
 	assert.Equal(t, []string{"value-from-new-user", "value-from-shared-user"}, developerNonOwnedRows, "nonowned rows not as expected")
 }
 
+// TestDatabase_foreignOwnedRelationInServiceSchema verifies that a relation in
+// the service schema owned by another role, eg. a view created by an extension
+// installed by the admin user, does not block reconciliation. Such relations
+// are skipped when granting privileges on existing tables while relations owned
+// by the service user are still granted.
+func TestDatabase_foreignOwnedRelationInServiceSchema(t *testing.T) {
+	postgresqlHost := test.Integration(t)
+	log := test.SetLogger(t)
+	managerRole := "postgres_role_name"
+
+	db, err := postgres.Connect(postgres.ConnectionString{
+		Host:     postgresqlHost,
+		Database: "postgres",
+		User:     "iam_creator",
+		Password: "iam_creator",
+	})
+	require.NoError(t, err, "connect to database failed")
+	defer db.Close()
+
+	require.NoError(t, createManagerRole(log, db, managerRole), "create manager role failed")
+
+	name := fmt.Sprintf("test_%d", time.Now().UnixNano())
+	password := "test"
+	adminCredentials := postgres.Credentials{
+		User:     "iam_creator",
+		Password: "iam_creator",
+	}
+	serviceCredentials := postgres.Credentials{
+		Name:     name,
+		User:     name,
+		Password: password,
+	}
+
+	err = postgres.Database(log, postgresqlHost, adminCredentials, serviceCredentials, managerRole, nil)
+	require.NoError(t, err, "first Database call failed")
+
+	// connect as the admin user and create a relation in the service schema
+	// owned by the admin user without any privileges granted to the service user.
+	// This is the state an installed extension leaves behind.
+	adminConn, err := postgres.Connect(postgres.ConnectionString{
+		Host:     postgresqlHost,
+		Database: name,
+		User:     "iam_creator",
+		Password: "iam_creator",
+	})
+	require.NoError(t, err, "connect as admin to service database failed")
+	defer adminConn.Close()
+
+	dbExec(t, adminConn, `CREATE TABLE %s.extension_owned (title varchar(40) NOT NULL)`, name)
+	dbExec(t, adminConn, `CREATE VIEW %s.extension_owned_view AS SELECT * FROM %[1]s.extension_owned`, name)
+
+	// connect as the service user and create an owned table that should still get
+	// privileges granted
+	serviceConn, err := postgres.Connect(postgres.ConnectionString{
+		Host:     postgresqlHost,
+		Database: name,
+		User:     name,
+		Password: password,
+	})
+	require.NoError(t, err, "connect as service user to service database failed")
+	defer serviceConn.Close()
+
+	dbExec(t, serviceConn, `CREATE TABLE %s.owned (title varchar(40) NOT NULL)`, name)
+
+	// reconcile again. This used to fail with
+	// 'pq: permission denied for table extension_owned'
+	err = postgres.Database(log, postgresqlHost, adminCredentials, serviceCredentials, managerRole, nil)
+	require.NoError(t, err, "second Database call failed")
+
+	assert.True(t,
+		tableHasPrivilege(t, adminConn, fmt.Sprintf("%s_read", name), fmt.Sprintf("%s.owned", name), "SELECT"),
+		"read role should have SELECT on the service owned table",
+	)
+	assert.True(t,
+		tableHasPrivilege(t, adminConn, fmt.Sprintf("%s_readwrite", name), fmt.Sprintf("%s.owned", name), "INSERT"),
+		"readwrite role should have INSERT on the service owned table",
+	)
+	assert.False(t,
+		tableHasPrivilege(t, adminConn, fmt.Sprintf("%s_read", name), fmt.Sprintf("%s.extension_owned", name), "SELECT"),
+		"read role should not have SELECT on the foreign owned table",
+	)
+}
+
+func tableHasPrivilege(t *testing.T, db *sql.DB, role, table, privilege string) bool {
+	t.Helper()
+	var hasPrivilege bool
+	err := db.QueryRow("SELECT has_table_privilege($1, $2, $3)", role, table, privilege).Scan(&hasPrivilege)
+	require.NoError(t, err, "query table privilege failed")
+	return hasPrivilege
+}
+
+// TestDatabase_foreignOwnedRelationInPublicSchema verifies that a relation in
+// the public schema owned by another role, eg. an extension installed manually
+// without an explicit schema, does not block reconciliation. Such relations are
+// skipped when revoking privileges from PUBLIC while relations owned by the
+// service user are still revoked.
+func TestDatabase_foreignOwnedRelationInPublicSchema(t *testing.T) {
+	postgresqlHost := test.Integration(t)
+	log := test.SetLogger(t)
+	managerRole := "postgres_role_name"
+
+	db, err := postgres.Connect(postgres.ConnectionString{
+		Host:     postgresqlHost,
+		Database: "postgres",
+		User:     "iam_creator",
+		Password: "iam_creator",
+	})
+	require.NoError(t, err, "connect to database failed")
+	defer db.Close()
+
+	require.NoError(t, createManagerRole(log, db, managerRole), "create manager role failed")
+
+	name := fmt.Sprintf("test_%d", time.Now().UnixNano())
+	password := "test"
+	adminCredentials := postgres.Credentials{
+		User:     "iam_creator",
+		Password: "iam_creator",
+	}
+	serviceCredentials := postgres.Credentials{
+		Name:     name,
+		User:     name,
+		Password: password,
+	}
+
+	err = postgres.Database(log, postgresqlHost, adminCredentials, serviceCredentials, managerRole, nil)
+	require.NoError(t, err, "first Database call failed")
+
+	// create a relation in the public schema owned by the admin user without any
+	// privileges granted to the service user. This is the state a manually
+	// installed extension leaves behind, as public is the default schema.
+	adminConn, err := postgres.Connect(postgres.ConnectionString{
+		Host:     postgresqlHost,
+		Database: name,
+		User:     "iam_creator",
+		Password: "iam_creator",
+	})
+	require.NoError(t, err, "connect as admin to service database failed")
+	defer adminConn.Close()
+
+	dbExec(t, adminConn, `CREATE TABLE public.extension_owned (title varchar(40) NOT NULL)`)
+
+	// create a table in public owned by the service user with privileges granted
+	// to PUBLIC. These privileges are expected to be revoked on reconcile.
+	serviceConn, err := postgres.Connect(postgres.ConnectionString{
+		Host:     postgresqlHost,
+		Database: name,
+		User:     name,
+		Password: password,
+	})
+	require.NoError(t, err, "connect as service user to service database failed")
+	defer serviceConn.Close()
+
+	dbExec(t, serviceConn, `CREATE TABLE public.owned (title varchar(40) NOT NULL)`)
+	dbExec(t, serviceConn, `GRANT SELECT ON public.owned TO PUBLIC`)
+
+	// reconcile again. This used to fail with
+	// 'pq: permission denied for table extension_owned'
+	err = postgres.Database(log, postgresqlHost, adminCredentials, serviceCredentials, managerRole, nil)
+	require.NoError(t, err, "second Database call failed")
+
+	assert.False(t,
+		tableHasPrivilege(t, adminConn, "public", "public.owned", "SELECT"),
+		"PUBLIC should not have SELECT on the service owned table in schema public",
+	)
+}
+
 func TestDatabase_idempotency(t *testing.T) {
 	postgresqlHost := test.Integration(t)
 	log := test.SetLogger(t)
 	managerRole := "postgres_role_name"
-	db, err := postgres.Connect(log, postgres.ConnectionString{
+	db, err := postgres.Connect(postgres.ConnectionString{
 		Host:     postgresqlHost,
 		Database: "postgres",
 		User:     "iam_creator",
@@ -884,7 +1050,7 @@ func TestDatabase_idempotency(t *testing.T) {
 }
 
 func hasPassword(t *testing.T, log logr.Logger, host, username string) bool {
-	db, err := postgres.Connect(log, postgres.ConnectionString{
+	db, err := postgres.Connect(postgres.ConnectionString{
 		Host:     host,
 		Database: "postgres",
 		User:     "admin",

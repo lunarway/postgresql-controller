@@ -132,8 +132,9 @@ func main() {
 		Client: mgr.GetClient(),
 		Log:    ctrl.Log.WithName("controllers").WithName("PostgreSQLDatabase"),
 
-		ManagerRoleName: config.ManagerRoleName,
-		HostCredentials: config.HostCredentials,
+		ManagerRoleName:   config.ManagerRoleName,
+		SuperuserRoleName: config.SuperuserRoleName,
+		HostCredentials:   config.HostCredentials,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PostgreSQLDatabase")
 		os.Exit(1)
@@ -190,9 +191,10 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controller.CustomRoleReconciler{
-		Client:          mgr.GetClient(),
-		Log:             ctrl.Log.WithName("controllers").WithName("CustomRole"),
-		HostCredentials: config.HostCredentials,
+		Client:            mgr.GetClient(),
+		Log:               ctrl.Log.WithName("controllers").WithName("CustomRole"),
+		SuperuserRoleName: config.SuperuserRoleName,
+		HostCredentials:   config.HostCredentials,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "CustomRole")
 		os.Exit(1)

@@ -15,7 +15,7 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .metadata.name
+    - jsonPath: .spec.roleName
       name: Role
       type: string
     - jsonPath: .status.phase
@@ -49,6 +49,76 @@ spec:
           spec:
             description: CustomRoleSpec defines the desired state of CustomRole
             properties:
+              databases:
+                description: |-
+                  Databases restricts which databases the grants and functions are applied to.
+                  If omitted, they are applied to every user database on the host.
+                  Use this to target specific databases (e.g. ["postgres"]) for
+                  admin-level utilities.
+                items:
+                  type: string
+                type: array
+              functions:
+                description: |-
+                  Functions is a list of SECURITY DEFINER functions to create and grant
+                  EXECUTE on to this role. Each function is created in the public schema
+                  with LANGUAGE plpgsql, SECURITY DEFINER, and SET search_path = pg_catalog
+                  hardcoded. The body should contain only the PL/pgSQL statements (the
+                  BEGIN/END block is added automatically).
+                items:
+                  description: "CustomRoleFunction defines a SECURITY DEFINER function
+                    to create and grant to the role.\nThe controller creates the function
+                    in the public schema using plpgsql with\nSECURITY DEFINER and
+                    SET search_path = pg_catalog. The body is wrapped in\nBEGIN ...
+                    END automatically.\n\nBy default the function is owned by the
+                    database owner, so SECURITY DEFINER\nruns with that role's privileges.
+                    Set owningRole to override this (e.g. to\nuse a superuser role
+                    for functions that need elevated privileges like ALTER ROLE).\nUse
+                    the sentinel value \"$controllerUser\" to resolve to the controller's
+                    connection\nrole at reconcile time — recommended when the connection
+                    role differs per host.\n\nExample:\n\n\tfunctions:\n\t- name:
+                    my_function\n\t  args: \"input_val text\"\n\t  returns: void\n\t
+                    \ body: |\n\t    EXECUTE format('ALTER ROLE %I SET some_setting
+                    = %L', input_val, 'value');"
+                  properties:
+                    args:
+                      description: |-
+                        Args is the function argument list (e.g. "role_name text", "id integer, name text").
+                        Omit for functions that take no arguments.
+                      type: string
+                    body:
+                      description: |-
+                        Body contains the PL/pgSQL statements for the function.
+                        Do not include BEGIN/END — they are added automatically.
+                        Use fully qualified names for tables and schemas (e.g. myschema.mytable)
+                        because search_path is set to pg_catalog.
+                      type: string
+                    name:
+                      description: Name is the function name.
+                      type: string
+                    owningRole:
+                      description: |-
+                        OwningRole is the PostgreSQL role that will own the function. Since the
+                        function uses SECURITY DEFINER, it executes with this role's privileges.
+                        If omitted, the function is owned by the database owner.
+
+                        Special sentinel values:
+                          - "$controllerUser" — resolves at reconcile time to the role the controller
+                            is currently connected as (SELECT current_user). Use this when the
+                            connection role differs per host (e.g. iam_creator, iam_creator_v2)
+                            and hard-coding a role name is not viable. This is the recommended
+                            value when the function must be owned by the controller's connection role.
+                      type: string
+                    returns:
+                      description: Returns is the return type (e.g. "void", "boolean",
+                        "TABLE(plan text)").
+                      type: string
+                  required:
+                  - body
+                  - name
+                  - returns
+                  type: object
+                type: array
               grantRoles:
                 description: |-
                   GrantRoles is a list of existing PostgreSQL roles to grant to this role
@@ -59,15 +129,15 @@ spec:
                 type: array
               grants:
                 description: |-
-                  Grants is a list of schema/table privilege grants applied to every database
-                  on the host. Reconciled whenever a new PostgreSQLDatabase is created.
+                  Grants is a list of schema/table privilege grants applied to the target
+                  databases. Reconciled whenever a new PostgreSQLDatabase is created.
                 items:
                   description: CustomRoleGrant defines schema/table privileges to
                     grant to the role.
                   properties:
                     privileges:
                       description: Privileges is a list of PostgreSQL privilege keywords
-                        (e.g. SELECT, INSERT, UPDATE, DELETE)
+                        (SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER)
                       items:
                         type: string
                       type: array
@@ -85,6 +155,21 @@ spec:
                   - privileges
                   type: object
                 type: array
+              roleName:
+                description: |-
+                  RoleName is the PostgreSQL role name to create. It is required and
+                  immutable: once set it cannot be changed, because the controller would
+                  otherwise orphan the previously-created role along with its grants and
+                  memberships. Use this field (rather than metadata.name) when the
+                  desired Postgres role name is not a valid Kubernetes resource name
+                  (e.g. contains underscores).
+                minLength: 1
+                type: string
+                x-kubernetes-validations:
+                - message: roleName is immutable
+                  rule: self == oldSelf
+            required:
+            - roleName
             type: object
           status:
             description: CustomRoleStatus defines the observed state of CustomRole
@@ -92,6 +177,11 @@ spec:
               error:
                 description: Error contains the error message when Phase is Failed
                   or Invalid
+                type: string
+              failingHost:
+                description: |-
+                  FailingHost is the PostgreSQL host that caused reconciliation to fail.
+                  Empty when reconciliation succeeded or the failure is not host-specific.
                 type: string
               phase:
                 description: Phase is the current phase of the CustomRole resource
