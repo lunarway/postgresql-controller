@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	lunarwayv1alpha1 "go.lunarway.com/postgresql-controller/api/v1alpha1"
 	ctlerrors "go.lunarway.com/postgresql-controller/pkg/errors"
+	"go.lunarway.com/postgresql-controller/pkg/postgres"
 	"go.lunarway.com/postgresql-controller/test"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -21,6 +22,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
+
+func TestPrepareConfiguredHosts(t *testing.T) {
+	credentials := map[string]postgres.Credentials{
+		"host-a": {User: "admin-a"},
+		"host-b": {User: "admin-b"},
+	}
+	prepared := make(map[string]postgres.Credentials)
+
+	err := prepareConfiguredHosts(credentials, func(host string, admin postgres.Credentials) error {
+		prepared[host] = admin
+		return nil
+	})
+
+	assert.NoError(t, err)
+	assert.Equal(t, credentials, prepared)
+}
 
 func TestStatus_update(t *testing.T) {
 	before := metav1.Time{
