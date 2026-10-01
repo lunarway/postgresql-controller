@@ -56,7 +56,7 @@ func TestEnsureUser_roleChange(t *testing.T) {
 
 	var (
 		policyBaseName = t.Name()
-		iamPrefix      = GenerateRandomString(10)
+		iamPrefix      = "/" + GenerateRandomString(10) + "/"
 		role           = fmt.Sprintf("GoogleDevLogin_%s", GenerateRandomString(5))
 	)
 
@@ -119,7 +119,7 @@ func TestEnsureUser_AWSLoginRole_Added(t *testing.T) {
 
 	var (
 		policyBaseName = t.Name()
-		iamPrefix      = GenerateRandomString(10)
+		iamPrefix      = "/" + GenerateRandomString(10) + "/"
 		existingRole   = fmt.Sprintf("GoogleDevLogin_Existing_%s", GenerateRandomString(5))
 		newRole        = fmt.Sprintf("GoogleDevLogin_New_%s", GenerateRandomString(5))
 	)
@@ -295,7 +295,7 @@ func Test_AddRemoveUser(t *testing.T) {
 				t.Fail()
 			}
 
-			iamPrefix := GenerateRandomString(10)
+			iamPrefix := "/" + GenerateRandomString(10) + "/"
 			session := CreateSession()
 			svc := iam.New(session)
 			client := NewClient(session, logger, accountID, iamPrefix)
