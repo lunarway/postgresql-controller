@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -111,10 +112,6 @@ func (r *PostgreSQLDatabaseReconciler) reconcile(ctx context.Context, reqLogger 
 	}
 	status.host = host
 	reqLogger = reqLogger.WithValues("host", host)
-
-	if err := r.prepareHost(reqLogger, host, *adminCredentials); err != nil {
-		return status, err
-	}
 
 	user, err := kube.ResourceValue(r.Client, database.Spec.User, request.Namespace)
 	if err != nil {
@@ -287,6 +284,31 @@ func (r *PostgreSQLDatabaseReconciler) EnsurePostgreSQLDatabase(ctx context.Cont
 		return fmt.Errorf("create database %s on host %s: %w", params.Target.Name, params.Host, err)
 	}
 
+	return nil
+}
+
+// PrepareHosts opens an admin connection to each configured host, runs
+// preflight checks, and ensures the management role exists. Call this before
+// starting the manager so the role is available even when no database
+// resources exist.
+func (r *PostgreSQLDatabaseReconciler) PrepareHosts() error {
+	return prepareConfiguredHosts(r.HostCredentials, func(host string, admin postgres.Credentials) error {
+		return r.prepareHost(r.Log.WithValues("host", host), host, admin)
+	})
+}
+
+func prepareConfiguredHosts(hostCredentials map[string]postgres.Credentials, prepare func(string, postgres.Credentials) error) error {
+	hosts := make([]string, 0, len(hostCredentials))
+	for host := range hostCredentials {
+		hosts = append(hosts, host)
+	}
+	sort.Strings(hosts)
+
+	for _, host := range hosts {
+		if err := prepare(host, hostCredentials[host]); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

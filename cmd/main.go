@@ -128,14 +128,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controller.PostgreSQLDatabaseReconciler{
+	databaseReconciler := &controller.PostgreSQLDatabaseReconciler{
 		Client: mgr.GetClient(),
 		Log:    ctrl.Log.WithName("controllers").WithName("PostgreSQLDatabase"),
 
 		ManagerRoleName:   config.ManagerRoleName,
 		SuperuserRoleName: config.SuperuserRoleName,
 		HostCredentials:   config.HostCredentials,
-	}).SetupWithManager(mgr); err != nil {
+	}
+	if err := databaseReconciler.PrepareHosts(); err != nil {
+		setupLog.Error(err, "unable to prepare PostgreSQL hosts")
+		os.Exit(1)
+	}
+	if err = databaseReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PostgreSQLDatabase")
 		os.Exit(1)
 	}
