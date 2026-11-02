@@ -17,6 +17,7 @@ rules:
   resources:
   - customroles
   - postgresqldatabases
+  - postgresqlexternalserviceusers
   - postgresqlserviceusers
   - postgresqlusers
   verbs:
@@ -31,6 +32,7 @@ rules:
   - postgresql.lunar.tech
   resources:
   - customroles/finalizers
+  - postgresqlexternalserviceusers/finalizers
   - postgresqlhostcredentials/finalizers
   - postgresqlserviceusers/finalizers
   - postgresqlusers/finalizers
@@ -41,6 +43,7 @@ rules:
   resources:
   - customroles/status
   - postgresqldatabases/status
+  - postgresqlexternalserviceusers/status
   - postgresqlhostcredentials/status
   - postgresqlserviceusers/status
   - postgresqlusers/status
